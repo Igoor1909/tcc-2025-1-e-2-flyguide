@@ -5,6 +5,8 @@ import com.TCC.FlyGuide.entities.Local;
 import com.TCC.FlyGuide.entities.Roteiro;
 import com.TCC.FlyGuide.entities.RoteiroLocal;
 import com.TCC.FlyGuide.entities.User;
+
+import java.math.BigDecimal;
 import com.TCC.FlyGuide.repositories.LocalRepository;
 import com.TCC.FlyGuide.repositories.RoteiroLocalRepository;
 import com.TCC.FlyGuide.repositories.RoteiroRepository;
@@ -77,7 +79,7 @@ class RoteiroLocalServiceTest {
     void findByRoteiro_semLocais_retornaListaVazia() {
         User dono = usuario(1L);
         when(roteiroRepository.findById(1L)).thenReturn(Optional.of(roteiro(1L, dono)));
-        when(roteiroLocalRepository.findByRoteiro_IdRoteiro(1L)).thenReturn(Collections.emptyList());
+        when(roteiroLocalRepository.buscarPorRoteiroComLocal(1L)).thenReturn(Collections.emptyList());
 
         List<RoteiroLocalDTO> result = roteiroLocalService.findByRoteiro(1L);
 
@@ -168,6 +170,25 @@ class RoteiroLocalServiceTest {
         verify(roteiroLocalRepository).save(any(RoteiroLocal.class));
     }
 
+    @Test
+    void insert_comCusto_persisteCustoNaEntidade() {
+        User dono = usuario(1L);
+        Roteiro r = roteiro(5L, dono);
+        Local l = local(10L);
+        RoteiroLocalDTO dto = new RoteiroLocalDTO();
+        dto.setIdLocal(10L);
+        dto.setCusto(new BigDecimal("49.90"));
+
+        when(roteiroRepository.findById(5L)).thenReturn(Optional.of(r));
+        when(localRepository.findById(10L)).thenReturn(Optional.of(l));
+        when(roteiroLocalRepository.countByRoteiro_IdRoteiro(5L)).thenReturn(0L);
+        when(roteiroLocalRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        RoteiroLocalDTO result = roteiroLocalService.insert(5L, dto, 1L);
+
+        assertThat(result.getCusto()).isEqualByComparingTo("49.90");
+    }
+
     // ─── update ───────────────────────────────────────────────────────────
 
     @Test
@@ -211,6 +232,24 @@ class RoteiroLocalServiceTest {
         assertThat(result).isNotNull();
         assertThat(rl.getStatus()).isEqualTo("VISITADO");
         assertThat(rl.getDia()).isEqualTo(2);
+    }
+
+    @Test
+    void update_comCusto_atualizaCustoNaEntidade() {
+        User dono = usuario(1L);
+        Roteiro r = roteiro(5L, dono);
+        RoteiroLocal rl = vinculo(r, local(10L));
+
+        when(roteiroLocalRepository.findByRoteiro_IdRoteiroAndLocal_IdLocal(5L, 10L))
+                .thenReturn(Optional.of(rl));
+        when(roteiroLocalRepository.save(any())).thenReturn(rl);
+
+        RoteiroLocalDTO dto = new RoteiroLocalDTO();
+        dto.setCusto(new BigDecimal("120.00"));
+
+        roteiroLocalService.update(5L, 10L, dto, 1L);
+
+        assertThat(rl.getCusto()).isEqualByComparingTo("120.00");
     }
 
     // ─── delete ───────────────────────────────────────────────────────────

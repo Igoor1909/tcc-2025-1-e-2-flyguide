@@ -9,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.TCC.FlyGuide.DTO.RoteiroLocalDTO;
@@ -23,6 +24,7 @@ import com.TCC.FlyGuide.services.exceptions.ResourceNotFoundException;
 import com.TCC.FlyGuide.services.exceptions.UnauthorizedException;
 
 @Service
+@Transactional
 public class RoteiroLocalService {
 
     @Autowired
@@ -34,11 +36,12 @@ public class RoteiroLocalService {
     @Autowired
     private LocalRepository localRepository;
 
+    @Transactional(readOnly = true)
     public List<RoteiroLocalDTO> findByRoteiro(Long idRoteiro) {
         roteiroRepository.findById(idRoteiro)
                 .orElseThrow(() -> new ResourceNotFoundException(idRoteiro));
 
-        List<RoteiroLocal> list = roteiroLocalRepository.findByRoteiro_IdRoteiro(idRoteiro);
+        List<RoteiroLocal> list = roteiroLocalRepository.buscarPorRoteiroComLocal(idRoteiro);
         return list.stream().map(RoteiroLocalDTO::new).collect(Collectors.toList());
     }
 
@@ -71,6 +74,7 @@ public class RoteiroLocalService {
         entity.setDia(dto.getDia());
         entity.setOrdem(dto.getOrdem());
         entity.setHorario(dto.getHorario());
+        entity.setCusto(dto.getCusto());
         entity.setCriadoEm(LocalDateTime.now());
 
         entity = roteiroLocalRepository.save(entity);
@@ -92,6 +96,7 @@ public class RoteiroLocalService {
         entity.setDia(dto.getDia());
         entity.setOrdem(dto.getOrdem());
         entity.setHorario(dto.getHorario());
+        entity.setCusto(dto.getCusto());
 
         entity = roteiroLocalRepository.save(entity);
         return new RoteiroLocalDTO(entity);

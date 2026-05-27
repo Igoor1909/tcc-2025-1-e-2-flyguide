@@ -27,7 +27,9 @@ public class Roteiro implements Serializable {
     private Imagem imagem;
 
     private String titulo;
+    private String pais;
     private String cidade;
+    private String stateCode;
     private String tipoRoteiro;
     private String statusRoteiro;
     private String visibilidadeRoteiro;
@@ -42,7 +44,16 @@ public class Roteiro implements Serializable {
 
     private String observacoes;
 
+    @Column(columnDefinition = "TEXT")
+    private String sugestoesJson;
+
+    @Column(columnDefinition = "TEXT")
+    private String aiStatusJson;
+
     private Long idRoteiroOrigem;
+
+    private Double latDestino;
+    private Double lngDestino;
 
     @Column(updatable = false)
     private LocalDateTime dataCriacao;
@@ -78,8 +89,14 @@ public class Roteiro implements Serializable {
     public String getTitulo()                         { return titulo; }
     public void setTitulo(String titulo)              { this.titulo = titulo; }
 
+    public String getPais()                           { return pais; }
+    public void setPais(String pais)                  { this.pais = pais; }
+
     public String getCidade()                         { return cidade; }
     public void setCidade(String cidade)              { this.cidade = cidade; }
+
+    public String getStateCode()                      { return stateCode; }
+    public void setStateCode(String stateCode)        { this.stateCode = stateCode; }
 
     public String getTipoRoteiro()                    { return tipoRoteiro; }
     public void setTipoRoteiro(String tipoRoteiro)    { this.tipoRoteiro = tipoRoteiro; }
@@ -99,6 +116,12 @@ public class Roteiro implements Serializable {
     public String getObservacoes()                    { return observacoes; }
     public void setObservacoes(String observacoes)    { this.observacoes = observacoes; }
 
+    public String getSugestoesJson()                  { return sugestoesJson; }
+    public void setSugestoesJson(String s)            { this.sugestoesJson = s; }
+
+    public String getAiStatusJson()                   { return aiStatusJson; }
+    public void setAiStatusJson(String s)             { this.aiStatusJson = s; }
+
     public Integer getDiasTotais()                    { return diasTotais; }
     public void setDiasTotais(Integer diasTotais)     { this.diasTotais = diasTotais; }
 
@@ -110,6 +133,12 @@ public class Roteiro implements Serializable {
 
     public Long getIdRoteiroOrigem()                        { return idRoteiroOrigem; }
     public void setIdRoteiroOrigem(Long idRoteiroOrigem)    { this.idRoteiroOrigem = idRoteiroOrigem; }
+
+    public Double getLatDestino()                           { return latDestino; }
+    public void setLatDestino(Double latDestino)            { this.latDestino = latDestino; }
+
+    public Double getLngDestino()                           { return lngDestino; }
+    public void setLngDestino(Double lngDestino)            { this.lngDestino = lngDestino; }
 
     @Override
     public int hashCode() {

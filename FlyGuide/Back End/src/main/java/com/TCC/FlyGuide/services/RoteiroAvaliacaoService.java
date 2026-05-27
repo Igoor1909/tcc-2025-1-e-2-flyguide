@@ -89,6 +89,7 @@ public class RoteiroAvaliacaoService {
         RoteiroAvaliacaoDTO dto = new RoteiroAvaliacaoDTO(avaliacao);
         dto.setNomeExibicao(resolverNome(usuario));
         dto.setTotalLikes(likeRepository.countByAvaliacao_IdAvaliacao(avaliacao.getIdAvaliacao()));
+        dto.setIsPremium("PREMIUM".equals(usuario.getTipoConta()));
         return dto;
     }
 
@@ -100,6 +101,16 @@ public class RoteiroAvaliacaoService {
                     RoteiroAvaliacaoDTO dto = new RoteiroAvaliacaoDTO(a);
                     dto.setNomeExibicao(resolverNome(a.getUsuario()));
                     dto.setTotalLikes(likeRepository.countByAvaliacao_IdAvaliacao(a.getIdAvaliacao()));
+                    if (a.getUsuario() != null) {
+                        Long uid = a.getUsuario().getIdUsuario();
+                        boolean concluiu =
+                            roteiroRepository.existsByUsuario_IdUsuarioAndIdRoteiroAndStatusRoteiro(
+                                uid, idRoteiro, "CONCLUIDO")
+                            || roteiroRepository.existsByUsuario_IdUsuarioAndIdRoteiroOrigemAndStatusRoteiro(
+                                uid, idRoteiro, "CONCLUIDO");
+                        dto.setConcluiuRoteiro(concluiu);
+                        dto.setIsPremium("PREMIUM".equals(a.getUsuario().getTipoConta()));
+                    }
                     return dto;
                 })
                 .collect(Collectors.toList());
@@ -133,6 +144,9 @@ public class RoteiroAvaliacaoService {
                     RoteiroAvaliacaoDTO dto = new RoteiroAvaliacaoDTO(a);
                     dto.setNomeExibicao(resolverNome(a.getUsuario()));
                     dto.setTotalLikes(likeRepository.countByAvaliacao_IdAvaliacao(a.getIdAvaliacao()));
+                    if (a.getUsuario() != null) {
+                        dto.setIsPremium("PREMIUM".equals(a.getUsuario().getTipoConta()));
+                    }
                     return dto;
                 })
                 .orElse(null);

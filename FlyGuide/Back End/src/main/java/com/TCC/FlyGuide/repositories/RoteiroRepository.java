@@ -17,6 +17,12 @@ public interface RoteiroRepository extends JpaRepository<Roteiro, Long> {
 
     boolean existsByUsuario_IdUsuarioAndIdRoteiroOrigem(Long idUsuario, Long idRoteiroOrigem);
 
+    boolean existsByUsuario_IdUsuarioAndIdRoteiroAndStatusRoteiro(
+            Long idUsuario, Long idRoteiro, String statusRoteiro);
+
+    boolean existsByUsuario_IdUsuarioAndIdRoteiroOrigemAndStatusRoteiro(
+            Long idUsuario, Long idRoteiroOrigem, String statusRoteiro);
+
     List<Roteiro> findByVisibilidadeRoteiroOrderByDataCriacaoDesc(String visibilidade);
 
     @Query("SELECT r FROM Roteiro r WHERE r.visibilidadeRoteiro = 'Público' " +

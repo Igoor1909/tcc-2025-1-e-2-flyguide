@@ -31,6 +31,8 @@ public class RoteiroLocal implements Serializable {
     private Integer ordem;
     private LocalTime horario;
 
+    private java.math.BigDecimal custo;
+
     private LocalDateTime criadoEm;
 
     public RoteiroLocal() {}
@@ -58,6 +60,9 @@ public class RoteiroLocal implements Serializable {
 
     public LocalTime getHorario()                          { return horario; }
     public void setHorario(LocalTime horario)              { this.horario = horario; }
+
+    public java.math.BigDecimal getCusto()                 { return custo; }
+    public void setCusto(java.math.BigDecimal custo)       { this.custo = custo; }
 
     public LocalDateTime getCriadoEm()                     { return criadoEm; }
     public void setCriadoEm(LocalDateTime criadoEm)        { this.criadoEm = criadoEm; }

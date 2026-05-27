@@ -189,6 +189,10 @@ class RoteiroAvaliacaoServiceTest {
         when(avaliacaoRepository.findByRoteiro_IdRoteiroOrderByCriadoEmDesc(10L))
                 .thenReturn(List.of(a));
         when(likeRepository.countByAvaliacao_IdAvaliacao(50L)).thenReturn(1L);
+        when(roteiroRepository.existsByUsuario_IdUsuarioAndIdRoteiroAndStatusRoteiro(1L, 10L, "CONCLUIDO"))
+                .thenReturn(false);
+        when(roteiroRepository.existsByUsuario_IdUsuarioAndIdRoteiroOrigemAndStatusRoteiro(1L, 10L, "CONCLUIDO"))
+                .thenReturn(false);
         mockResolverNomePF(usuario);
 
         List<RoteiroAvaliacaoDTO> result = roteiroAvaliacaoService.findByRoteiro(10L);
@@ -196,6 +200,64 @@ class RoteiroAvaliacaoServiceTest {
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getNomeExibicao()).isEqualTo("João Silva");
         assertThat(result.get(0).getTotalLikes()).isEqualTo(1L);
+    }
+
+    @Test
+    void findByRoteiro_usuarioConcluiuRoteiro_setaConcluiuRoteiroTrue() {
+        User usuario = usuarioPF(1L);
+        Roteiro r = roteiro(10L);
+        RoteiroAvaliacao a = avaliacao(50L, r, usuario);
+
+        when(avaliacaoRepository.findByRoteiro_IdRoteiroOrderByCriadoEmDesc(10L))
+                .thenReturn(List.of(a));
+        when(likeRepository.countByAvaliacao_IdAvaliacao(50L)).thenReturn(0L);
+        when(roteiroRepository.existsByUsuario_IdUsuarioAndIdRoteiroAndStatusRoteiro(1L, 10L, "CONCLUIDO"))
+                .thenReturn(true);
+        mockResolverNomePF(usuario);
+
+        List<RoteiroAvaliacaoDTO> result = roteiroAvaliacaoService.findByRoteiro(10L);
+
+        assertThat(result.get(0).getConcluiuRoteiro()).isTrue();
+    }
+
+    @Test
+    void findByRoteiro_usuarioConcluiuClone_setaConcluiuRoteiroTrue() {
+        User usuario = usuarioPF(1L);
+        Roteiro r = roteiro(10L);
+        RoteiroAvaliacao a = avaliacao(50L, r, usuario);
+
+        when(avaliacaoRepository.findByRoteiro_IdRoteiroOrderByCriadoEmDesc(10L))
+                .thenReturn(List.of(a));
+        when(likeRepository.countByAvaliacao_IdAvaliacao(50L)).thenReturn(0L);
+        when(roteiroRepository.existsByUsuario_IdUsuarioAndIdRoteiroAndStatusRoteiro(1L, 10L, "CONCLUIDO"))
+                .thenReturn(false);
+        when(roteiroRepository.existsByUsuario_IdUsuarioAndIdRoteiroOrigemAndStatusRoteiro(1L, 10L, "CONCLUIDO"))
+                .thenReturn(true);
+        mockResolverNomePF(usuario);
+
+        List<RoteiroAvaliacaoDTO> result = roteiroAvaliacaoService.findByRoteiro(10L);
+
+        assertThat(result.get(0).getConcluiuRoteiro()).isTrue();
+    }
+
+    @Test
+    void findByRoteiro_usuarioNaoConcluiu_setaConcluiuRoteiroFalse() {
+        User usuario = usuarioPF(1L);
+        Roteiro r = roteiro(10L);
+        RoteiroAvaliacao a = avaliacao(50L, r, usuario);
+
+        when(avaliacaoRepository.findByRoteiro_IdRoteiroOrderByCriadoEmDesc(10L))
+                .thenReturn(List.of(a));
+        when(likeRepository.countByAvaliacao_IdAvaliacao(50L)).thenReturn(0L);
+        when(roteiroRepository.existsByUsuario_IdUsuarioAndIdRoteiroAndStatusRoteiro(1L, 10L, "CONCLUIDO"))
+                .thenReturn(false);
+        when(roteiroRepository.existsByUsuario_IdUsuarioAndIdRoteiroOrigemAndStatusRoteiro(1L, 10L, "CONCLUIDO"))
+                .thenReturn(false);
+        mockResolverNomePF(usuario);
+
+        List<RoteiroAvaliacaoDTO> result = roteiroAvaliacaoService.findByRoteiro(10L);
+
+        assertThat(result.get(0).getConcluiuRoteiro()).isFalse();
     }
 
     // ─── getMedia ──────────────────────────────────────────────────────────

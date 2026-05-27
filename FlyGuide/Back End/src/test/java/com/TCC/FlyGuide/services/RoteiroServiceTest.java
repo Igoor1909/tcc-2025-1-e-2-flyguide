@@ -6,6 +6,8 @@ import com.TCC.FlyGuide.entities.User;
 import com.TCC.FlyGuide.repositories.*;
 import com.TCC.FlyGuide.services.exceptions.ResourceNotFoundException;
 import com.TCC.FlyGuide.services.exceptions.UnauthorizedException;
+
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -34,6 +36,8 @@ class RoteiroServiceTest {
     @Mock RoteiroLocalRepository roteiroLocalRepository;
     @Mock ComentarioLikeRepository comentarioLikeRepository;
     @Mock RoteiroAvaliacaoRepository avaliacaoRepository;
+    @Mock PessoaFisicaRepository pessoaFisicaRepository;
+    @Mock PessoaJuridicaRepository pessoaJuridicaRepository;
     @InjectMocks RoteiroService roteiroService;
 
     private User usuario(Long id) {
@@ -300,5 +304,76 @@ class RoteiroServiceTest {
 
         assertThatThrownBy(() -> roteiroService.findCompletoById(99L))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    // ─── findById ──────────────────────────────────────────────────────────
+
+    @Test
+    void findById_roteiroExistente_retornaDTO() {
+        User dono = usuario(1L);
+        Roteiro r = roteiro(10L, dono);
+        when(roteiroRepository.findById(10L)).thenReturn(Optional.of(r));
+
+        RoteiroDTO result = roteiroService.findById(10L);
+
+        assertThat(result).isNotNull();
+        assertThat(result.getIdRoteiro()).isEqualTo(10L);
+    }
+
+    @Test
+    void findById_roteiroNaoEncontrado_throwsResourceNotFound() {
+        when(roteiroRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> roteiroService.findById(99L))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    // ─── salvarAiStatus ────────────────────────────────────────────────────
+
+    @Test
+    void salvarAiStatus_donoDoRoteiro_persisteJson() {
+        User dono = usuario(1L);
+        Roteiro r = roteiro(10L, dono);
+        when(roteiroRepository.findById(10L)).thenReturn(Optional.of(r));
+        when(roteiroRepository.save(any())).thenReturn(r);
+
+        roteiroService.salvarAiStatus(10L, Map.of("etapa", "concluido"), 1L);
+
+        verify(roteiroRepository).save(r);
+        assertThat(r.getAiStatusJson()).contains("concluido");
+    }
+
+    @Test
+    void salvarAiStatus_usuarioDiferente_throwsUnauthorized() {
+        User dono = usuario(1L);
+        Roteiro r = roteiro(10L, dono);
+        when(roteiroRepository.findById(10L)).thenReturn(Optional.of(r));
+
+        assertThatThrownBy(() -> roteiroService.salvarAiStatus(10L, Map.of("etapa", "x"), 99L))
+                .isInstanceOf(UnauthorizedException.class);
+    }
+
+    @Test
+    void salvarAiStatus_roteiroNaoEncontrado_throwsResourceNotFound() {
+        when(roteiroRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> roteiroService.salvarAiStatus(99L, Map.of(), 1L))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    // ─── jaClonou ──────────────────────────────────────────────────────────
+
+    @Test
+    void jaClonou_usuarioNaoClonou_retornaFalse() {
+        when(roteiroRepository.existsByUsuario_IdUsuarioAndIdRoteiroOrigem(1L, 10L)).thenReturn(false);
+
+        assertThat(roteiroService.jaClonou(10L, 1L)).isFalse();
+    }
+
+    @Test
+    void jaClonou_usuarioJaClonou_retornaTrue() {
+        when(roteiroRepository.existsByUsuario_IdUsuarioAndIdRoteiroOrigem(1L, 10L)).thenReturn(true);
+
+        assertThat(roteiroService.jaClonou(10L, 1L)).isTrue();
     }
 }

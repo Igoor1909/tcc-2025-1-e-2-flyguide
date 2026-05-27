@@ -1,0 +1,5 @@
+target/
+*.zip
+.git/
+.claude/
+*.md
