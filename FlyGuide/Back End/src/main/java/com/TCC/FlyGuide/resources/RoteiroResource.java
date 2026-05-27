@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -23,7 +24,10 @@ import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import com.TCC.FlyGuide.DTO.RoteiroDTO;
 import com.TCC.FlyGuide.DTO.RoteiroCompletoDTO;
+import com.TCC.FlyGuide.DTO.GerarRoteiroRequestDTO;
+import com.TCC.FlyGuide.DTO.GerarRoteiroResponseDTO;
 import com.TCC.FlyGuide.services.RoteiroService;
+import com.TCC.FlyGuide.services.GeradorRoteiroService;
 import com.TCC.FlyGuide.services.PdfService;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -36,7 +40,14 @@ public class RoteiroResource {
     private RoteiroService service;
 
     @Autowired
+    private GeradorRoteiroService geradorService;
+
+    @Autowired
     private PdfService pdfService;
+
+    private Long getUsuarioLogadoId() {
+        return (Long) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+    }
 
     @GetMapping
     public ResponseEntity<List<RoteiroDTO>> findAll() {
@@ -73,6 +84,12 @@ public class RoteiroResource {
         return ResponseEntity.ok().body(list);
     }
 
+    @PostMapping(value = "/gerar")
+    public ResponseEntity<GerarRoteiroResponseDTO> gerarComIA(@RequestBody GerarRoteiroRequestDTO req) {
+        GerarRoteiroResponseDTO resp = geradorService.gerar(req);
+        return ResponseEntity.ok(resp);
+    }
+
     @PostMapping
     public ResponseEntity<RoteiroDTO> insert(@RequestBody RoteiroDTO dto) {
         RoteiroDTO created = service.insert(dto);
@@ -96,6 +113,12 @@ public class RoteiroResource {
     public ResponseEntity<Void> atualizarStatus(@PathVariable Long id, @RequestBody java.util.Map<String, String> body) {
         String novoStatus = body.get("statusRoteiro");
         if (novoStatus != null) service.atualizarStatus(id, novoStatus);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping(value = "/{id}/ai-status")
+    public ResponseEntity<Void> salvarAiStatus(@PathVariable Long id, @RequestBody java.util.Map<String, String> body) {
+        service.salvarAiStatus(id, body, getUsuarioLogadoId());
         return ResponseEntity.noContent().build();
     }
 

@@ -6,6 +6,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 
 import com.TCC.FlyGuide.entities.RoteiroLocal;
+import com.fasterxml.jackson.annotation.JsonFormat;
 
 public class RoteiroLocalDTO implements Serializable {
 
@@ -18,6 +19,7 @@ public class RoteiroLocalDTO implements Serializable {
     private String placeId;
     private String nome;
     private String endereco;
+    private String tipo;
     private BigDecimal latitude;
     private BigDecimal longitude;
 
@@ -26,6 +28,9 @@ public class RoteiroLocalDTO implements Serializable {
 
     private Integer dia;
     private Integer ordem;
+    private BigDecimal custo;
+
+    @JsonFormat(pattern = "HH:mm:ss")
     private LocalTime horario;
 
     private LocalDateTime criadoEm;
@@ -55,6 +60,10 @@ public class RoteiroLocalDTO implements Serializable {
                 ? entity.getLocal().getEndereco()
                 : null;
 
+        this.tipo = (entity.getLocal() != null)
+                ? entity.getLocal().getTipo()
+                : null;
+
         this.latitude = (entity.getLocal() != null)
                 ? entity.getLocal().getLatitude()
                 : null;
@@ -68,6 +77,7 @@ public class RoteiroLocalDTO implements Serializable {
         this.dia         = entity.getDia();
         this.ordem       = entity.getOrdem();
         this.horario     = entity.getHorario();
+        this.custo       = entity.getCusto();
         this.criadoEm    = entity.getCriadoEm();
     }
 
@@ -89,6 +99,9 @@ public class RoteiroLocalDTO implements Serializable {
     public String getEndereco()                            { return endereco; }
     public void setEndereco(String endereco)               { this.endereco = endereco; }
 
+    public String getTipo()                                { return tipo; }
+    public void setTipo(String tipo)                       { this.tipo = tipo; }
+
     public BigDecimal getLatitude()                        { return latitude; }
     public void setLatitude(BigDecimal latitude)           { this.latitude = latitude; }
 
@@ -109,6 +122,9 @@ public class RoteiroLocalDTO implements Serializable {
 
     public LocalTime getHorario()                         { return horario; }
     public void setHorario(LocalTime horario)             { this.horario = horario; }
+
+    public BigDecimal getCusto()                          { return custo; }
+    public void setCusto(BigDecimal custo)                { this.custo = custo; }
 
     public LocalDateTime getCriadoEm()                    { return criadoEm; }
     public void setCriadoEm(LocalDateTime criadoEm)       { this.criadoEm = criadoEm; }

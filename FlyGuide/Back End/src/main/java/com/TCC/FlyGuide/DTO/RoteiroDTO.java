@@ -4,8 +4,12 @@ import java.io.Serializable;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
 
 import com.TCC.FlyGuide.entities.Roteiro;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 public class RoteiroDTO implements Serializable {
 
@@ -20,7 +24,9 @@ public class RoteiroDTO implements Serializable {
     private String imagemChave;
 
     private String titulo;
+    private String pais;
     private String cidade;
+    private String stateCode;
     private String tipoRoteiro;
     private String statusRoteiro;
     private String visibilidadeRoteiro;
@@ -35,8 +41,15 @@ public class RoteiroDTO implements Serializable {
     private Double mediaAvaliacao;
     private Long totalAvaliacoes;
 
+    private Double latDestino;
+    private Double lngDestino;
+
+    private List<Map<String, Object>> sugestoes;
+    private Map<String, String> aiStatus;
+
     // Dados do autor (para exibição no feed)
     private String emailUsuario;
+    private String nomeUsuario;
 
     public RoteiroDTO() {}
 
@@ -44,7 +57,9 @@ public class RoteiroDTO implements Serializable {
         this.idRoteiro           = entity.getIdRoteiro();
         this.idUsuario           = (entity.getUsuario() != null) ? entity.getUsuario().getIdUsuario() : null;
         this.titulo              = entity.getTitulo();
+        this.pais                = entity.getPais();
         this.cidade              = entity.getCidade();
+        this.stateCode           = entity.getStateCode();
         this.tipoRoteiro         = entity.getTipoRoteiro();
         this.statusRoteiro       = entity.getStatusRoteiro();
         this.visibilidadeRoteiro = entity.getVisibilidadeRoteiro();
@@ -61,7 +76,29 @@ public class RoteiroDTO implements Serializable {
             this.imagemChave = entity.getImagem().getChave();
         }
 
-        this.dataCriacao = entity.getDataCriacao();
+        this.dataCriacao  = entity.getDataCriacao();
+        this.latDestino   = entity.getLatDestino();
+        this.lngDestino   = entity.getLngDestino();
+
+        // Deserializar sugestões do JSON
+        if (entity.getSugestoesJson() != null && !entity.getSugestoesJson().isBlank()) {
+            try {
+                this.sugestoes = new ObjectMapper().readValue(
+                    entity.getSugestoesJson(),
+                    new TypeReference<List<Map<String, Object>>>() {}
+                );
+            } catch (Exception ignored) {}
+        }
+
+        // Deserializar status IA do JSON
+        if (entity.getAiStatusJson() != null && !entity.getAiStatusJson().isBlank()) {
+            try {
+                this.aiStatus = new ObjectMapper().readValue(
+                    entity.getAiStatusJson(),
+                    new TypeReference<Map<String, String>>() {}
+                );
+            } catch (Exception ignored) {}
+        }
 
         // Dados do autor
         if (entity.getUsuario() != null) {
@@ -87,8 +124,14 @@ public class RoteiroDTO implements Serializable {
     public String getTitulo()                             { return titulo; }
     public void setTitulo(String titulo)                  { this.titulo = titulo; }
 
+    public String getPais()                               { return pais; }
+    public void setPais(String pais)                      { this.pais = pais; }
+
     public String getCidade()                             { return cidade; }
     public void setCidade(String cidade)                  { this.cidade = cidade; }
+
+    public String getStateCode()                          { return stateCode; }
+    public void setStateCode(String stateCode)            { this.stateCode = stateCode; }
 
     public String getTipoRoteiro()                        { return tipoRoteiro; }
     public void setTipoRoteiro(String tipoRoteiro)        { this.tipoRoteiro = tipoRoteiro; }
@@ -123,6 +166,21 @@ public class RoteiroDTO implements Serializable {
     public Long getTotalAvaliacoes()                               { return totalAvaliacoes; }
     public void setTotalAvaliacoes(Long totalAvaliacoes)           { this.totalAvaliacoes = totalAvaliacoes; }
 
+    public List<Map<String, Object>> getSugestoes()                  { return sugestoes; }
+    public void setSugestoes(List<Map<String, Object>> sugestoes)    { this.sugestoes = sugestoes; }
+
+    public Map<String, String> getAiStatus()                         { return aiStatus; }
+    public void setAiStatus(Map<String, String> aiStatus)            { this.aiStatus = aiStatus; }
+
     public String getEmailUsuario()                          { return emailUsuario; }
     public void setEmailUsuario(String emailUsuario)         { this.emailUsuario = emailUsuario; }
+
+    public String getNomeUsuario()                           { return nomeUsuario; }
+    public void setNomeUsuario(String nomeUsuario)           { this.nomeUsuario = nomeUsuario; }
+
+    public Double getLatDestino()                            { return latDestino; }
+    public void setLatDestino(Double latDestino)             { this.latDestino = latDestino; }
+
+    public Double getLngDestino()                            { return lngDestino; }
+    public void setLngDestino(Double lngDestino)             { this.lngDestino = lngDestino; }
 }

@@ -15,6 +15,8 @@ public class RoteiroAvaliacaoDTO {
     private LocalDateTime criadoEm;
     private LocalDateTime atualizadoEm;
     private Long totalLikes;
+    private Boolean concluiuRoteiro;
+    private Boolean isPremium;
 
     public RoteiroAvaliacaoDTO() {}
 
@@ -54,4 +56,10 @@ public class RoteiroAvaliacaoDTO {
 
     public Long getTotalLikes()                              { return totalLikes; }
     public void setTotalLikes(Long totalLikes)               { this.totalLikes = totalLikes; }
+
+    public Boolean getConcluiuRoteiro()                         { return concluiuRoteiro; }
+    public void setConcluiuRoteiro(Boolean concluiuRoteiro)     { this.concluiuRoteiro = concluiuRoteiro; }
+
+    public Boolean getIsPremium()                               { return isPremium; }
+    public void setIsPremium(Boolean isPremium)                 { this.isPremium = isPremium; }
 }

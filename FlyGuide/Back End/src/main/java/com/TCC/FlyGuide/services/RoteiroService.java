@@ -6,15 +6,21 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 import com.TCC.FlyGuide.DTO.RoteiroCompletoDTO;
 import com.TCC.FlyGuide.DTO.RoteiroLocalDTO;
 import com.TCC.FlyGuide.entities.Imagem;
+import com.TCC.FlyGuide.entities.PessoaFisica;
+import com.TCC.FlyGuide.entities.PessoaJuridica;
 import com.TCC.FlyGuide.entities.RoteiroLocal;
 import com.TCC.FlyGuide.repositories.ImagemRepository;
 import com.TCC.FlyGuide.repositories.ComentarioLikeRepository;
+import com.TCC.FlyGuide.repositories.PessoaFisicaRepository;
+import com.TCC.FlyGuide.repositories.PessoaJuridicaRepository;
 import com.TCC.FlyGuide.repositories.RoteiroLocalRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -36,6 +42,8 @@ import jakarta.persistence.EntityNotFoundException;
 @Service
 public class RoteiroService {
 
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
     @Autowired
     private RoteiroRepository roteiroRepository;
 
@@ -54,6 +62,24 @@ public class RoteiroService {
     @Autowired
     private com.TCC.FlyGuide.repositories.RoteiroAvaliacaoRepository avaliacaoRepository;
 
+    @Autowired
+    private PessoaFisicaRepository pessoaFisicaRepository;
+
+    @Autowired
+    private PessoaJuridicaRepository pessoaJuridicaRepository;
+
+    private void preencherNomeAutor(RoteiroDTO dto) {
+        if (dto.getIdUsuario() == null) return;
+        pessoaFisicaRepository.findById(dto.getIdUsuario()).ifPresentOrElse(
+            pf -> dto.setNomeUsuario(pf.getPrimeiroNome() + " " + pf.getUltimoNome()),
+            () -> pessoaJuridicaRepository.findById(dto.getIdUsuario()).ifPresent(
+                pj -> dto.setNomeUsuario(
+                    pj.getNomeFantasia() != null ? pj.getNomeFantasia() : pj.getRazaoSocial()
+                )
+            )
+        );
+    }
+
     @Transactional(readOnly = true)
     public List<RoteiroDTO> findAll() {
         List<Roteiro> list = roteiroRepository.findAll();
@@ -62,6 +88,7 @@ public class RoteiroService {
             Double media = avaliacaoRepository.mediaByRoteiro(r.getIdRoteiro());
             dto.setMediaAvaliacao(media != null ? Math.round(media * 10.0) / 10.0 : 0.0);
             dto.setTotalAvaliacoes(avaliacaoRepository.totalByRoteiro(r.getIdRoteiro()));
+            preencherNomeAutor(dto);
             return dto;
         }).collect(Collectors.toList());
     }
@@ -69,7 +96,9 @@ public class RoteiroService {
     public RoteiroDTO findById(Long id) {
         Optional<Roteiro> obj = roteiroRepository.findById(id);
         Roteiro entity = obj.orElseThrow(() -> new ResourceNotFoundException(id));
-        return new RoteiroDTO(entity);
+        RoteiroDTO dto = new RoteiroDTO(entity);
+        preencherNomeAutor(dto);
+        return dto;
     }
 
     @Transactional(readOnly = true)
@@ -80,6 +109,7 @@ public class RoteiroService {
             Double media = avaliacaoRepository.mediaByRoteiro(r.getIdRoteiro());
             dto.setMediaAvaliacao(media != null ? Math.round(media * 10.0) / 10.0 : 0.0);
             dto.setTotalAvaliacoes(avaliacaoRepository.totalByRoteiro(r.getIdRoteiro()));
+            preencherNomeAutor(dto);
             return dto;
         }).collect(Collectors.toList());
     }
@@ -107,6 +137,7 @@ public class RoteiroService {
             Double media = avaliacaoRepository.mediaByRoteiro(r.getIdRoteiro());
             dto.setMediaAvaliacao(media != null ? Math.round(media * 10.0) / 10.0 : 0.0);
             dto.setTotalAvaliacoes(avaliacaoRepository.totalByRoteiro(r.getIdRoteiro()));
+            preencherNomeAutor(dto);
             return dto;
         });
     }
@@ -137,9 +168,26 @@ public class RoteiroService {
     }
 
     @Transactional
+    public void salvarAiStatus(Long id, java.util.Map<String, String> aiStatus, Long idUsuario) {
+        Roteiro roteiro = roteiroRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException(id));
+        if (!roteiro.getUsuario().getIdUsuario().equals(idUsuario)) {
+            throw new UnauthorizedException("Você não tem permissão para modificar este roteiro.");
+        }
+        try {
+            roteiro.setAiStatusJson(objectMapper.writeValueAsString(aiStatus));
+        } catch (Exception ignored) {}
+        roteiroRepository.save(roteiro);
+    }
+
+    @Transactional
     public RoteiroDTO clonar(Long idRoteiro, Long idUsuario) {
         Roteiro original = roteiroRepository.findById(idRoteiro)
                 .orElseThrow(() -> new ResourceNotFoundException(idRoteiro));
+
+        if (original.getUsuario().getIdUsuario().equals(idUsuario)) {
+            throw new UnauthorizedException("Você não pode salvar seu próprio roteiro.");
+        }
 
         User usuario = userRepository.findById(idUsuario)
                 .orElseThrow(() -> new ResourceNotFoundException(idUsuario));
@@ -148,7 +196,9 @@ public class RoteiroService {
         Roteiro clone = new Roteiro();
         clone.setUsuario(usuario);
         clone.setTitulo(original.getTitulo());
+        clone.setPais(original.getPais());
         clone.setCidade(original.getCidade());
+        clone.setStateCode(original.getStateCode());
         clone.setDataInicio(original.getDataInicio());
         clone.setDataFim(original.getDataFim());
         clone.setDiasTotais(original.getDiasTotais());
@@ -222,7 +272,9 @@ public class RoteiroService {
 
     private void updateData(Roteiro entity, RoteiroDTO dto) {
         entity.setTitulo(dto.getTitulo());
+        entity.setPais(dto.getPais());
         entity.setCidade(dto.getCidade());
+        entity.setStateCode(dto.getStateCode());
         entity.setTipoRoteiro(dto.getTipoRoteiro());
         entity.setStatusRoteiro(dto.getStatusRoteiro());
         entity.setVisibilidadeRoteiro(dto.getVisibilidadeRoteiro());
@@ -231,6 +283,15 @@ public class RoteiroService {
         entity.setObservacoes(dto.getObservacoes());
         entity.setDiasTotais(dto.getDiasTotais());
         entity.setOrcamento(dto.getOrcamento());
+        if (dto.getLatDestino() != null) entity.setLatDestino(dto.getLatDestino());
+        if (dto.getLngDestino() != null) entity.setLngDestino(dto.getLngDestino());
+
+        // Persiste sugestões da IA como JSON — só sobrescreve se enviadas
+        if (dto.getSugestoes() != null && !dto.getSugestoes().isEmpty()) {
+            try {
+                entity.setSugestoesJson(objectMapper.writeValueAsString(dto.getSugestoes()));
+            } catch (Exception ignored) {}
+        }
 
         // Vincula a imagem de capa se enviada
         if (dto.getIdImagem() != null) {
@@ -252,6 +313,7 @@ public class RoteiroService {
                 .collect(Collectors.toList());
 
         RoteiroDTO roteiroDTO = new RoteiroDTO(roteiro);
+        preencherNomeAutor(roteiroDTO);
         return new RoteiroCompletoDTO(roteiroDTO, locaisDTO);
     }
 }

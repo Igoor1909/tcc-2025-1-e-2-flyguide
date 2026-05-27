@@ -2,6 +2,7 @@ package com.TCC.FlyGuide.services;
 
 import com.TCC.FlyGuide.DTO.AtualizarPessoaFisicaDTO;
 import com.TCC.FlyGuide.DTO.AtualizarPessoaJuridicaDTO;
+import com.TCC.FlyGuide.DTO.AtualizarUsuarioDTO;
 import com.TCC.FlyGuide.DTO.CadastroPessoaFisicaDTO;
 import com.TCC.FlyGuide.DTO.CadastroPessoaJuridicaDTO;
 import com.TCC.FlyGuide.entities.PessoaFisica;

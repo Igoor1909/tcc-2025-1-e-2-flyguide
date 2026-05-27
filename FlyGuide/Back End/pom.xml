@@ -100,6 +100,12 @@
 			<artifactId>spring-boot-starter-mail</artifactId>
 		</dependency>
 
+		<!-- Jackson - serialização/deserialização JSON -->
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-databind</artifactId>
+		</dependency>
+
 		<!-- iText 7 - Geração de PDF -->
 		<dependency>
 			<groupId>com.itextpdf</groupId>

@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class GooglePlacesService {
@@ -35,8 +36,12 @@ public class GooglePlacesService {
      * Busca locais no mundo inteiro via Google Places Text Search.
      * Retorna lista de LocalBuscaDTO com os campos básicos.
      */
-    @SuppressWarnings("unchecked")
     public List<LocalBuscaDTO> buscarLocais(String query) {
+        return buscarLocaisProximos(query, null, null, 0);
+    }
+
+    @SuppressWarnings("unchecked")
+    public List<LocalBuscaDTO> buscarLocaisProximos(String query, Double lat, Double lng, int raioMetros) {
         List<LocalBuscaDTO> resultado = new ArrayList<>();
 
         if (apiKey == null || apiKey.isBlank() || query == null || query.isBlank()) {
@@ -44,11 +49,17 @@ public class GooglePlacesService {
         }
 
         try {
-            String url = UriComponentsBuilder.fromUriString(TEXT_SEARCH_URL)
+            UriComponentsBuilder builder = UriComponentsBuilder.fromUriString(TEXT_SEARCH_URL)
                     .queryParam("query", query)
                     .queryParam("language", "pt-BR")
-                    .queryParam("key", apiKey)
-                    .toUriString();
+                    .queryParam("key", apiKey);
+
+            if (lat != null && lng != null && raioMetros > 0) {
+                builder.queryParam("location", lat + "," + lng)
+                       .queryParam("radius", raioMetros);
+            }
+
+            String url = builder.toUriString();
 
             Map<?, ?> response = restTemplate.getForObject(url, Map.class);
             if (response == null) return resultado;
@@ -90,11 +101,29 @@ public class GooglePlacesService {
                 resultado.add(dto);
             }
 
+            // Text Search usa location+radius como bias, não restrição — filtra por distância real
+            if (lat != null && lng != null && raioMetros > 0) {
+                resultado = resultado.stream()
+                    .filter(dto -> dto.getLatitude() != null && dto.getLongitude() != null
+                            && calcularDistanciaMetros(lat, lng, dto.getLatitude(), dto.getLongitude()) <= raioMetros)
+                    .collect(Collectors.toList());
+            }
+
         } catch (Exception e) {
             // Falha na API retorna lista vazia sem quebrar o sistema
         }
 
         return resultado;
+    }
+
+    private double calcularDistanciaMetros(double lat1, double lng1, double lat2, double lng2) {
+        final double R = 6_371_000;
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLng = Math.toRadians(lng2 - lng1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                 + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                 * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
 
     /**

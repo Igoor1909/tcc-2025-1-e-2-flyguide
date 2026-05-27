@@ -31,6 +31,7 @@ import org.springframework.stereotype.Service;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -203,6 +204,8 @@ public class PdfService {
             if (!semDia.isEmpty()) {
                 renderizarDia(doc, fontBold, fontRegular, null, semDia, roteiro);
             }
+        } else if (roteiro.getSugestoes() != null && !roteiro.getSugestoes().isEmpty()) {
+            renderizarSugestoesPdf(doc, fontBold, fontRegular, roteiro);
         } else {
             doc.add(new Paragraph("Nenhum local adicionado a este roteiro.")
                     .setFont(fontRegular).setFontSize(11)
@@ -220,6 +223,126 @@ public class PdfService {
 
         doc.close();
         return baos.toByteArray();
+    }
+
+    // ── RENDERIZAR SUGESTÕES DA IA ───────────────────────────────────────────
+    @SuppressWarnings("unchecked")
+    private void renderizarSugestoesPdf(Document doc, PdfFont fontBold, PdfFont fontRegular,
+                                         RoteiroDTO roteiro) {
+        for (Map<String, Object> diaMap : roteiro.getSugestoes()) {
+            int dia = diaMap.get("dia") instanceof Number ? ((Number) diaMap.get("dia")).intValue() : 0;
+
+            String tituloDia = dia > 0 ? "Dia " + dia : "Sugestões";
+            if (dia > 0 && roteiro.getDataInicio() != null) {
+                tituloDia += "   •   " + roteiro.getDataInicio().plusDays(dia - 1).format(FMT_DATA);
+            }
+
+            Map<String, Object> periodos  = (Map<String, Object>) diaMap.get("periodos");
+            List<Object>        locaisFlat = (List<Object>)        diaMap.get("locais");
+
+            int totalDia = 0;
+            if (periodos != null) {
+                for (String p : new String[]{"manha", "tarde", "noite"}) {
+                    List<?> lp = (List<?>) periodos.get(p);
+                    if (lp != null) totalDia += lp.size();
+                }
+            } else if (locaisFlat != null) {
+                totalDia = locaisFlat.size();
+            }
+
+            tituloDia += "   •   " + totalDia + (totalDia == 1 ? " local" : " locais");
+
+            Table diaHeader = new Table(UnitValue.createPercentArray(new float[]{1}))
+                    .setWidth(UnitValue.createPercentValue(100))
+                    .setMarginBottom(8).setBorder(Border.NO_BORDER).setKeepTogether(true);
+
+            diaHeader.addCell(new Cell()
+                    .setBackgroundColor(COR_CINZA_ESCURO).setBorder(Border.NO_BORDER)
+                    .setPaddingTop(10).setPaddingBottom(10).setPaddingLeft(16).setPaddingRight(16)
+                    .add(new Paragraph(tituloDia)
+                            .setFont(fontBold).setFontSize(11).setFontColor(COR_BRANCO)));
+
+            doc.add(diaHeader);
+
+            if (periodos != null) {
+                String[] chaves = {"manha", "tarde", "noite"};
+                String[] nomes  = {"Manhã",  "Tarde",  "Noite"};
+                for (int p = 0; p < chaves.length; p++) {
+                    List<Map<String, Object>> lp = (List<Map<String, Object>>) periodos.get(chaves[p]);
+                    if (lp == null || lp.isEmpty()) continue;
+
+                    Table periodoHeader = new Table(UnitValue.createPercentArray(new float[]{1}))
+                            .setWidth(UnitValue.createPercentValue(100))
+                            .setMarginBottom(4).setBorder(Border.NO_BORDER);
+                    periodoHeader.addCell(new Cell()
+                            .setBackgroundColor(COR_LARANJA_MEDIO).setBorder(Border.NO_BORDER)
+                            .setPaddingTop(5).setPaddingBottom(5).setPaddingLeft(16).setPaddingRight(16)
+                            .add(new Paragraph(nomes[p])
+                                    .setFont(fontBold).setFontSize(9).setFontColor(COR_LARANJA)));
+                    doc.add(periodoHeader);
+
+                    for (int i = 0; i < lp.size(); i++) {
+                        boolean ultimo = (i == lp.size() - 1) && (p == chaves.length - 1
+                                || semProximoPeriodo(periodos, chaves, p + 1));
+                        renderizarCardSugestao(doc, fontBold, fontRegular, lp.get(i), i + 1, ultimo);
+                    }
+                }
+            } else if (locaisFlat != null) {
+                for (int i = 0; i < locaisFlat.size(); i++) {
+                    Map<String, Object> local = new HashMap<>();
+                    Object obj = locaisFlat.get(i);
+                    if (obj instanceof String) {
+                        local.put("nome", obj);
+                    } else if (obj instanceof Map) {
+                        local = (Map<String, Object>) obj;
+                    }
+                    renderizarCardSugestao(doc, fontBold, fontRegular, local, i + 1,
+                            i == locaisFlat.size() - 1);
+                }
+            }
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private boolean semProximoPeriodo(Map<String, Object> periodos, String[] chaves, int from) {
+        for (int i = from; i < chaves.length; i++) {
+            List<?> lp = (List<?>) periodos.get(chaves[i]);
+            if (lp != null && !lp.isEmpty()) return false;
+        }
+        return true;
+    }
+
+    private void renderizarCardSugestao(Document doc, PdfFont fontBold, PdfFont fontRegular,
+                                         Map<String, Object> local, int ordem, boolean ultimo) {
+        String nome  = local.get("nome")  instanceof String ? (String) local.get("nome")  : "Local";
+        String custo = local.get("custo") instanceof String ? (String) local.get("custo") : null;
+
+        Table card = new Table(UnitValue.createPercentArray(new float[]{0.08f, 0.92f}))
+                .setWidth(UnitValue.createPercentValue(100))
+                .setMarginBottom(ultimo ? 20 : 2).setBorder(Border.NO_BORDER).setKeepTogether(true);
+
+        Cell colEsq = new Cell()
+                .setBackgroundColor(COR_LARANJA_CLARO).setBorder(Border.NO_BORDER)
+                .setBorderLeft(new SolidBorder(COR_LARANJA, 3))
+                .setPadding(10).setTextAlignment(TextAlignment.CENTER)
+                .add(new Paragraph(String.format("%02d", ordem))
+                        .setFont(fontBold).setFontSize(9).setFontColor(COR_LARANJA));
+
+        Cell colDir = new Cell()
+                .setBackgroundColor(COR_CINZA_CLARO).setBorder(Border.NO_BORDER)
+                .setPaddingTop(10).setPaddingBottom(10).setPaddingLeft(14).setPaddingRight(14);
+
+        colDir.add(new Paragraph(nome)
+                .setFont(fontBold).setFontSize(11).setFontColor(COR_CINZA_ESCURO).setMarginBottom(2));
+
+        if (custo != null && !custo.isBlank()) {
+            colDir.add(new Paragraph("Custo estimado: " + custo)
+                    .setFont(fontRegular).setFontSize(9).setFontColor(COR_CINZA_MEDIO));
+        }
+
+        card.addCell(colEsq);
+        card.addCell(colDir);
+        doc.add(card);
     }
 
     // ── RENDERIZAR SEÇÃO DE UM DIA ───────────────────────────────────────────
