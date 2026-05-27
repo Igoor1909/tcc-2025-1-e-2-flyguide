@@ -42,6 +42,7 @@ public class Roteiro implements Serializable {
     @Column(precision = 12, scale = 2)
     private BigDecimal orcamento;
 
+    @Column(columnDefinition = "TEXT")
     private String observacoes;
 
     @Column(columnDefinition = "TEXT")
