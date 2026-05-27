@@ -21,7 +21,9 @@
       "Bash(Get-ChildItem -Path . -Directory)",
       "Bash(Select-Object Name)",
       "Bash(Get-ChildItem -Path \"C:\\\\Projetos\\\\tcc-repo\\\\FlyGuide\\\\Back End\\\\src\\\\main\\\\java\\\\com\\\\TCC\\\\FlyGuide\\\\resources\" -File -Recurse)",
-      "Bash(Select-Object FullName)"
+      "Bash(Select-Object FullName)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Projetos\\\\tcc-repo\\\\FlyGuide\\\\Back End\\\\src\\\\main\\\\java\\\\com\\\\TCC\\\\FlyGuide\" -Recurse -Filter \"*.java\")",
+      "Bash(Select-Object -ExpandProperty FullName)"
     ]
   }
 }
