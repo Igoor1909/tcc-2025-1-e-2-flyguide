@@ -13,6 +13,7 @@ public class EmailService {
 
     public void enviarOtpResetSenha(String destinatario, String codigo) {
         SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom("onboarding@resend.dev");
         message.setTo(destinatario);
         message.setSubject("FlyGuide - Recuperação de Senha");
         message.setText(
@@ -28,6 +29,7 @@ public class EmailService {
 
     public void enviarOtpLogin(String destinatario, String codigo) {
         SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom("onboarding@resend.dev");
         message.setTo(destinatario);
         message.setSubject("FlyGuide - Código de Acesso");
         message.setText(

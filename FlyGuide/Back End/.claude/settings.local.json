@@ -19,7 +19,9 @@
       "PowerShell(Get-Process *)",
       "Read(//c/Users/igorg/OneDrive/Área de Trabalho/FLYGUIDE_FRONT_v1.4/FLYGUIDE_FRONT_v1.4/**)",
       "Bash(Get-ChildItem -Path . -Directory)",
-      "Bash(Select-Object Name)"
+      "Bash(Select-Object Name)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Projetos\\\\tcc-repo\\\\FlyGuide\\\\Back End\\\\src\\\\main\\\\java\\\\com\\\\TCC\\\\FlyGuide\\\\resources\" -File -Recurse)",
+      "Bash(Select-Object FullName)"
     ]
   }
 }
