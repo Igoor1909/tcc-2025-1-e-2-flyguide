@@ -105,7 +105,9 @@ public class GeradorRoteiroService {
             try {
                 aiJson = objectMapper.readTree(text);
             } catch (Exception parseEx) {
-                logger.error("Falha ao parsear JSON da IA para {}. Texto recebido: [{}] | Erro: {}", req.getCidade(), text, parseEx.getMessage());
+                int len = text.length();
+                String trecho = len > 200 ? text.substring(0, 200) + "...[" + len + " chars total]" : text;
+                logger.error("Falha ao parsear JSON da IA para {}. Trecho: [{}] | Erro: {}", req.getCidade(), trecho, parseEx.getMessage());
                 return fallback(req);
             }
 
@@ -852,6 +854,8 @@ public class GeradorRoteiroService {
         if (s.startsWith("```json")) s = s.substring(7);
         else if (s.startsWith("```"))  s = s.substring(3);
         if (s.endsWith("```")) s = s.substring(0, s.length() - 3);
+        // Remove BOM e caracteres de controle inválidos em JSON (exceto \t \n \r)
+        s = s.replaceAll("[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F]", "");
         return s.trim();
     }
 }
