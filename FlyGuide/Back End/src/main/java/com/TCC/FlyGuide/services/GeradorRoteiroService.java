@@ -70,14 +70,14 @@ public class GeradorRoteiroService {
                     + "use exatamente \"" + req.getCidade() + "\" como um dos itens do roteiro.";
 
             Map<String, Object> reqMap = new HashMap<>();
-            reqMap.put("model",       "claude-sonnet-4-6");
+            reqMap.put("model",       "claude-haiku-4-5-20251001");
             reqMap.put("max_tokens",  4096);
             reqMap.put("temperature", 1.0);
             reqMap.put("system",      systemMsg);
             reqMap.put("messages",    List.of(Map.of("role", "user", "content", prompt)));
             String requestBody = objectMapper.writeValueAsString(reqMap);
 
-            logger.info("Chamando IA para: {}, modelo: claude-sonnet-4-6", req.getCidade());
+            logger.info("Chamando IA para: {}, modelo: claude-haiku-4-5-20251001", req.getCidade());
 
             HttpRequest httpReq = HttpRequest.newBuilder()
                     .uri(URI.create("https://api.anthropic.com/v1/messages"))
