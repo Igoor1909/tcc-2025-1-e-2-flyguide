@@ -3,6 +3,8 @@ package com.TCC.FlyGuide.resources;
 import java.util.Map;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -18,6 +20,8 @@ import com.TCC.FlyGuide.services.exceptions.UnauthorizedException;
 @RequestMapping("/auth")
 public class AuthResource {
 
+    private static final Logger logger = LoggerFactory.getLogger(AuthResource.class);
+
     @Autowired
     private AuthService authService;
 
@@ -28,6 +32,9 @@ public class AuthResource {
             return ResponseEntity.ok(Map.of("message", "Codigo de acesso enviado para o seu e-mail"));
         } catch (UnauthorizedException e) {
             return ResponseEntity.status(401).body(Map.of("message", "login ou senha invalida"));
+        } catch (Exception e) {
+            logger.error("❌ [AUTH] Falha ao enviar OTP de login para: {} | Erro: {}", req.getEmail(), e.getMessage());
+            return ResponseEntity.status(500).body(Map.of("message", "Não foi possível enviar o e-mail de verificação. Tente novamente em instantes."));
         }
     }
 

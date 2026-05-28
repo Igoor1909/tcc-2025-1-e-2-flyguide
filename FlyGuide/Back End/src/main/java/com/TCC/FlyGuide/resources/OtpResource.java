@@ -5,6 +5,8 @@ import com.TCC.FlyGuide.DTO.SolicitarOtpDTO;
 import com.TCC.FlyGuide.services.OtpService;
 import com.TCC.FlyGuide.services.exceptions.ResourceNotFoundException;
 import com.TCC.FlyGuide.services.exceptions.UnauthorizedException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -14,6 +16,8 @@ import java.util.Map;
 @RestController
 @RequestMapping("/auth/senha")
 public class OtpResource {
+
+    private static final Logger logger = LoggerFactory.getLogger(OtpResource.class);
 
     @Autowired
     private OtpService otpService;
@@ -25,6 +29,9 @@ public class OtpResource {
             return ResponseEntity.ok(Map.of("message", "Código enviado para o e-mail informado"));
         } catch (ResourceNotFoundException e) {
             return ResponseEntity.status(404).body(Map.of("message", e.getMessage()));
+        } catch (Exception e) {
+            logger.error("❌ [OTP] Falha ao enviar OTP de recuperação para: {} | Erro: {}", req.getEmail(), e.getMessage());
+            return ResponseEntity.status(500).body(Map.of("message", "Não foi possível enviar o e-mail de verificação. Tente novamente em instantes."));
         }
     }
 
