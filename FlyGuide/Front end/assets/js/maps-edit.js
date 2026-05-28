@@ -1562,13 +1562,16 @@ function renderLocaisEditAI() {
           if (per.key === "tarde") return h >= "12:00" && h < "18:00";
           return h >= "18:00";
         });
-        // Separa checkout para garantir que seja o último item do período
-        const _isSpecialCO = it => {
-          const n = (it.nome || "").trim().toLowerCase().replace(/[\s-]/g, "");
-          return !!it._checkout || n === "checkout";
+        // Separa checkout (de AI items E de locais salvos) para garantir que seja o último
+        const _isCheckoutNome = x => {
+          const n = ((x.nome || "")).trim().toLowerCase().replace(/[\s-]/g, "");
+          return !!x._checkout || n === "checkout";
         };
-        const itensRegulares = itens.filter(it => !_isSpecialCO(it));
-        const checkoutItem   = itens.find(it => _isSpecialCO(it));
+        const itensRegulares     = itens.filter(it => !_isCheckoutNome(it));
+        const checkoutAI         = itens.find(it => _isCheckoutNome(it));
+        const locaisRegularesPer = locaisDestePer.filter(l => !_isCheckoutNome(l));
+        const checkoutLocal      = locaisDestePer.find(l => _isCheckoutNome(l));
+        const checkoutFinal      = checkoutAI || checkoutLocal;
 
         html += `<div class="mb-2" data-ai-per="${per.key}" data-ai-target-count="${itens.length}">`;
         html += `<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;">
@@ -1578,17 +1581,24 @@ function renderLocaisEditAI() {
         itensRegulares.forEach((item, idx) => {
           html += _renderAIItemCardMR(item, idx, `p-${dIdx}-${per.key}-${idx}`, isDark);
         });
-        locaisDestePer.forEach((l, idx) => { html += _renderLocalCardMR(l, idx, isDark); });
-        if (checkoutItem) {
-          html += _renderAIItemCardMR(checkoutItem, itensRegulares.length + locaisDestePer.length, `p-${dIdx}-${per.key}-co`, isDark);
+        locaisRegularesPer.forEach((l, idx) => { html += _renderLocalCardMR(l, idx, isDark); });
+        if (checkoutFinal) {
+          const totalAntes = itensRegulares.length + locaisRegularesPer.length;
+          html += checkoutAI
+            ? _renderAIItemCardMR(checkoutFinal, totalAntes, `p-${dIdx}-${per.key}-co`, isDark)
+            : _renderLocalCardMR(checkoutFinal, totalAntes, isDark);
         }
         html += `</div>`;
       });
-      const locaisSemPer = locaisDesteDia.filter(l => !_normalizarHorarioEdit(l.horario));
-      if (locaisSemPer.length > 0) {
+      const _isCONome = l => ((l.nome||"")).trim().toLowerCase().replace(/[\s-]/g,"") === "checkout" || !!l._checkout;
+      const locaisSemPerTodos = locaisDesteDia.filter(l => !_normalizarHorarioEdit(l.horario));
+      const locaisSemPer      = locaisSemPerTodos.filter(l => !_isCONome(l));
+      const checkoutSemPer    = locaisSemPerTodos.find(l => _isCONome(l));
+      if (locaisSemPer.length > 0 || checkoutSemPer) {
         html += `<div class="mt-2 pt-2" style="border-top:1px solid ${isDark ? "#334155" : "#e2e8f0"};">
           <div style="font-size:.75rem;font-weight:700;color:#64748b;margin-bottom:5px;"><i class="bi bi-pin-map me-1"></i>Sem período</div>`;
         locaisSemPer.forEach((l, idx) => { html += _renderLocalCardMR(l, idx, isDark); });
+        if (checkoutSemPer) html += _renderLocalCardMR(checkoutSemPer, locaisSemPer.length, isDark);
         html += `</div>`;
       }
     } else {
