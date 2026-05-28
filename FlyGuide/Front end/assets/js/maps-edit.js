@@ -1562,15 +1562,26 @@ function renderLocaisEditAI() {
           if (per.key === "tarde") return h >= "12:00" && h < "18:00";
           return h >= "18:00";
         });
+        // Separa checkout para garantir que seja o último item do período
+        const _isSpecialCO = it => {
+          const n = (it.nome || "").trim().toLowerCase().replace(/[\s-]/g, "");
+          return !!it._checkout || n === "checkout";
+        };
+        const itensRegulares = itens.filter(it => !_isSpecialCO(it));
+        const checkoutItem   = itens.find(it => _isSpecialCO(it));
+
         html += `<div class="mb-2" data-ai-per="${per.key}" data-ai-target-count="${itens.length}">`;
         html += `<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;">
           <i class="bi ${per.icon}" style="color:${per.cor};font-size:.85rem;"></i>
           <span style="font-size:.78rem;font-weight:700;color:${per.cor};">${per.label}</span>
         </div>`;
-        itens.forEach((item, idx) => {
+        itensRegulares.forEach((item, idx) => {
           html += _renderAIItemCardMR(item, idx, `p-${dIdx}-${per.key}-${idx}`, isDark);
         });
         locaisDestePer.forEach((l, idx) => { html += _renderLocalCardMR(l, idx, isDark); });
+        if (checkoutItem) {
+          html += _renderAIItemCardMR(checkoutItem, itensRegulares.length + locaisDestePer.length, `p-${dIdx}-${per.key}-co`, isDark);
+        }
         html += `</div>`;
       });
       const locaisSemPer = locaisDesteDia.filter(l => !_normalizarHorarioEdit(l.horario));
