@@ -208,6 +208,9 @@ public class RoteiroService {
         clone.setOrcamento(original.getOrcamento());
         clone.setObservacoes(original.getObservacoes());
         clone.setImagem(original.getImagem());
+        clone.setSugestoesJson(original.getSugestoesJson());
+        clone.setLatDestino(original.getLatDestino());
+        clone.setLngDestino(original.getLngDestino());
         clone.setDataCriacao(LocalDateTime.now());
         clone.setIdRoteiroOrigem(idRoteiro);
         clone = roteiroRepository.save(clone);
