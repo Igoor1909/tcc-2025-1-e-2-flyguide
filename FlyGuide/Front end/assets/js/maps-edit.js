@@ -668,19 +668,22 @@ function _initAIItemAutocomplete(input) {
 
 function _renderAIItemCardMR(item, idx, uid, isDark) {
   // Renderização especial para marcadores de check-in / checkout
-  if (item._checkin || item._checkout) {
-    const isCI  = !!item._checkin;
+  const _nomeNormAI = (item.nome || "").trim().toLowerCase().replace(/[\s-]/g, "");
+  const _isAICI  = !!item._checkin  || _nomeNormAI === "checkin";
+  const _isAICO  = !!item._checkout || _nomeNormAI === "checkout";
+  if (_isAICI || _isAICO) {
+    const isCI  = _isAICI;
     const icon  = isCI ? "bi-key-fill" : "bi-box-arrow-right";
     const bg    = isCI ? (isDark ? "rgba(20,83,45,.3)"   : "#f0fdf4") : (isDark ? "rgba(124,45,18,.25)" : "#fff7ed");
     const clr   = isCI ? "#16a34a" : "#ea580c";
     const brd   = isCI ? (isDark ? "#166534" : "#bbf7d0") : (isDark ? "#9a3412" : "#fed7aa");
     const label = isCI ? "Check-in" : "Checkout";
     return `<div data-ai-item data-ai-special style="margin-top:5px;">
-      <div style="background:${bg};border:1.5px solid ${brd};border-radius:8px;display:flex;align-items:center;gap:8px;padding:8px 12px;">
-        <div style="background:${clr}22;color:${clr};min-width:28px;height:28px;border-radius:50%;display:grid;place-items:center;flex-shrink:0;font-size:.85rem;">
+      <div style="background:${bg};border:1.5px solid ${brd};border-radius:10px;display:flex;align-items:center;gap:10px;padding:12px 16px;">
+        <div style="background:${clr}22;color:${clr};width:32px;height:32px;border-radius:50%;display:grid;place-items:center;flex-shrink:0;font-size:.95rem;">
           <i class="bi ${icon}"></i>
         </div>
-        <div style="font-weight:800;font-size:.85rem;color:${clr};">${label}</div>
+        <div style="font-weight:800;font-size:.92rem;color:${clr};">${label}</div>
         <input type="hidden" data-ai-nome value="${escapeHtml(label)}">
         <input type="hidden" data-ai-checkin  value="${isCI  ? '1' : ''}">
         <input type="hidden" data-ai-checkout value="${!isCI ? '1' : ''}">
@@ -790,6 +793,25 @@ function _garantirLocalBaseNoDiaUnicoEdit(sugestoes) {
 }
 
 function _renderLocalCardMR(l, idx, isDark) {
+  // Renderização especial para check-in / checkout salvos
+  const _nomeNormLR = (l.nome || "").trim().toLowerCase().replace(/[\s-]/g, "");
+  if (_nomeNormLR === "checkin" || _nomeNormLR === "checkout") {
+    const isCI  = _nomeNormLR === "checkin";
+    const icon  = isCI ? "bi-key-fill" : "bi-box-arrow-right";
+    const bg    = isCI ? (isDark ? "rgba(20,83,45,.3)"   : "#f0fdf4") : (isDark ? "rgba(124,45,18,.25)" : "#fff7ed");
+    const clr   = isCI ? "#16a34a" : "#ea580c";
+    const brd   = isCI ? (isDark ? "#166534" : "#bbf7d0") : (isDark ? "#9a3412" : "#fed7aa");
+    const label = isCI ? "Check-in" : "Checkout";
+    return `<div id="lwrap-${String(l.idRoteiroLocal)}" style="margin-top:5px;">
+      <div style="background:${bg};border:1.5px solid ${brd};border-radius:10px;display:flex;align-items:center;gap:10px;padding:12px 16px;">
+        <div style="background:${clr}22;color:${clr};width:32px;height:32px;border-radius:50%;display:grid;place-items:center;flex-shrink:0;font-size:.95rem;">
+          <i class="bi ${icon}"></i>
+        </div>
+        <div style="font-weight:800;font-size:.92rem;color:${clr};">${label}</div>
+      </div>
+    </div>`;
+  }
+
   const vid = String(l.idRoteiroLocal);
   const horFmt    = _formatarHorarioEdit(l.horario) || "";
   const corCard   = isDark ? "#1e293b" : "#f8fafc";
