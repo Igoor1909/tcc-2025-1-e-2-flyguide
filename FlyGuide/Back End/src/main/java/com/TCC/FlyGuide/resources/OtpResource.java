@@ -8,6 +8,7 @@ import com.TCC.FlyGuide.services.exceptions.UnauthorizedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -26,12 +27,15 @@ public class OtpResource {
     public ResponseEntity<?> solicitar(@RequestBody SolicitarOtpDTO req) {
         try {
             otpService.solicitarResetSenha(req.getEmail());
-            return ResponseEntity.ok(Map.of("message", "Código enviado para o e-mail informado"));
+            return ResponseEntity.ok(Map.of("message", "Codigo enviado para o e-mail informado"));
         } catch (ResourceNotFoundException e) {
-            return ResponseEntity.status(404).body(Map.of("message", e.getMessage()));
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", e.getMessage()));
+        } catch (UnauthorizedException e) {
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(Map.of("message", e.getMessage()));
         } catch (Exception e) {
-            logger.error("❌ [OTP] Falha ao enviar OTP de recuperação para: {} | Erro: {}", req.getEmail(), e.getMessage());
-            return ResponseEntity.status(500).body(Map.of("message", "Não foi possível enviar o e-mail de verificação. Tente novamente em instantes."));
+            logger.error("[OTP] Falha ao enviar OTP de recuperacao para: {} | Erro: {}", req.getEmail(), e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("message", "Nao foi possivel enviar o e-mail de verificacao. Tente novamente em instantes."));
         }
     }
 
@@ -40,10 +44,12 @@ public class OtpResource {
         try {
             otpService.resetarSenha(req.getEmail(), req.getCodigo(), req.getNovaSenha());
             return ResponseEntity.ok(Map.of("message", "Senha alterada com sucesso"));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY).body(Map.of("message", e.getMessage()));
         } catch (UnauthorizedException e) {
-            return ResponseEntity.status(401).body(Map.of("message", e.getMessage()));
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", e.getMessage()));
         } catch (ResourceNotFoundException e) {
-            return ResponseEntity.status(404).body(Map.of("message", e.getMessage()));
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", e.getMessage()));
         }
     }
 }

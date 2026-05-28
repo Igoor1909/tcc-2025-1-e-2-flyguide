@@ -19,6 +19,8 @@ public class OtpService {
     private static final String TIPO_RESET_SENHA = "RESET_SENHA";
     private static final String TIPO_LOGIN = "LOGIN";
     private static final int EXPIRACAO_MINUTOS = 10;
+    private static final int MAX_TENTATIVAS_OTP = 5;
+    private static final String REGEX_SENHA_FORTE = "^(?=.*[A-Z])(?=.*[^A-Za-z0-9]).{8,}$";
 
     @Autowired
     private OtpRepository otpRepository;
@@ -37,7 +39,7 @@ public class OtpService {
         otpRepository.findTopByEmailAndTipoAndUsadoFalseOrderByExpiracaoDesc(email, tipo)
                 .ifPresent(otp -> {
                     if (otp.getExpiracao().isAfter(limiteExpiracao)) {
-                        throw new UnauthorizedException("Aguarde pelo menos 1 minuto antes de solicitar um novo código.");
+                        throw new UnauthorizedException("Aguarde pelo menos 1 minuto antes de solicitar um novo codigo.");
                     }
                 });
     }
@@ -61,21 +63,23 @@ public class OtpService {
 
     public void resetarSenha(String email, String codigo, String novaSenha) {
         String emailNormalizado = email.trim().toLowerCase();
+        validarSenhaForte(novaSenha);
 
         OtpCode otp = otpRepository
                 .findTopByEmailAndTipoAndUsadoFalseOrderByExpiracaoDesc(emailNormalizado, TIPO_RESET_SENHA)
-                .orElseThrow(() -> new UnauthorizedException("Código inválido ou expirado"));
+                .orElseThrow(() -> new UnauthorizedException("Codigo invalido ou expirado"));
 
         if (LocalDateTime.now().isAfter(otp.getExpiracao())) {
-            throw new UnauthorizedException("Código expirado");
+            throw new UnauthorizedException("Codigo expirado");
         }
 
         if (!otp.getCodigo().equals(codigo)) {
-            throw new UnauthorizedException("Código inválido");
+            registrarTentativaInvalida(otp);
+            throw new UnauthorizedException("Codigo invalido");
         }
 
         User user = userRepository.findByEmail(emailNormalizado)
-                .orElseThrow(() -> new ResourceNotFoundException("Usuário não encontrado"));
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario nao encontrado"));
 
         user.setSenha(passwordEncoder.encode(novaSenha));
         userRepository.save(user);
@@ -96,14 +100,15 @@ public class OtpService {
     public void validarOtpLogin(String email, String codigo) {
         OtpCode otp = otpRepository
                 .findTopByEmailAndTipoAndUsadoFalseOrderByExpiracaoDesc(email, TIPO_LOGIN)
-                .orElseThrow(() -> new UnauthorizedException("Código inválido ou expirado"));
+                .orElseThrow(() -> new UnauthorizedException("Codigo invalido ou expirado"));
 
         if (LocalDateTime.now().isAfter(otp.getExpiracao())) {
-            throw new UnauthorizedException("Código expirado");
+            throw new UnauthorizedException("Codigo expirado");
         }
 
         if (!otp.getCodigo().equals(codigo)) {
-            throw new UnauthorizedException("Código inválido");
+            registrarTentativaInvalida(otp);
+            throw new UnauthorizedException("Codigo invalido");
         }
 
         otp.setUsado(true);
@@ -114,5 +119,21 @@ public class OtpService {
         SecureRandom random = new SecureRandom();
         int numero = random.nextInt(900000) + 100000;
         return String.valueOf(numero);
+    }
+
+    private void validarSenhaForte(String senha) {
+        if (senha == null || !senha.matches(REGEX_SENHA_FORTE)) {
+            throw new IllegalArgumentException(
+                    "Senha invalida. Deve ter no minimo 8 caracteres, 1 letra maiuscula e 1 caractere especial."
+            );
+        }
+    }
+
+    private void registrarTentativaInvalida(OtpCode otp) {
+        otp.incrementarTentativasInvalidas();
+        if (otp.getTentativasInvalidas() >= MAX_TENTATIVAS_OTP) {
+            otp.setUsado(true);
+        }
+        otpRepository.save(otp);
     }
 }

@@ -44,8 +44,6 @@ class OtpServiceTest {
         return new OtpCode(email, "123456", LocalDateTime.now().minusMinutes(1), tipo);
     }
 
-    // ─── Gerar OTP de login ────────────────────────────────────────────────
-
     @Test
     void gerarOtpLogin_semCooldown_salvaEEnviaEmail() {
         when(otpRepository.findTopByEmailAndTipoAndUsadoFalseOrderByExpiracaoDesc("teste@email.com", "LOGIN"))
@@ -67,8 +65,6 @@ class OtpServiceTest {
                 .isInstanceOf(UnauthorizedException.class)
                 .hasMessageContaining("1 minuto");
     }
-
-    // ─── Validar OTP de login ──────────────────────────────────────────────
 
     @Test
     void validarOtpLogin_codigoCorretoENaoExpirado_marcaComoUsado() {
@@ -103,17 +99,18 @@ class OtpServiceTest {
     }
 
     @Test
-    void validarOtpLogin_codigoErrado_throwsUnauthorized() {
+    void validarOtpLogin_codigoErrado_throwsUnauthorizedERegistraTentativa() {
         OtpCode otp = otpValido("teste@email.com", "LOGIN");
         when(otpRepository.findTopByEmailAndTipoAndUsadoFalseOrderByExpiracaoDesc(any(), any()))
                 .thenReturn(Optional.of(otp));
 
         assertThatThrownBy(() -> otpService.validarOtpLogin("teste@email.com", "000000"))
                 .isInstanceOf(UnauthorizedException.class)
-                .hasMessageContaining("inválido");
-    }
+                .hasMessageContaining("invalido");
 
-    // ─── Solicitar reset de senha ──────────────────────────────────────────
+        assertThat(otp.getTentativasInvalidas()).isEqualTo(1);
+        verify(otpRepository).save(otp);
+    }
 
     @Test
     void solicitarResetSenha_emailNaoEncontrado_throwsResourceNotFound() {
@@ -147,8 +144,6 @@ class OtpServiceTest {
         verify(emailService).enviarOtpResetSenha(eq("teste@email.com"), anyString());
     }
 
-    // ─── Resetar senha ─────────────────────────────────────────────────────
-
     @Test
     void resetarSenha_codigoValidoENaoExpirado_atualizaSenhaEConsomeOtp() {
         OtpCode otp = otpValido("teste@email.com", "RESET_SENHA");
@@ -176,13 +171,40 @@ class OtpServiceTest {
     }
 
     @Test
-    void resetarSenha_codigoErrado_throwsUnauthorized() {
+    void resetarSenha_codigoErrado_throwsUnauthorizedERegistraTentativa() {
         OtpCode otp = otpValido("teste@email.com", "RESET_SENHA");
         when(otpRepository.findTopByEmailAndTipoAndUsadoFalseOrderByExpiracaoDesc(any(), any()))
                 .thenReturn(Optional.of(otp));
 
         assertThatThrownBy(() -> otpService.resetarSenha("teste@email.com", "000000", "NovaSenha@1"))
                 .isInstanceOf(UnauthorizedException.class)
-                .hasMessageContaining("inválido");
+                .hasMessageContaining("invalido");
+
+        assertThat(otp.getTentativasInvalidas()).isEqualTo(1);
+        verify(otpRepository).save(otp);
+    }
+
+    @Test
+    void resetarSenha_codigoErradoCincoVezes_invalidaOtp() {
+        OtpCode otp = otpValido("teste@email.com", "RESET_SENHA");
+        otp.setTentativasInvalidas(4);
+        when(otpRepository.findTopByEmailAndTipoAndUsadoFalseOrderByExpiracaoDesc(any(), any()))
+                .thenReturn(Optional.of(otp));
+
+        assertThatThrownBy(() -> otpService.resetarSenha("teste@email.com", "000000", "NovaSenha@1"))
+                .isInstanceOf(UnauthorizedException.class);
+
+        assertThat(otp.isUsado()).isTrue();
+        verify(otpRepository).save(otp);
+    }
+
+    @Test
+    void resetarSenha_senhaFraca_throwsIllegalArgumentException() {
+        assertThatThrownBy(() -> otpService.resetarSenha("teste@email.com", "123456", "senhafraca"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Senha invalida");
+
+        verifyNoInteractions(passwordEncoder);
+        verify(userRepository, never()).save(any(User.class));
     }
 }

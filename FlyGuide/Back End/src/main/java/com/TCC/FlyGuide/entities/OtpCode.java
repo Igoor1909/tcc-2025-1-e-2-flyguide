@@ -26,6 +26,9 @@ public class OtpCode {
     @Column(nullable = false)
     private String tipo;
 
+    @Column(nullable = false, columnDefinition = "integer default 0")
+    private int tentativasInvalidas = 0;
+
     public OtpCode() {}
 
     public OtpCode(String email, String codigo, LocalDateTime expiracao, String tipo) {
@@ -48,4 +51,10 @@ public class OtpCode {
     public void setUsado(boolean usado) { this.usado = usado; }
 
     public String getTipo() { return tipo; }
+
+    public int getTentativasInvalidas() { return tentativasInvalidas; }
+
+    public void setTentativasInvalidas(int tentativasInvalidas) { this.tentativasInvalidas = tentativasInvalidas; }
+
+    public void incrementarTentativasInvalidas() { this.tentativasInvalidas++; }
 }
