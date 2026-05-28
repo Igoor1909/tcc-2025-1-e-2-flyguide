@@ -189,6 +189,30 @@ html[data-theme="dark"] .dia-header-label{ color: #f1f5f9 !important; }
   z-index: 10055 !important; /* Acima do modal Bootstrap (z-index 1055) */
 }
 
+/* ── Responsividade mobile ─────────────────────────────────── */
+@media (max-width: 767px) {
+  .details-top {
+    margin-top: -36px;
+    padding: 0 10px;
+  }
+
+  /* Botões no hero: reduz tamanho e ajusta gap */
+  .details-actions { top: 10px; right: 10px; gap: 6px; }
+  .back-btn { top: 10px; left: 10px; padding: 7px 10px; font-size: .85rem; }
+
+  .stat-card { padding: 12px; min-height: auto; }
+  .stat-big  { font-size: 1.3rem; }
+
+  .section-card { padding: 14px; }
+
+  .details-badges { flex-wrap: wrap; gap: 6px; }
+  .details-meta   { flex-wrap: wrap; gap: 8px; font-size: .85rem; }
+}
+
+@media (max-width: 576px) {
+  .details-actions { flex-direction: column; gap: 4px; }
+}
+
 /* Avaliações por dia */
 #secaoAvaliacoesDia > div[style*="border"] {
   transition: box-shadow .2s;

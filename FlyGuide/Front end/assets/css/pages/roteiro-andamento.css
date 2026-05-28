@@ -183,6 +183,31 @@
 }
 .star-dia:hover { transform: scale(1.15); }
 
+/* ── Responsividade mobile ─────────────────────────────────── */
+@media (max-width: 576px) {
+  .andamento-header {
+    padding: 16px 14px 16px 14px;
+    border-radius: 0 0 14px 14px;
+  }
+  .andamento-titulo { font-size: 1.15rem; }
+  .andamento-cidade { font-size: .82rem; margin-bottom: 10px; }
+
+  .progress-stats { flex-wrap: wrap; gap: 8px; }
+
+  .andamento-footer {
+    padding: 10px 14px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .andamento-footer .btn { flex: 1; min-width: 0; font-size: .88rem; }
+
+  .iniciado-actions { flex-wrap: wrap; }
+  .iniciado-actions .btn { flex: 1; min-width: 0; font-size: .82rem; }
+
+  .checkpoint-item { padding: 10px 10px; gap: 8px; }
+  .checkpoint-nome { font-size: .88rem; }
+}
+
 /* Dark mode */
 html[data-theme="dark"] .andamento-header { background: linear-gradient(135deg, #9a3412 0%, #7c2d12 100%); }
 html[data-theme="dark"] .dia-header { background: #1e293b !important; border-color: #334155 !important; color: #f1f5f9 !important; }

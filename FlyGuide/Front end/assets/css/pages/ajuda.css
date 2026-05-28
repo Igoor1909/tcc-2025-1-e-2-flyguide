@@ -131,7 +131,32 @@
   color: var(--fg-orange);
 }
 
-/* Responsivo específico da página Ajuda */
-@media (max-width: 992px){
-  .help-mini{ grid-template-columns: 1fr; }
+/* ── Responsividade mobile ─────────────────────────────────── */
+@media (max-width: 992px) {
+  .help-mini { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 768px) {
+  .help-accordion,
+  .help-cta,
+  .help-mini {
+    margin-left: 0;
+    margin-right: 0;
+  }
+
+  .help-cta { padding: 16px 14px; }
+  .help-cta .actions { flex-direction: column; align-items: stretch; }
+  .help-cta .actions .btn { width: 100%; justify-content: center; }
+
+  .tab-pill { padding: 7px 10px; font-size: .85rem; gap: 6px; }
+
+  .cat-head { padding: 12px 14px; font-size: .92rem; }
+  .faq-btn  { padding: 10px 14px; font-size: .9rem; }
+  .faq-body { padding: 0 14px 12px 14px; font-size: .88rem; }
+}
+
+@media (max-width: 576px) {
+  .help-tabs { gap: 6px; margin: 12px 0 8px 0; }
+  .tab-pill  { font-size: .8rem; padding: 6px 8px; }
+  .mini-card { padding: 14px; }
 }

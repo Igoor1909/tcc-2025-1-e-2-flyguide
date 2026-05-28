@@ -234,7 +234,7 @@
 .trip-footer a:hover{ color:#ea580c; }
 
 /* Offcanvas (filtros premium) */
-.offcanvas{ width: 420px !important; }
+.offcanvas{ width: 420px !important; max-width: 100vw; }
 
 .premium-lock-card{
   border-radius: 14px;
@@ -345,6 +345,23 @@
   border-radius: 12px;
   display:grid;
   place-items:center;
+}
+
+/* ── Responsividade global (mobile) ─────────────────────────── */
+@media (max-width: 576px) {
+  .grid-wrap { padding: 12px 12px 32px 12px; }
+
+  .hero { height: 200px; }
+  .hero.details { height: 240px; }
+
+  .rascunho-card {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .rascunho-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
 }
 
 /* ── Visibility strip (toggle Público/Privado) ── */

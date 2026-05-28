@@ -8,3 +8,28 @@
   Se você precisar de ajustes específicos desta página,
   coloque aqui para não afetar as outras telas.
 */
+
+/* ── Responsividade mobile ─────────────────────────────────── */
+@media (max-width: 576px) {
+  /* Cards de rascunho: empilha ações abaixo do conteúdo */
+  .rascunho-card {
+    flex-wrap: wrap;
+    padding: 12px 14px;
+    gap: 8px;
+  }
+  .rascunho-actions {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .rascunho-actions .btn {
+    font-size: .8rem;
+    padding: 6px 10px;
+  }
+
+  /* Trip cards: ajusta padding interno */
+  .trip-body  { padding: 10px 12px 8px 12px; }
+  .trip-footer { padding: 8px 12px 12px 12px; }
+  .meta-row   { gap: 10px; font-size: .82rem; }
+}
