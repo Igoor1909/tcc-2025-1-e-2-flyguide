@@ -1,24 +1,47 @@
-/* ================================================================
+﻿/* ================================================================
    FlyGuide - app.js
-   Funções globais e comportamentos de UI presentes em todas as páginas:
-   - escapeHtml (global)
-   - Sidebar mobile
-   - Likes
-   - Ajuda (tabs + FAQ)
-   - Premium subscribe
-   - Modal de atividades (etapa 2)
-   - Sidebar: preenchimento dinâmico do usuário logado
-   - Perfil: edição de dados
+   Funcoes globais e comportamentos de UI presentes em todas as paginas
 ================================================================ */
 
-// ── Utilitário global (usado por outros arquivos JS) ──────────
+// Utilitario global (usado por outros arquivos JS)
 function escapeHtml(str) {
-  return String(str ?? "")
+  return String(str == null ? "" : str)
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+// Decodifica o JWT (base64url) e retorna o userId (campo subject).
+function getUserIdFromToken() {
+  var token = localStorage.getItem("flyguide.token");
+  if (!token) return null;
+  try {
+    var base64Url = token.split(".")[1];
+    var base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+    var pad = (4 - base64.length % 4) % 4;
+    for (var i = 0; i < pad; i++) base64 += "=";
+    var payload = JSON.parse(atob(base64));
+    return payload.sub ? String(payload.sub) : null;
+  } catch(e) { return null; }
+}
+
+// authFetch: injeta Authorization Bearer e redireciona em 401/403
+function authFetch(url, options) {
+  if (!options) options = {};
+  var token = localStorage.getItem("flyguide.token");
+  var headers = Object.assign({}, options.headers || {});
+  if (token) headers["Authorization"] = "Bearer " + token;
+  var newOptions = Object.assign({}, options, { headers: headers });
+  return fetch(url, newOptions).then(function(res) {
+    if (res.status === 401 || res.status === 403) {
+      localStorage.removeItem("flyguide.token");
+      window.location.href = "login.html";
+      return Promise.reject(new Error("Sessao expirada"));
+    }
+    return res;
+  });
 }
 
 (function () {
@@ -174,10 +197,9 @@ function escapeHtml(str) {
 
   // ── Sidebar: preenche nome/email do usuário logado ──────────
   (function preencherSidebarUsuario() {
-    const SESSION_KEY  = "flyguide.userId";
-    const URL_API_BASE = "http://localhost:8080";
+    const URL_API_BASE = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app";
     const paginaAtual  = document.body.getAttribute("data-pagina");
-    const userId       = sessionStorage.getItem(SESSION_KEY);
+    const userId       = getUserIdFromToken();
     const profileEl    = qs(".profile");
     if (!profileEl) return;
 
@@ -191,7 +213,7 @@ function escapeHtml(str) {
       return;
     }
 
-    fetch(`${URL_API_BASE}/users/search-completo/${userId}`)
+    authFetch(`${URL_API_BASE}/users/search-completo/${userId}`)
       .then(r => r.json())
       .then(dados => {
         const pf = dados.pessoaFisica, pj = dados.pessoaJuridica;
@@ -225,9 +247,8 @@ function escapeHtml(str) {
   (function iniciarPaginaPerfil() {
     if (document.body.getAttribute("data-pagina") !== "perfil") return;
 
-    const SESSION_KEY  = "flyguide.userId";
-    const URL_API_BASE = "http://localhost:8080";
-    const userId = sessionStorage.getItem(SESSION_KEY);
+    const URL_API_BASE = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app";
+    const userId = getUserIdFromToken();
     if (!userId) { window.location.href = "login.html"; return; }
 
     let dadosAtuais = null;
@@ -307,6 +328,49 @@ function escapeHtml(str) {
           inputEl("editCidade",       "Cidade",        usr?.cidade,     "bi bi-building") +
           inputEl("editPais",         "País",          usr?.pais,       "bi bi-globe");
       }
+      _iniciarViaCep();
+    }
+
+    function _iniciarViaCep() {
+      const cepInput = document.getElementById("editCep");
+      if (!cepInput) return;
+
+      cepInput.addEventListener("input", function () {
+        let v = cepInput.value.replace(/\D/g, "").slice(0, 8);
+        cepInput.value = v.length > 5 ? v.slice(0, 5) + "-" + v.slice(5) : v;
+        if (v.length === 8) _buscarViaCep(v);
+      });
+
+      cepInput.addEventListener("blur", function () {
+        const v = cepInput.value.replace(/\D/g, "");
+        if (v.length === 8) _buscarViaCep(v);
+      });
+    }
+
+    async function _buscarViaCep(cep) {
+      const endEl    = document.getElementById("editEndereco");
+      const cidadeEl = document.getElementById("editCidade");
+      const paisEl   = document.getElementById("editPais");
+      if (!endEl || !cidadeEl || !paisEl) return;
+
+      try {
+        const res  = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+        const data = await res.json();
+        if (data.erro) {
+          endEl.value    = "";
+          cidadeEl.value = "";
+          paisEl.value   = "";
+          mostrarAlerta("danger", "CEP inválido ou não encontrado. Verifique e tente novamente.");
+          return;
+        }
+        endEl.value    = [data.logradouro, data.bairro].filter(Boolean).join(", ");
+        cidadeEl.value = data.localidade || "";
+        paisEl.value   = "Brasil";
+        mostrarAlerta("", "");
+        document.getElementById("perfilAlerta").style.display = "none";
+      } catch (_) {
+        mostrarAlerta("danger", "Não foi possível consultar o CEP. Verifique sua conexão.");
+      }
     }
 
     function ativarEdicao()  { renderEdicao(dadosAtuais); document.getElementById("editActions")?.classList.add("visivel"); document.getElementById("btnEditar").style.display = "none"; }
@@ -321,10 +385,15 @@ function escapeHtml(str) {
     }
 
     async function salvarEdicao() {
+      const val = (id) => document.getElementById(id)?.value?.trim() || "";
+      if (!val("editCep").replace(/\D/g,"")) { mostrarAlerta("danger", "Informe o CEP."); return; }
+      if (!val("editEndereco"))              { mostrarAlerta("danger", "Endereço não pode ficar em branco. Verifique o CEP."); return; }
+      if (!val("editCidade"))                { mostrarAlerta("danger", "Cidade não pode ficar em branco. Verifique o CEP."); return; }
+      if (!val("editPais"))                  { mostrarAlerta("danger", "País não pode ficar em branco. Verifique o CEP."); return; }
+
       const btn = document.getElementById("btnSalvar");
       btn.disabled = true;
       btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Salvando...`;
-      const val = (id) => document.getElementById(id)?.value?.trim() || "";
       const pf = dadosAtuais.pessoaFisica, pj = dadosAtuais.pessoaJuridica, usr = dadosAtuais.usuario;
       let payload = {}, endpoint = "";
       if (pf) {
@@ -335,9 +404,9 @@ function escapeHtml(str) {
         endpoint = `${URL_API_BASE}/users/update/pj/${userId}`;
       }
       try {
-        const r = await fetch(endpoint, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        const r = await authFetch(endpoint, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
         if (r.ok || r.status === 204) {
-          const res = await fetch(`${URL_API_BASE}/users/search-completo/${userId}`);
+          const res = await authFetch(`${URL_API_BASE}/users/search-completo/${userId}`);
           dadosAtuais = await res.json();
           cancelarEdicao();
           mostrarAlerta("success", "Dados atualizados com sucesso!");
@@ -351,7 +420,7 @@ function escapeHtml(str) {
       finally { btn.disabled = false; btn.innerHTML = `<i class="bi bi-check-lg"></i> Salvar alterações`; }
     }
 
-    fetch(`${URL_API_BASE}/users/search-completo/${userId}`)
+    authFetch(`${URL_API_BASE}/users/search-completo/${userId}`)
       .then(r => { if (!r.ok) throw new Error(); return r.json(); })
       .then(dados => {
         dadosAtuais = dados;
@@ -377,10 +446,15 @@ function escapeHtml(str) {
         document.getElementById("btnCancelar")?.addEventListener("click", cancelarEdicao);
         document.getElementById("btnSalvar")?.addEventListener("click", salvarEdicao);
       })
-      .catch(() => { sessionStorage.removeItem(SESSION_KEY); window.location.href = "login.html"; });
+      .catch((err) => { if (err && err.message === "Sessao expirada") return; });
 
-    document.getElementById("btnSair")?.addEventListener("click", () => {
-      sessionStorage.removeItem(SESSION_KEY); window.location.href = "login.html";
+    document.getElementById("btnSair")?.addEventListener("click", async () => {
+      const token = localStorage.getItem("flyguide.token");
+      if (token) {
+        try { await fetch("https://tcc-2025-1-e-2-flyguide-production.up.railway.app/auth/logout", { method: "POST", headers: { "Authorization": "Bearer " + token } }); } catch (_) {}
+      }
+      localStorage.removeItem("flyguide.token");
+      window.location.href = "login.html";
     });
 
     const modal = new bootstrap.Modal(document.getElementById("modalConfirmar"));
@@ -389,11 +463,84 @@ function escapeHtml(str) {
       const btn = document.getElementById("btnConfirmarExclusao");
       btn.disabled = true; btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Excluindo...`;
       try {
-        const r = await fetch(`${URL_API_BASE}/users/delete/${userId}`, { method: "DELETE" });
-        if (r.ok || r.status === 204) { sessionStorage.removeItem(SESSION_KEY); alert("Conta excluída com sucesso."); window.location.href = "login.html"; }
+        const r = await authFetch(`${URL_API_BASE}/users/delete/${userId}`, { method: "DELETE" });
+        if (r.ok || r.status === 204) { localStorage.removeItem("flyguide.token"); alert("Conta excluída com sucesso."); window.location.href = "login.html"; }
         else { alert("Não foi possível excluir a conta."); btn.disabled = false; btn.innerHTML = `<i class="bi bi-trash me-1"></i> Sim, excluir minha conta`; }
       } catch { alert("Erro ao conectar ao servidor."); btn.disabled = false; btn.innerHTML = `<i class="bi bi-trash me-1"></i> Sim, excluir minha conta`; }
     });
   })();
 
 })();
+
+// Função global: infere o tipo Google Places a partir do nome do local em PT
+window.inferPlaceType = function inferPlaceType(nome) {
+  var n = String(nome || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  if (/restaurante|almo[cç]|jantar|refei[cç]|comida|gastronomia|culin|tipico|tipica/.test(n)) return "restaurant";
+  if (/museu|galeria/.test(n)) return "museum";
+  if (/parque|jardim|natureza/.test(n)) return "park";
+  if (/praia|beach/.test(n)) return "natural_feature";
+  if (/shopping|compras|loja/.test(n)) return "shopping_mall";
+  if (/mercado/.test(n)) return "supermarket";
+  if (/hotel|hospedagem|check.in|pousada/.test(n)) return "tourist_attraction";
+  if (/bar|pub|balada/.test(n)) return "bar";
+  if (/caf[eé]/.test(n)) return "cafe";
+  if (/spa|massagem/.test(n)) return "spa";
+  if (/aquario/.test(n)) return "aquarium";
+  if (/zoologico|zoo/.test(n)) return "zoo";
+  if (/parque tematico|disney|universal|busch/.test(n)) return "amusement_park";
+  if (/cinema/.test(n)) return "movie_theater";
+  if (/cassino|casino/.test(n)) return "casino";
+  if (/biblioteca/.test(n)) return "library";
+  if (/igreja|catedral|basilica|templo|mesquita/.test(n)) return "church";
+  if (/estadio|arena/.test(n)) return "stadium";
+  return "tourist_attraction";
+};
+
+// Função global: gera badge HTML de categoria de lugar (Google Places types)
+window.placeCategoryBadgeHtml = (function () {
+  var MAP = {
+    amusement_park:    { label: "Parque Temático",    icon: "bi-stars",              cor: "#8b5cf6" },
+    museum:            { label: "Museu",               icon: "bi-building-fill",      cor: "#6366f1" },
+    art_gallery:       { label: "Galeria de Arte",     icon: "bi-palette-fill",       cor: "#ec4899" },
+    zoo:               { label: "Zoológico",           icon: "bi-tree-fill",          cor: "#16a34a" },
+    aquarium:          { label: "Aquário",             icon: "bi-water",              cor: "#0284c7" },
+    restaurant:        { label: "Restaurante",         icon: "bi-egg-fried",          cor: "#f97316" },
+    cafe:              { label: "Café",                icon: "bi-cup-hot-fill",       cor: "#92400e" },
+    bar:               { label: "Bar",                 icon: "bi-cup-straw",          cor: "#7c3aed" },
+    bakery:            { label: "Padaria",             icon: "bi-basket2-fill",       cor: "#d97706" },
+    night_club:        { label: "Balada",              icon: "bi-music-note-beamed",  cor: "#6d28d9" },
+    spa:               { label: "Spa",                 icon: "bi-flower1",            cor: "#a855f7" },
+    park:              { label: "Parque",              icon: "bi-tree",               cor: "#15803d" },
+    natural_feature:   { label: "Natureza",            icon: "bi-tree",               cor: "#15803d" },
+    beach:             { label: "Praia",               icon: "bi-umbrella-fill",      cor: "#0ea5e9" },
+    shopping_mall:     { label: "Shopping",            icon: "bi-bag-fill",           cor: "#f43f5e" },
+    store:             { label: "Loja",                icon: "bi-shop",               cor: "#f43f5e" },
+    stadium:           { label: "Estádio",             icon: "bi-trophy-fill",        cor: "#16a34a" },
+    movie_theater:     { label: "Cinema",              icon: "bi-camera-reels-fill",  cor: "#dc2626" },
+    casino:            { label: "Cassino",             icon: "bi-dice-5-fill",        cor: "#dc2626" },
+    library:           { label: "Biblioteca",          icon: "bi-book-fill",          cor: "#0284c7" },
+    church:            { label: "Igreja",              icon: "bi-building",           cor: "#78716c" },
+    mosque:            { label: "Mesquita",            icon: "bi-building",           cor: "#78716c" },
+    hindu_temple:      { label: "Templo",              icon: "bi-building",           cor: "#78716c" },
+    supermarket:       { label: "Mercado",             icon: "bi-cart-fill",          cor: "#16a34a" },
+    tourist_attraction:{ label: "Atração Turística",   icon: "bi-camera-fill",        cor: "#0ea5e9" },
+    point_of_interest: { label: "Ponto de Interesse",  icon: "bi-pin-map-fill",       cor: "#f97316" },
+  };
+  var PRIORITY = [
+    "amusement_park","zoo","aquarium","museum","art_gallery","spa","beach",
+    "restaurant","cafe","bar","bakery","night_club","casino","movie_theater",
+    "park","natural_feature","shopping_mall","store","stadium","library",
+    "church","mosque","hindu_temple","supermarket","tourist_attraction","point_of_interest",
+  ];
+  return function placeCategoryBadgeHtml(types) {
+    if (!types || !types.length) return "";
+    var key = PRIORITY.find(function (k) { return types.indexOf(k) !== -1; });
+    var cfg = key ? MAP[key] : null;
+    if (!cfg) return "";
+    return '<span class="place-category-badge" style="display:inline-flex;align-items:center;gap:4px;font-size:.68rem;font-weight:700;color:' + cfg.cor + ';background:' + cfg.cor + '1a;padding:2px 8px;border-radius:999px;margin-top:4px;"><i class="bi ' + cfg.icon + '"></i>' + cfg.label + '</span>';
+  };
+}());
+
+
+
+

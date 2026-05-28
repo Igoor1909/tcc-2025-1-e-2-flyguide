@@ -1,7 +1,7 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="pt-br">
 <head>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧭</text></svg>">
+    <link rel="icon" href="../assets/img/logo.png" type="image/png">
   <title>FlyGuide - Meus Roteiros</title>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -29,36 +29,68 @@
     #listaLocaisEdit .d-flex { transition: box-shadow .15s; }
     #listaLocaisEdit .d-flex:hover { box-shadow: 0 2px 8px rgba(0,0,0,.08); }
     #buscaLocalEdit { border-left: none !important; }
-    .pac-container { font-family: Inter, sans-serif; border-radius: 12px; }
-    .modal-dialog-scrollable .modal-body { max-height: 80vh; overflow-y: auto; }
+    .pac-container { font-family: Inter, sans-serif; border-radius: 12px; z-index: 2000 !important; }
+    /* Desktop: limita altura do body scrollável */
+    @media (min-width: 576px) {
+      .modal-dialog-scrollable .modal-body { max-height: 75vh; overflow-y: auto; }
+    }
+    #imgSelectorEdit { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:10px; margin-top:6px; }
+    /* Mobile: força fullscreen com scroll correto */
+    @media (max-width: 575.98px) {
+      #modalEditarRoteiro { padding: 0 !important; }
+      #modalEditarRoteiro .modal-dialog {
+        margin: 0 !important;
+        width: 100vw !important;
+        max-width: 100vw !important;
+        height: 100% !important;
+        min-height: 100% !important;
+        align-items: stretch !important;
+      }
+      #modalEditarRoteiro .modal-content {
+        height: 100% !important;
+        border-radius: 0 !important;
+        display: flex !important;
+        flex-direction: column !important;
+        overflow: hidden !important;
+      }
+      #modalEditarRoteiro .modal-body {
+        flex: 1 1 0 !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch;
+      }
+    }
   </style>
 </head>
 
 <body data-pagina="meus-roteiros">
+  <a href="#conteudo-principal" class="skip-link">Pular para o conteúdo principal</a>
   <div class="app-shell">
 
     <!-- SIDEBAR -->
-    <div class="sidebar">
+    <nav class="sidebar" aria-label="Menu principal">
       <div class="brand">
-        <div class="brand-badge"><i class="bi bi-compass"></i></div>
-        <div><div class="brand-title">Roteiros</div><div class="brand-sub">Suas viagens inesquecíveis</div></div>
+        <div class="brand-badge" style="width:42px;height:42px;min-width:42px;padding:0;background:transparent;border:none;box-shadow:none;border-radius:0;overflow:visible;"><img src="../assets/img/logo.png" alt="FlyGuide" style="width:42px;height:42px;object-fit:contain;display:block;"></div>
+        <div><div class="brand-title">Fly Guide</div><div class="brand-sub">Suas viagens inesquecíveis</div></div>
         <button class="btn btn-sm btn-outline-soft ms-auto d-lg-none" data-sidebar-close title="Fechar"><i class="bi bi-x-lg"></i></button>
       </div>
       <div class="navlist">
         <a class="" href="index.html"><i class="bi bi-globe"></i><span>Feed de Roteiros</span></a>
         <a class="active" href="meus-roteiros.html"><i class="bi bi-map"></i><span>Meus Roteiros</span></a>
+        <a class="" href="roteiros-iniciados.html"><i class="bi bi-play-circle"></i><span>Roteiros Iniciados</span></a>
         <a class="" href="planos-premium.html"><i class="bi bi-star"></i><span>Planos Premium</span></a>
         <a class="" href="ajuda.html"><i class="bi bi-question-circle"></i><span>Ajuda</span></a>
       </div>
-      <a href="criar-roteiro.html" class="btn btn-new btn-primary w-100"><i class="bi bi-plus-lg me-2"></i>Novo Roteiro</a>
+      <a href="criar-roteiro.html" class="btn btn-new btn-primary w-100"><i class="bi bi-plus-lg me-2"></i>Gerar Novo Roteiro</a>
       <div class="profile">
         <div class="avatar">?</div>
         <div><div class="name">Carregando...</div><div class="email"></div></div>
       </div>
-    </div>
+    </nav>
 
     <!-- ÁREA PRINCIPAL -->
-    <div class="main">
+    <main class="main" id="conteudo-principal">
       <div class="mobile-topbar">
         <button class="btn btn-outline-soft" data-sidebar-open><i class="bi bi-list"></i></button>
         <div class="fw-bold">Meus Roteiros</div>
@@ -86,14 +118,17 @@
             <h1 class="fw-black fw-bold mb-1" style="font-weight:900;">Meus Roteiros</h1>
             <div class="small-muted">Gerencie suas viagens e experiências</div>
           </div>
-          <a class="btn btn-primary-orange" href="criar-roteiro.html"><i class="bi bi-plus-lg me-2"></i>Novo Roteiro</a>
+          <a class="btn btn-primary-orange" href="criar-roteiro.html"><i class="bi bi-plus-lg me-2"></i>Gerar Novo Roteiro</a>
         </div>
 
         <!-- Filtros -->
         <div class="mt-4 d-flex flex-wrap gap-2" id="filtrosRoteiros">
           <button class="btn btn-outline-soft rounded-pill fw-bold active-filter" data-filtro="todos">Todos (<span id="cntTodos">0</span>)</button>
-          <button class="btn btn-outline-soft rounded-pill fw-bold" data-filtro="PUBLIC">Públicos (<span id="cntPublicos">0</span>)</button>
-          <button class="btn btn-outline-soft rounded-pill fw-bold" data-filtro="PRIVATE">Privados (<span id="cntPrivados">0</span>)</button>
+          <button class="btn btn-outline-soft rounded-pill fw-bold" data-filtro="Público">Públicos (<span id="cntPublicos">0</span>)</button>
+          <button class="btn btn-outline-soft rounded-pill fw-bold" data-filtro="Privado">Privados (<span id="cntPrivados">0</span>)</button>
+          <button class="btn btn-outline-soft rounded-pill fw-bold" data-filtro="rascunhos" id="btnFiltroRascunhos" style="display:none;">
+            <i class="bi bi-bookmark me-1"></i>Rascunhos (<span id="cntRascunhos">0</span>)
+          </button>
         </div>
 
         <!-- Carregando -->
@@ -112,25 +147,41 @@
 
         <!-- Lista -->
         <div class="row g-4 mt-2" id="listaRoteiros" style="display:none;"></div>
+
+        <!-- Rascunhos -->
+        <div id="listaRascunhos" style="display:none;" class="mt-2"></div>
       </div>
-    </div>
+    </main>
   </div>
 
-  <!-- Modal: Excluir Roteiro -->
-  <div class="modal fade" id="modalExcluirRoteiro" tabindex="-1">
+  <!-- Modal: Avaliar Roteiro -->
+  <div class="modal fade" id="modalAvaliarMR" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content" style="border-radius:18px;">
         <div class="modal-header border-0 pb-0">
-          <h5 class="modal-title fw-bold">Excluir Roteiro</h5>
+          <h5 class="modal-title fw-bold">
+            <i class="bi bi-star-fill me-2" style="color:#facc15;"></i>Avaliar roteiro
+          </h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
-        <div class="modal-body">
-          Tem certeza que deseja excluir o roteiro <strong id="nomeRoteiroExcluir"></strong>? Esta ação não pode ser desfeita.
+        <div class="modal-body text-center">
+          <p class="text-secondary mb-3" style="font-size:.9rem;">Como foi sua experiência com este roteiro?</p>
+          <div role="radiogroup" aria-label="Nota de 1 a 5 estrelas" style="display:flex;gap:12px;justify-content:center;font-size:2.2rem;margin-bottom:8px;">
+            <i class="bi bi-star star-mr" data-nota="1" role="radio" aria-label="1 estrela" aria-checked="false" tabindex="0" style="cursor:pointer;color:#cbd5e1;transition:color .12s;"></i>
+            <i class="bi bi-star star-mr" data-nota="2" role="radio" aria-label="2 estrelas" aria-checked="false" tabindex="0" style="cursor:pointer;color:#cbd5e1;transition:color .12s;"></i>
+            <i class="bi bi-star star-mr" data-nota="3" role="radio" aria-label="3 estrelas" aria-checked="false" tabindex="0" style="cursor:pointer;color:#cbd5e1;transition:color .12s;"></i>
+            <i class="bi bi-star star-mr" data-nota="4" role="radio" aria-label="4 estrelas" aria-checked="false" tabindex="0" style="cursor:pointer;color:#cbd5e1;transition:color .12s;"></i>
+            <i class="bi bi-star star-mr" data-nota="5" role="radio" aria-label="5 estrelas" aria-checked="false" tabindex="0" style="cursor:pointer;color:#cbd5e1;transition:color .12s;"></i>
+          </div>
+          <p id="legendaNotaMR" style="font-size:.82rem;color:#94a3b8;min-height:1.2em;margin-bottom:14px;"></p>
+          <textarea id="textoAvaliacaoMR" placeholder="Conte como foi (opcional)..." maxlength="1000"
+            style="width:100%;border-radius:10px;border:1px solid #e2e8f0;padding:10px;font-size:.88rem;resize:none;min-height:80px;background:inherit;color:inherit;"></textarea>
+          <div id="erroAvaliacaoMR" style="display:none;margin-top:8px;padding:8px 12px;background:#fee2e2;color:#b91c1c;border-radius:8px;font-size:.83rem;text-align:left;"></div>
         </div>
-        <div class="modal-footer border-0">
+        <div class="modal-footer border-0 pt-0">
           <button class="btn btn-outline-gray" data-bs-dismiss="modal">Cancelar</button>
-          <button class="btn btn-danger fw-bold" id="btnConfirmarExcluirRoteiro">
-            <i class="bi bi-trash me-1"></i>Excluir
+          <button class="btn btn-primary-orange fw-bold" id="btnSalvarAvaliacaoMR" disabled>
+            <i class="bi bi-check-lg me-1"></i>Salvar avaliação
           </button>
         </div>
       </div>
@@ -140,7 +191,7 @@
   <!-- Modal: Editar Roteiro -->
   <!-- Modal: Editar Roteiro (com abas) -->
   <div class="modal fade" id="modalEditarRoteiro" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable modal-fullscreen-sm-down">
       <div class="modal-content" style="border-radius:18px;">
 
         <!-- Header com abas -->
@@ -168,28 +219,29 @@
           </ul>
         </div>
 
-        <div class="modal-body" style="min-height:420px;">
+        <div class="modal-body">
           <div class="alert alert-danger" id="editRoteiroErro" style="display:none;"></div>
 
           <!-- ABA: Informações -->
           <div id="abaInfo">
             <div class="row g-3">
               <input type="hidden" id="editRoteiroId">
-              <div class="col-12 col-md-6">
-                <label class="form-label fw-bold">Título *</label>
-                <input class="form-control" id="editTitulo" placeholder="Título do roteiro">
+
+              <div class="col-12">
+                <label class="form-label fw-bold">Título do Roteiro *</label>
+                <input class="form-control" id="editTitulo" placeholder="Ex: 10 dias mágicos em Paris">
               </div>
               <div class="col-12 col-md-6">
-                <label class="form-label fw-bold">Destino (Cidade) *</label>
-                <input class="form-control" id="editCidade" placeholder="Cidade">
+                <label class="form-label fw-bold">País Principal *</label>
+                <input class="form-control" id="editPais" placeholder="Ex: França" autocomplete="off">
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label fw-bold">Cidade Base *</label>
+                <input class="form-control" id="editCidade" placeholder="Ex: Paris" autocomplete="off">
               </div>
               <div class="col-12 col-md-4">
-                <label class="form-label fw-bold">Data Início</label>
-                <input class="form-control" id="editDataInicio" type="date">
-              </div>
-              <div class="col-12 col-md-4">
-                <label class="form-label fw-bold">Data Fim</label>
-                <input class="form-control" id="editDataFim" type="date">
+                <label class="form-label fw-bold">Duração (dias) *</label>
+                <input class="form-control" id="editDuracao" type="number" min="1" placeholder="Ex: 7">
               </div>
               <div class="col-12 col-md-4">
                 <label class="form-label fw-bold">Tipo de Viagem</label>
@@ -204,34 +256,37 @@
                   <option value="Luxo">Luxo</option>
                 </select>
               </div>
-              <div class="col-12 col-md-6">
+              <div class="col-12 col-md-4">
                 <label class="form-label fw-bold">Orçamento (R$)</label>
                 <input class="form-control" id="editOrcamento" type="number" min="0" placeholder="Ex: 5000">
               </div>
-              <div class="col-12 col-md-6">
-                <label class="form-label fw-bold">Visibilidade</label>
-                <select class="form-select" id="editVisibilidade">
-                  <option value="PUBLIC">Público</option>
-                  <option value="PRIVATE">Privado</option>
-                </select>
-              </div>
               <div class="col-12">
                 <label class="form-label fw-bold">Descrição</label>
-                <textarea class="form-control" id="editDescricao" rows="3"></textarea>
+                <textarea class="form-control" id="editDescricao" rows="3" placeholder="Conte sobre sua viagem..."></textarea>
               </div>
               <div class="col-12">
                 <label class="form-label fw-bold">Imagem de Capa</label>
-                <div class="img-selector-sm" id="imgSelectorEdit">
-                  <div class="img-opt-sm" data-img-edit="praia"><img src="https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=200&q=60" alt="Praia"><div class="img-lbl">🏖️ Praia</div><div class="chk"><i class="bi bi-check"></i></div></div>
-                  <div class="img-opt-sm" data-img-edit="neve"><img src="https://images.unsplash.com/photo-1551582045-6ec9c11d8697?w=200&q=60" alt="Neve"><div class="img-lbl">❄️ Neve</div><div class="chk"><i class="bi bi-check"></i></div></div>
-                  <div class="img-opt-sm" data-img-edit="floresta"><img src="https://images.unsplash.com/photo-1448375240586-882707db888b?w=200&q=60" alt="Floresta"><div class="img-lbl">🌿 Floresta</div><div class="chk"><i class="bi bi-check"></i></div></div>
-                  <div class="img-opt-sm" data-img-edit="aventura"><img src="https://images.unsplash.com/photo-1551632811-561732d1e306?w=200&q=60" alt="Aventura"><div class="img-lbl">🧗 Aventura</div><div class="chk"><i class="bi bi-check"></i></div></div>
-                  <div class="img-opt-sm" data-img-edit="cidade"><img src="https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=200&q=60" alt="Cidade"><div class="img-lbl">🏙️ Cidade</div><div class="chk"><i class="bi bi-check"></i></div></div>
-                  <div class="img-opt-sm" data-img-edit="gastronomia"><img src="https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=200&q=60" alt="Gastronomia"><div class="img-lbl">🍽️ Gastro</div><div class="chk"><i class="bi bi-check"></i></div></div>
-                  <div class="img-opt-sm" data-img-edit="chuva"><img src="https://images.unsplash.com/photo-1519692933481-e162a57d6721?w=200&q=60" alt="Chuva"><div class="img-lbl">🌧️ Chuva</div><div class="chk"><i class="bi bi-check"></i></div></div>
-                  <div class="img-opt-sm" data-img-edit="diversao"><img src="https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?w=200&q=60" alt="Diversão"><div class="img-lbl">🎡 Diversão</div><div class="chk"><i class="bi bi-check"></i></div></div>
+                <div class="helper mb-2">Escolha um tema visual para o seu roteiro</div>
+                <div id="imgSelectorEdit"></div>
+                <input type="hidden" id="editImagem" value="">
+              </div>
+              <div class="col-12">
+                <div class="visibility-strip" id="visibilityStrip">
+                  <div class="visibility-icon-wrap" id="visIconWrap">
+                    <i class="bi bi-lock-fill" id="visIcon"></i>
+                  </div>
+                  <div class="visibility-text">
+                    <div class="visibility-label" id="visLabel">Roteiro Privado</div>
+                    <div class="visibility-desc" id="visDesc">Somente você pode ver este roteiro</div>
+                  </div>
+                  <div class="visibility-toggle-wrap">
+                    <div class="form-check form-switch m-0">
+                      <input class="form-check-input" id="editPublico" type="checkbox" role="switch">
+                    </div>
+                    <span class="visibility-badge" id="visBadge">Privado</span>
+                  </div>
                 </div>
-                <input type="hidden" id="editImagem" value="praia">
+                <input type="hidden" id="editVisibilidade" value="Privado">
               </div>
             </div>
           </div>
@@ -239,8 +294,39 @@
           <!-- ABA: Locais -->
           <div id="abaLocais" style="display:none;">
             <div class="alert" id="erroLocalEdit" style="display:none;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:10px;font-size:.9rem;"></div>
+            <div id="formAdicionarLocalEdit">
 
-            <!-- Busca Google Maps -->
+            <!-- ── Recomendações Inteligentes ── -->
+            <div class="mb-3" style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:14px;padding:16px;">
+              <div style="font-weight:800;font-size:.95rem;margin-bottom:10px;">
+                <i class="bi bi-stars me-1" style="color:#f97316;"></i>Recomendações Inteligentes
+                <div style="font-size:.78rem;font-weight:400;color:#64748b;margin-top:2px;">Melhores lugares na cidade do roteiro, ordenados por avaliação</div>
+              </div>
+              <div class="d-flex gap-2 mb-2">
+                <select class="form-select form-select-sm" id="categoriaRecomendacaoEdit">
+                  <option value="tourist_attraction">Atrações Turísticas</option>
+                  <option value="restaurant">Restaurantes</option>
+                  <option value="lodging">Hospedagem</option>
+                  <option value="museum">Museus</option>
+                  <option value="park">Parques</option>
+                  <option value="shopping_mall">Shoppings</option>
+                  <option value="night_club">Vida Noturna</option>
+                  <option value="bar">Bares</option>
+                  <option value="cafe">Cafés</option>
+                  <option value="beach">Praias</option>
+                </select>
+                <button class="btn btn-sm btn-primary-orange flex-shrink-0" id="btnBuscarRecomendacoesEdit" type="button">
+                  <i class="bi bi-search me-1"></i>Buscar
+                </button>
+              </div>
+              <div id="alertaRecomendacoesEdit" style="display:none;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:8px;font-size:.82rem;padding:8px 12px;margin-bottom:8px;"></div>
+              <div id="loadingRecomendacoesEdit" style="display:none;" class="text-center py-2 text-secondary" style="font-size:.82rem;">
+                <span class="spinner-border spinner-border-sm me-1"></span>Buscando recomendações...
+              </div>
+              <div id="listaRecomendacoesEdit"></div>
+            </div>
+
+            <!-- ── Busca Manual ── -->
             <div class="mb-3">
               <label class="form-label fw-bold">Buscar Local</label>
               <div class="input-group">
@@ -271,11 +357,16 @@
             <div class="row g-2 mb-3">
               <div class="col-4">
                 <label class="form-label fw-bold">Dia *</label>
-                <input id="localDiaEdit" type="number" min="1" class="form-control" placeholder="Ex: 1">
+                <select id="localDiaEdit" class="form-select"><option value="" disabled selected>Selecione</option></select>
               </div>
               <div class="col-4">
-                <label class="form-label fw-bold">Horário</label>
-                <input id="localHorarioEdit" type="text" class="form-control" placeholder="HH:MM" maxlength="5" oninput="mascHorario(this)">
+                <label class="form-label fw-bold">Período <span style="color:#ef4444;">*</span></label>
+                <select id="localPeriodoEdit" class="form-select">
+                  <option value="" disabled selected>— selecione —</option>
+                  <option value="manha">🌅 Manhã</option>
+                  <option value="tarde">☀️ Tarde</option>
+                  <option value="noite">🌙 Noite</option>
+                </select>
               </div>
               <div class="col-4">
                 <label class="form-label fw-bold">Observações</label>
@@ -286,6 +377,15 @@
             <button class="btn btn-primary-orange w-100 fw-bold mb-3" id="btnAdicionarLocalEdit" type="button">
               <i class="bi bi-plus-lg me-1"></i>Adicionar Local ao Roteiro
             </button>
+            </div><!-- /formAdicionarLocalEdit -->
+
+            <!-- Mapa dos Locais -->
+            <div id="miniMapaEditBox" style="display:none;margin-bottom:12px;background:#f8fafc;border:1px solid #e5e7eb;border-radius:14px;padding:12px;">
+              <div class="fw-bold mb-2" style="font-size:.9rem;color:#64748b;">
+                <i class="bi bi-map me-1" style="color:#f97316;"></i>Mapa dos Locais
+              </div>
+              <div id="miniMapaEdit" style="height:240px;border-radius:10px;overflow:hidden;"></div>
+            </div>
 
             <!-- Lista -->
             <div style="background:#f8fafc;border-radius:14px;padding:14px;min-height:120px;">
@@ -348,7 +448,7 @@
   <script src="../assets/js/roteiros.js"></script>
   <script src="../assets/js/maps.js"></script>
   <script src="../assets/js/maps-edit.js"></script>
-  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDJDXcLhGd99ryVpWwvkVpeFaKuzDWbvwI&libraries=places&language=pt-BR&callback=initMapsEdit" async defer></script>
+  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDJDXcLhGd99ryVpWwvkVpeFaKuzDWbvwI&libraries=places&language=pt-BR&loading=async&callback=initMapsEdit" async defer></script>
   <script>
     function mascHorario(input) {
       let v = input.value.replace(/\D/g, '').slice(0, 4);
@@ -359,3 +459,5 @@
   <script src="../assets/js/dark-mode.js"></script>
 </body>
 </html>
+
+

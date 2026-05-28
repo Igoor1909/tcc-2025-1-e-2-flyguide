@@ -1,7 +1,7 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="pt-br">
 <head>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧭</text></svg>">
+    <link rel="icon" href="../assets/img/logo.png" type="image/png">
   <title>FlyGuide - Meu Perfil</title>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -19,14 +19,15 @@
 </head>
 
 <body data-pagina="perfil">
+  <a href="#conteudo-principal" class="skip-link">Pular para o conteúdo principal</a>
   <div class="app-shell">
 
     <!-- SIDEBAR -->
-    <div class="sidebar">
+    <nav class="sidebar" aria-label="Menu principal">
       <div class="brand">
-        <div class="brand-badge"><i class="bi bi-compass"></i></div>
+        <div class="brand-badge" style="width:42px;height:42px;min-width:42px;padding:0;background:transparent;border:none;box-shadow:none;border-radius:0;overflow:visible;"><img src="../assets/img/logo.png" alt="FlyGuide" style="width:42px;height:42px;object-fit:contain;display:block;"></div>
         <div>
-          <div class="brand-title">Roteiros</div>
+          <div class="brand-title">Fly Guide</div>
           <div class="brand-sub">Suas viagens inesquecíveis</div>
         </div>
         <button class="btn btn-sm ms-auto d-lg-none" data-sidebar-close>
@@ -37,12 +38,13 @@
       <div class="navlist">
         <a href="index.html"><i class="bi bi-globe"></i><span>Feed de Roteiros</span></a>
         <a href="meus-roteiros.html"><i class="bi bi-map"></i><span>Meus Roteiros</span></a>
+        <a href="roteiros-iniciados.html"><i class="bi bi-play-circle"></i><span>Roteiros Iniciados</span></a>
         <a href="planos-premium.html"><i class="bi bi-star"></i><span>Planos Premium</span></a>
         <a href="ajuda.html"><i class="bi bi-question-circle"></i><span>Ajuda</span></a>
       </div>
 
       <a href="criar-roteiro.html" class="btn btn-new w-100">
-        <i class="bi bi-plus-lg me-2"></i>Novo Roteiro
+        <i class="bi bi-plus-lg me-2"></i>Gerar Novo Roteiro
       </a>
 
       <div class="profile" id="sidebarProfile" title="Meu Perfil">
@@ -52,12 +54,12 @@
           <div class="email" id="sidebarEmail"></div>
         </div>
       </div>
-    </div>
+    </nav>
 
     <!-- CONTEÚDO PRINCIPAL -->
-    <div class="main">
+    <main class="main" id="conteudo-principal">
       <div class="mobile-topbar">
-        <button class="btn" data-sidebar-open><i class="bi bi-list fs-5"></i></button>
+        <button class="btn" data-sidebar-open aria-label="Abrir menu"><i class="bi bi-list fs-5" aria-hidden="true"></i></button>
         <div class="fw-bold">Meu Perfil</div>
         <div style="width:36px"></div>
       </div>
@@ -139,7 +141,7 @@
         </div>
 
       </div>
-    </div>
+    </main>
   </div>
 
   <!-- Modal de confirmação exclusão -->
@@ -174,3 +176,4 @@
   <script src="../assets/js/dark-mode.js"></script>
 </body>
 </html>
+

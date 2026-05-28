@@ -1,99 +1,2010 @@
-/* ================================================================
+﻿/* ================================================================
    FlyGuide - maps-edit.js
-   Google Maps Places no modal de edição de roteiro (meus-roteiros)
-   Depende de: app.js, maps.js (para escapeHtml e URL_API_BASE)
+   Google Maps Places no modal de edicao de roteiro (meus-roteiros)
+   Depende de: app.js (authFetch, escapeHtml)
 ================================================================ */
 
-const _URL_API = "http://localhost:8080";
-let _autocompleteEdit = null;
-let _localSelecionadoEdit = null;
-let _locaisEdit = [];
-let _roteiroIdEdit = null;
+const _URL_API = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app";
 
-// Chamada pelo Google Maps API callback
-window.initMapsEdit = function () {
-  const input = document.getElementById("buscaLocalEdit");
-  if (!input || !window.google) return;
+// ── Estado do modal ───────────────────────────────────────────────
+let _autocompleteEdit         = null;
+let _autocompleteBasePaisEdit  = null;
+let _autocompleteBaseCidadeEdit = null;
+let _localSelecionadoEdit      = null;
+let _locaisEdit                = [];
+let _roteiroIdEdit             = null;
+let _basesEdit                 = [];
+let _baseAtivaIdEdit           = null;
+let _raioFiltroKmEdit          = 50;
+let _cidadeBaseSelecionadaEdit = null;
+let _paisBaseSelecionadoEdit   = null;
+let _diasTotaisEdit            = 0;
+let _userIdEdit                = null;
+let _roteiroObjEdit            = null;
+let _codigoPaisEdit            = null; // código ISO-2 do país do roteiro (ex: "br")
+let _estadoBaseCode            = null; // código do estado da base (ex: "SP") — disponível antes das bases carregarem
+let _estadoBaseName            = null; // nome legível do estado (ex: "São Paulo")
+let _ocultarBtnSalvarSugestoes = false; // true no passo3 do criar-roteiro
+let _lookupAiSeq               = 0;
+let _destinoPOIEdit            = false;
+let _localBaseEscolhidoEdit    = null;
 
-  _autocompleteEdit = new google.maps.places.Autocomplete(input, {
-    fields:   ["place_id", "name", "formatted_address", "geometry", "types"],
-    language: "pt-BR",
+// ── Estado temporário da tela ─────────────────────────────────────
+function _resetarEstadoBasesEdit() {
+  _basesEdit = [];
+  _baseAtivaIdEdit = null;
+  _raioFiltroKmEdit = 50;
+}
+
+function _salvarBasesEdit() {}
+function _salvarFiltroEdit() {}
+
+// ── Utilidades ────────────────────────────────────────────────────
+function _normalizar(v) {
+  return String(v || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+}
+
+function _calcularKm(lat1, lng1, lat2, lng2) {
+  const toRad = g => g * Math.PI / 180;
+  const R = 6371;
+  const dLat = toRad(lat2 - lat1), dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function _distanciaBase(local, base) {
+  if (!base || base.latitude == null || base.longitude == null) return null;
+  if (!local || local.latitude == null || local.longitude == null) return null;
+  return _calcularKm(
+    parseFloat(base.latitude), parseFloat(base.longitude),
+    parseFloat(local.latitude), parseFloat(local.longitude)
+  );
+}
+
+function _fmtKm(v) {
+  return Number(v).toLocaleString("pt-BR", {
+    minimumFractionDigits: v < 10 ? 1 : 0,
+    maximumFractionDigits: v < 10 ? 1 : 0,
   });
+}
+
+function _obterBaseAtiva() {
+  return _basesEdit.find(b => String(b.id) === String(_baseAtivaIdEdit)) || _basesEdit[0] || null;
+}
+
+function _coordenadasDestinoEdit(opts) {
+  const roteiro = opts?.roteiro || {};
+  const lat = opts?.latDestino ?? roteiro.latDestino ?? roteiro.latitudeDestino ?? null;
+  const lng = opts?.lngDestino ?? roteiro.lngDestino ?? roteiro.longitudeDestino ?? null;
+  const latNum = parseFloat(lat);
+  const lngNum = parseFloat(lng);
+  if (!Number.isFinite(latNum) || !Number.isFinite(lngNum)) return null;
+  return { latitude: latNum, longitude: lngNum };
+}
+
+function _mostrarErroLocalEdit(msg) {
+  const erroEl = document.getElementById("erroLocalEdit");
+  if (!erroEl) return;
+  erroEl.textContent = msg;
+  erroEl.style.display = "";
+}
+
+function _ocultarErroLocalEdit() {
+  const erroEl = document.getElementById("erroLocalEdit");
+  if (erroEl) erroEl.style.display = "none";
+}
+
+function _limparLocalSelecionadoEdit(limparInput) {
+  _localSelecionadoEdit = null;
+  const preview = document.getElementById("localPreviewEdit");
+  if (preview) preview.style.display = "none";
+  if (limparInput) {
+    const input = document.getElementById("buscaLocalEdit");
+    if (input) input.value = "";
+  }
+}
+
+function _mensagemLocalForaDaBaseEdit(local) {
+  const base = _obterBaseAtiva();
+  if (!base) return "Adicione ou aguarde carregar a cidade base antes de escolher um local.";
+  if (base.latitude == null || base.longitude == null) return "A cidade base ainda não possui coordenadas. Aguarde carregar e tente novamente.";
+  if (!local || local.latitude == null || local.longitude == null) return "Selecione um local válido da lista do Google Maps.";
+
+  const distancia = _distanciaBase(local, base);
+  if (distancia == null) return "Selecione um local válido da lista do Google Maps.";
+  if (distancia > _raioFiltroKmEdit) {
+    return `O local escolhido está a ${_fmtKm(distancia)} km de ${base.city || base.label}. Locais fora da cidade base não podem ser adicionados ao roteiro.`;
+  }
+  return "";
+}
+
+function _validarLocalNaBaseEdit(local) {
+  const mensagem = _mensagemLocalForaDaBaseEdit(local);
+  if (!mensagem) return true;
+  _mostrarErroLocalEdit(mensagem);
+  _limparLocalSelecionadoEdit(false);
+  return false;
+}
+
+function _calcularTimeline(bases) {
+  let dia = 1;
+  return bases.map(b => {
+    const ini = dia;
+    const d   = parseInt(b.dias) || 0;
+    const fim = d > 0 ? dia + d - 1 : null;
+    if (d > 0) dia += d;
+    return { ...b, diaInicio: ini, diaFim: fim };
+  });
+}
+
+// ── Erro base ─────────────────────────────────────────────────────
+function _mostrarErroBase(msg) {
+  const el = document.getElementById("erroBaseEdit");
+  if (el) { el.textContent = msg; el.style.display = ""; }
+}
+
+function _ocultarErroBase() {
+  const el = document.getElementById("erroBaseEdit");
+  if (el) el.style.display = "none";
+}
+
+// ── Geocodifica usando PlacesService (evita Geocoding API) ────────
+async function _geocodificarBase(pais, cidade) {
+  if (!window.google || !google.maps?.places?.PlacesService) {
+    throw new Error("Aguarde o Google Maps terminar de carregar.");
+  }
+  const query = [cidade, pais].filter(Boolean).join(", ");
+  const div = document.createElement("div");
+  const svc = new google.maps.places.PlacesService(div);
+  return new Promise((resolve, reject) => {
+    // findPlaceFromQuery não suporta address_components — usa formatted_address
+    svc.findPlaceFromQuery({ query, fields: ["geometry", "name", "formatted_address"] }, (results, status) => {
+      const OK = google.maps.places.PlacesServiceStatus.OK;
+      if (status !== OK || !results?.[0]?.geometry) {
+        reject(new Error("Nao foi possivel localizar essa cidade base."));
+        return;
+      }
+      // Extrai UF do Brasil a partir do formatted_address (ex: "São Paulo - SP, Brasil")
+      const addr = results[0].formatted_address || "";
+      const stateMatch = addr.match(/[-\s]([A-Z]{2})[,\s]/);
+      const stateCode  = stateMatch?.[1] || null;
+      resolve({
+        latitude:  results[0].geometry.location.lat(),
+        longitude: results[0].geometry.location.lng(),
+        stateCode,
+        stateName: stateCode || null,
+      });
+    });
+  });
+}
+
+// ── Render bases ──────────────────────────────────────────────────
+function _renderBases() {
+  const listaEl  = document.getElementById("listaBasesFiltroEdit");
+  const vazioEl  = document.getElementById("vazioBasesFiltroEdit");
+  const selectEl = document.getElementById("baseFiltroAtivaEdit");
+  const raioEl   = document.getElementById("raioBaseKmEdit");
+  if (!listaEl || !selectEl) return;
+
+  if (raioEl) raioEl.value = _raioFiltroKmEdit;
+
+  if (_basesEdit.length === 0) {
+    listaEl.innerHTML = "";
+    if (vazioEl) vazioEl.style.display = "";
+    selectEl.innerHTML = '<option value="">Nenhuma base cadastrada</option>';
+    selectEl.disabled = true;
+    return;
+  }
+
+  if (!_obterBaseAtiva()) _baseAtivaIdEdit = _basesEdit[0].id;
+  if (vazioEl) vazioEl.style.display = "none";
+
+  selectEl.disabled = false;
+  selectEl.innerHTML = _basesEdit.map(b =>
+    `<option value="${b.id}" ${String(b.id) === String(_baseAtivaIdEdit) ? "selected" : ""}>
+      ${escapeHtml(b.city || "Cidade")}${b.country ? ` · ${escapeHtml(b.country)}` : ""}
+    </option>`
+  ).join("");
+
+  const timeline = _calcularTimeline(_basesEdit);
+  const temDias  = _basesEdit.some(b => b.dias);
+  const isDark   = document.documentElement.getAttribute("data-theme") === "dark";
+  const cFundo   = isDark ? "#1e293b" : "#fff7ed";
+  const cBorda   = isDark ? "#334155" : "#fed7aa";
+  const cTexto   = isDark ? "#fdba74" : "#92400e";
+
+  const timelineHtml = temDias ? `
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;padding:10px 12px;background:${cFundo};border-radius:10px;border:1px solid ${cBorda};">
+      <div style="width:100%;font-size:.7rem;font-weight:700;color:${cTexto};text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;">
+        <i class="bi bi-calendar-range me-1"></i>Cronograma
+      </div>
+      ${timeline.map(b => b.diaFim ? `
+        <span style="padding:3px 10px;border-radius:999px;background:#f97316;color:#fff;font-size:.78rem;font-weight:700;">
+          ${b.diaInicio === b.diaFim ? `Dia ${b.diaInicio}` : `Dias ${b.diaInicio}–${b.diaFim}`}:
+          ${escapeHtml(b.city || b.label)}
+        </span>` : `
+        <span style="padding:3px 10px;border-radius:999px;background:${isDark ? "#334155" : "#e2e8f0"};color:${isDark ? "#94a3b8" : "#475569"};font-size:.78rem;font-weight:600;">
+          <i class="bi bi-geo-alt"></i> ${escapeHtml(b.city || b.label)}
+        </span>`
+      ).join("")}
+    </div>` : "";
+
+  listaEl.innerHTML = timelineHtml + timeline.map(base => {
+    const ativa       = String(base.id) === String(_baseAtivaIdEdit);
+    const cCard       = isDark ? "#1e293b" : "#fff";
+    const cBordaCard  = isDark ? (ativa ? "#f97316" : "#334155") : (ativa ? "#f97316" : "#e5e7eb");
+    const diasLabel   = base.diaFim
+      ? `<span style="padding:2px 8px;border-radius:999px;background:#fff7ed;color:#c2410c;font-size:.7rem;font-weight:700;border:1px solid #fed7aa;">
+           <i class="bi bi-calendar-range"></i>
+           ${base.diaInicio === base.diaFim ? `Dia ${base.diaInicio}` : `Dias ${base.diaInicio}–${base.diaFim}`}
+           (${base.dias}d)
+         </span>` : "";
+    return `
+      <div style="background:${cCard};border:1.5px solid ${cBordaCard};border-radius:10px;padding:10px 12px;
+                  display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px;">
+        <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+          <i class="bi bi-geo-alt-fill" style="color:#f97316;font-size:1rem;flex-shrink:0;"></i>
+          <div>
+            <div style="font-weight:800;font-size:.9rem;">${escapeHtml(base.city || "Cidade")}</div>
+            <div style="font-size:.78rem;color:#94a3b8;">${escapeHtml(base.country || "")}</div>
+            ${diasLabel ? `<div style="margin-top:5px;">${diasLabel}</div>` : ""}
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
+          ${ativa
+            ? `<span style="padding:3px 10px;border-radius:999px;background:#fff7ed;color:#f97316;font-size:.72rem;font-weight:700;">Base ativa</span>`
+            : `<button class="btn btn-sm btn-outline-gray" data-sel-base="${base.id}" type="button" style="font-size:.75rem;padding:3px 8px;">Usar</button>`}
+          ${_basesEdit.length > 1
+            ? `<button class="btn btn-sm btn-outline-danger" data-rem-base="${base.id}" type="button"><i class="bi bi-trash"></i></button>`
+            : ""}
+        </div>
+      </div>`;
+  }).join("");
+
+  listaEl.querySelectorAll("[data-sel-base]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      _baseAtivaIdEdit = btn.getAttribute("data-sel-base");
+      _salvarFiltroEdit();
+      _renderBases();
+      renderLocaisEdit();
+    });
+  });
+
+  listaEl.querySelectorAll("[data-rem-base]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const id = btn.getAttribute("data-rem-base");
+      _basesEdit = _basesEdit.filter(b => String(b.id) !== String(id));
+      if (String(_baseAtivaIdEdit) === String(id)) _baseAtivaIdEdit = _basesEdit[0]?.id || null;
+      _salvarBasesEdit();
+      _salvarFiltroEdit();
+      _renderBases();
+      renderLocaisEdit();
+    });
+  });
+}
+
+// ── Autocomplete bases ────────────────────────────────────────────
+function _configurarAutocompleteBases() {
+  const inputPais   = document.getElementById("basePaisEdit");
+  const inputCidade = document.getElementById("baseCidadeEdit");
+  if (!window.google || !google.maps?.places || !inputPais || !inputCidade) return;
+
+  if (!_autocompleteBasePaisEdit) {
+    _autocompleteBasePaisEdit = new google.maps.places.Autocomplete(inputPais, {
+      fields: ["address_components", "name", "types"],
+      types: ["(regions)"],
+      language: "pt-BR",
+    });
+    _autocompleteBasePaisEdit.addListener("place_changed", () => {
+      const place = _autocompleteBasePaisEdit.getPlace();
+      const comp  = (place?.address_components || []).find(c => (c.types || []).includes("country"));
+      if (!comp) return;
+      _paisBaseSelecionadoEdit = { nome: comp.long_name, codigo: comp.short_name?.toLowerCase() };
+      inputPais.value = comp.long_name;
+      if (_autocompleteBaseCidadeEdit && comp.short_name) {
+        _autocompleteBaseCidadeEdit.setComponentRestrictions({ country: comp.short_name });
+      }
+    });
+    inputPais.addEventListener("input", () => {
+      if (!inputPais.value.trim()) {
+        _paisBaseSelecionadoEdit = null;
+        inputCidade.value = "";
+        _cidadeBaseSelecionadaEdit = null;
+      }
+    });
+  }
+
+  if (!_autocompleteBaseCidadeEdit) {
+    _autocompleteBaseCidadeEdit = new google.maps.places.Autocomplete(inputCidade, {
+      fields: ["place_id", "name", "address_components", "geometry", "types"],
+      types: ["(cities)"],
+      language: "pt-BR",
+    });
+    _autocompleteBaseCidadeEdit.addListener("place_changed", () => {
+      const place = _autocompleteBaseCidadeEdit.getPlace();
+      if (!place.place_id) return;
+
+      const cidadeComp = (place.address_components || []).find(c =>
+        ["locality", "administrative_area_level_2", "postal_town", "administrative_area_level_1"]
+          .some(t => (c.types || []).includes(t))
+      );
+      const cidadeNome = cidadeComp?.long_name || place.name || inputCidade.value.trim();
+
+      const stateComp = (place.address_components || []).find(c =>
+        (c.types || []).includes("administrative_area_level_1")
+      );
+      _cidadeBaseSelecionadaEdit = {
+        nome:      cidadeNome,
+        latitude:  place.geometry?.location?.lat(),
+        longitude: place.geometry?.location?.lng(),
+        stateCode: stateComp?.short_name || null,
+        stateName: stateComp?.long_name  || null,
+      };
+      inputCidade.value = cidadeNome;
+
+      if (!_paisBaseSelecionadoEdit) {
+        const paisComp = (place.address_components || []).find(c => (c.types || []).includes("country"));
+        if (paisComp) {
+          _paisBaseSelecionadoEdit = { nome: paisComp.long_name, codigo: paisComp.short_name?.toLowerCase() };
+          inputPais.value = paisComp.long_name;
+        }
+      }
+      _ocultarErroBase();
+    });
+    inputCidade.addEventListener("input", () => {
+      if (_cidadeBaseSelecionadaEdit && _normalizar(inputCidade.value) !== _normalizar(_cidadeBaseSelecionadaEdit.nome)) {
+        _cidadeBaseSelecionadaEdit = null;
+      }
+    });
+  }
+}
+
+// ── Recomendações ─────────────────────────────────────────────────
+async function _buscarRecomendacoes(base, tipo) {
+  if (!window.google || !google.maps?.places) throw new Error("Google Maps não carregou ainda.");
+  if (!base || base.latitude == null) throw new Error("A base ativa não possui coordenadas.");
+
+  const div = document.createElement("div");
+  const svc = new google.maps.places.PlacesService(div);
+  return new Promise((resolve, reject) => {
+    svc.nearbySearch({
+      location: new google.maps.LatLng(parseFloat(base.latitude), parseFloat(base.longitude)),
+      radius:   _raioFiltroKmEdit * 1000,
+      type:     tipo,
+    }, (results, status) => {
+      const OK   = google.maps.places.PlacesServiceStatus.OK;
+      const ZERO = google.maps.places.PlacesServiceStatus.ZERO_RESULTS;
+      if (status !== OK && status !== ZERO) { reject(new Error("Erro ao buscar recomendações.")); return; }
+      const sorted = (results || [])
+        .filter(p => p.rating != null)
+        .sort((a, b) => b.rating !== a.rating
+          ? b.rating - a.rating
+          : (b.user_ratings_total || 0) - (a.user_ratings_total || 0));
+      resolve(sorted);
+    });
+  });
+}
+
+let _todosLugaresEdit = [];
+const _POR_PAGINA_EDIT = 5;
+
+function _renderRecomendacoes(lugares, pagina) {
+  const listaEl = document.getElementById("listaRecomendacoesEdit");
+  if (!listaEl) return;
+
+  if (lugares.length === 0) {
+    _todosLugaresEdit = [];
+    listaEl.innerHTML = `
+      <div class="text-center py-3 text-secondary" style="font-size:.82rem;">
+        <i class="bi bi-search" style="font-size:1.5rem;color:#cbd5e1;display:block;margin-bottom:6px;"></i>
+        Nenhum lugar encontrado nessa categoria.
+      </div>`;
+    return;
+  }
+
+  if (pagina === undefined) { _todosLugaresEdit = lugares; pagina = 0; }
+  const pg       = Math.max(0, Math.min(pagina, Math.ceil(_todosLugaresEdit.length / _POR_PAGINA_EDIT) - 1));
+  const total    = _todosLugaresEdit.length;
+  const totalPg  = Math.ceil(total / _POR_PAGINA_EDIT);
+  const slice    = _todosLugaresEdit.slice(pg * _POR_PAGINA_EDIT, (pg + 1) * _POR_PAGINA_EDIT);
+  const cidade   = _roteiroObjEdit ? (_roteiroObjEdit.cidade || _roteiroObjEdit.pais || "") : "";
+
+  listaEl.innerHTML = `
+    <div style="font-size:.78rem;color:#64748b;margin-bottom:8px;">
+      <i class="bi bi-trophy me-1" style="color:#f97316;"></i>
+      <strong>${total}</strong> lugar${total !== 1 ? "es" : ""}, ordenado${total !== 1 ? "s" : ""} por avaliação
+      ${cidade ? `· <strong>${escapeHtml(cidade)}</strong>` : ""}
+    </div>
+    ${slice.map((lugar, i) => {
+      const idx     = pg * _POR_PAGINA_EDIT + i;
+      const rating  = lugar.rating || 0;
+      const tot     = lugar.user_ratings_total || 0;
+      const addr    = lugar.vicinity || lugar.formatted_address || "";
+      const stars   = Array.from({ length: 5 }, (_, s) =>
+        `<i class="bi bi-star${s < Math.round(rating) ? "-fill" : ""}" style="color:${s < Math.round(rating) ? "#f59e0b" : "#cbd5e1"};font-size:.72rem;"></i>`
+      ).join("");
+      return `
+        <div style="background:#fff;border:1px solid #eef2f7;border-radius:10px;padding:10px 12px;
+                    display:flex;gap:10px;align-items:flex-start;margin-bottom:6px;">
+          <div style="background:#f97316;color:#fff;min-width:28px;height:28px;border-radius:50%;
+                      display:grid;place-items:center;font-weight:900;font-size:.8rem;flex-shrink:0;">${idx + 1}</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:800;font-size:.88rem;">${escapeHtml(lugar.name)}</div>
+            <div style="display:flex;align-items:center;gap:4px;margin-top:2px;">
+              ${stars}
+              <span style="font-weight:700;font-size:.82rem;">${rating.toFixed(1)}</span>
+              ${tot > 0 ? `<span style="font-size:.72rem;color:#94a3b8;">(${tot.toLocaleString("pt-BR")})</span>` : ""}
+            </div>
+            ${addr ? `<div style="color:#94a3b8;font-size:.75rem;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><i class="bi bi-geo-alt me-1"></i>${escapeHtml(addr)}</div>` : ""}
+            ${window.placeCategoryBadgeHtml ? window.placeCategoryBadgeHtml(lugar.types || []) : ""}
+            ${lugar.business_status === "OPERATIONAL" ? `<div style="font-size:.72rem;color:#16a34a;margin-top:2px;"><i class="bi bi-clock me-1"></i>Estabelecimento ativo</div>` : ""}
+          </div>
+          <button class="btn btn-sm btn-primary-orange flex-shrink-0"
+                  style="font-size:.78rem;padding:4px 8px;white-space:nowrap;"
+                  data-rec-nome="${escapeHtml(lugar.name)}"
+                  data-rec-end="${escapeHtml(addr)}"
+                  data-rec-pid="${lugar.place_id}"
+                  data-rec-lat="${lugar.geometry?.location?.lat() ?? ""}"
+                  data-rec-lng="${lugar.geometry?.location?.lng() ?? ""}"
+                  data-rec-tipo="${(lugar.types || [])[0] || "establishment"}">
+            <i class="bi bi-plus-lg"></i>
+          </button>
+        </div>`;
+    }).join("")}
+    ${totalPg > 1 ? `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;">
+      <button id="recEditPrev" style="background:none;border:1px solid #e2e8f0;border-radius:8px;padding:4px 12px;font-size:.78rem;font-weight:700;color:#475569;cursor:pointer;" ${pg === 0 ? "disabled" : ""}>&#8592; Anterior</button>
+      <span style="font-size:.75rem;color:#94a3b8;">${pg + 1} / ${totalPg}</span>
+      <button id="recEditNext" style="background:none;border:1px solid #e2e8f0;border-radius:8px;padding:4px 12px;font-size:.78rem;font-weight:700;color:#475569;cursor:pointer;" ${pg >= totalPg - 1 ? "disabled" : ""}>Próximo &#8594;</button>
+    </div>` : ""}
+  `;
+
+  listaEl.querySelectorAll("[data-rec-pid]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      _localSelecionadoEdit = {
+        placeId:   btn.getAttribute("data-rec-pid"),
+        nome:      btn.getAttribute("data-rec-nome"),
+        endereco:  btn.getAttribute("data-rec-end"),
+        tipo:      btn.getAttribute("data-rec-tipo"),
+        latitude:  parseFloat(btn.getAttribute("data-rec-lat")) || null,
+        longitude: parseFloat(btn.getAttribute("data-rec-lng")) || null,
+      };
+      const inputBusca = document.getElementById("buscaLocalEdit");
+      const preview    = document.getElementById("localPreviewEdit");
+      if (inputBusca) inputBusca.value = _localSelecionadoEdit.nome;
+      if (preview) {
+        preview.style.display = "";
+        const nEl = document.getElementById("previewNomeEdit");
+        const eEl = document.getElementById("previewEnderecoEdit");
+        if (nEl) nEl.textContent = _localSelecionadoEdit.nome;
+        if (eEl) eEl.textContent = _localSelecionadoEdit.endereco;
+      }
+      const busca = document.getElementById("buscaLocalEdit");
+      if (busca) busca.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+  });
+
+  const prevBtn = listaEl.querySelector("#recEditPrev");
+  const nextBtn = listaEl.querySelector("#recEditNext");
+  if (prevBtn) prevBtn.addEventListener("click", () => _renderRecomendacoes(null, pg - 1));
+  if (nextBtn) nextBtn.addEventListener("click", () => _renderRecomendacoes(null, pg + 1));
+}
+
+// ── Autocomplete busca local ──────────────────────────────────────
+// Aplica bounds de ~300 km ao redor da base ativa para restringir ao estado/região
+function _calcularBoundsEstado(base) {
+  if (!base || base.latitude == null || base.longitude == null || !window.google) return null;
+  const lat = parseFloat(base.latitude);
+  const lng = parseFloat(base.longitude);
+  const delta = 1.5; // ~165 km por grau — restringe ao estado
+  return new google.maps.LatLngBounds(
+    { lat: lat - delta, lng: lng - delta },
+    { lat: lat + delta, lng: lng + delta }
+  );
+}
+
+function _aplicarBoundsEstado() {
+  if (!_autocompleteEdit || !window.google) return;
+  const bounds = _calcularBoundsEstado(_obterBaseAtiva());
+  if (!bounds) return;
+  // setOptions com bounds + strictBounds em chamada única — mais confiável que setBounds separado
+  _autocompleteEdit.setOptions({ bounds, strictBounds: true });
+}
+
+function garantirAutocompleteEdit() {
+  const input = document.getElementById("buscaLocalEdit");
+  if (!input || !window.google || _autocompleteEdit) return;
+
+  if (input.dataset.localResetEditReady !== "true") {
+    input.dataset.localResetEditReady = "true";
+    input.addEventListener("input", () => {
+      if (!_localSelecionadoEdit) return;
+      if (_normalizar(input.value) === _normalizar(_localSelecionadoEdit.nome)) return;
+      _limparLocalSelecionadoEdit(false);
+      _ocultarErroLocalEdit();
+    });
+  }
+
+  const opts = {
+    fields: ["place_id", "name", "formatted_address", "geometry", "types"],
+    language: "pt-BR",
+  };
+
+  _autocompleteEdit = new google.maps.places.Autocomplete(input, opts);
 
   _autocompleteEdit.addListener("place_changed", () => {
     const place = _autocompleteEdit.getPlace();
-    if (!place.place_id) return;
+    if (!place || !place.place_id) return;
+    _ocultarErroLocalEdit();
 
     _localSelecionadoEdit = {
       placeId:   place.place_id,
       nome:      place.name,
       endereco:  place.formatted_address,
       tipo:      (place.types || [])[0] || "establishment",
-      latitude:  place.geometry?.location?.lat(),
-      longitude: place.geometry?.location?.lng(),
+      latitude:  place.geometry && place.geometry.location ? place.geometry.location.lat() : null,
+      longitude: place.geometry && place.geometry.location ? place.geometry.location.lng() : null,
     };
 
-    const preview = document.getElementById("localPreviewEdit");
-    if (preview) {
-      preview.style.display = "";
-      document.getElementById("previewNomeEdit").textContent     = _localSelecionadoEdit.nome;
-      document.getElementById("previewEnderecoEdit").textContent = _localSelecionadoEdit.endereco;
-    }
+    const preview    = document.getElementById("localPreviewEdit");
+    const nomeEl     = document.getElementById("previewNomeEdit");
+    const enderecoEl = document.getElementById("previewEnderecoEdit");
+    if (preview)    preview.style.display    = "";
+    if (nomeEl)     nomeEl.textContent       = _localSelecionadoEdit.nome || "";
+    if (enderecoEl) enderecoEl.textContent   = _localSelecionadoEdit.endereco || "";
   });
-};
 
-// Carrega locais do roteiro no modal
-function carregarLocaisEdit(roteiroId) {
-  _roteiroIdEdit = roteiroId;
-  _locaisEdit    = [];
-
-  fetch(`${_URL_API}/roteiros/${roteiroId}/locais`)
-    .then(r => r.json())
-    .then(data => { _locaisEdit = data; renderLocaisEdit(); })
-    .catch(() => { _locaisEdit = []; renderLocaisEdit(); });
+  window.setTimeout(() => {
+    document.querySelectorAll(".pac-container").forEach(el => { el.style.zIndex = "2000"; });
+  }, 0);
 }
 
-function renderLocaisEdit() {
-  const lista = document.getElementById("listaLocaisEdit");
-  const vazio = document.getElementById("vazioLocaisEdit");
-  if (!lista) return;
+window.initMapsEdit = function () {
+  garantirAutocompleteEdit();
+  _configurarAutocompleteBases();
+};
 
-  if (_locaisEdit.length === 0) {
-    lista.innerHTML = "";
-    if (vazio) { vazio.style.display = ""; lista.appendChild(vazio); }
-    return;
+// ── Horário ───────────────────────────────────────────────────────
+function _normalizarHorarioEdit(valor) {
+  if (Array.isArray(valor)) {
+    const hh = String(valor[0] || 0).padStart(2, "0");
+    const mm = String(valor[1] || 0).padStart(2, "0");
+    return `${hh}:${mm}:00`;
+  }
+  const h = String(valor || "").trim();
+  if (!h) return null;
+  if (/^\d{2}:\d{2}$/.test(h)) return `${h}:00`;
+  if (/^\d{2}:\d{2}:\d{2}$/.test(h)) return h;
+  return null;
+}
+
+function _formatarHorarioEdit(valor) {
+  const h = _normalizarHorarioEdit(valor);
+  return h ? h.slice(0, 5) : "";
+}
+
+function _horarioOrdemEdit(valor) {
+  const h = _normalizarHorarioEdit(valor);
+  if (!h) return Number.MAX_SAFE_INTEGER;
+  const [hora, min] = h.split(":").map(Number);
+  return hora * 60 + min;
+}
+
+function _compararLocaisEdit(a, b) {
+  return (a.dia || 0) - (b.dia || 0)
+    || _horarioOrdemEdit(a.horario) - _horarioOrdemEdit(b.horario)
+    || (a.ordem || 0) - (b.ordem || 0)
+    || String(a.nome || "").localeCompare(String(b.nome || ""), "pt-BR");
+}
+
+function _agruparLocaisEdit(locais) {
+  const grupos = new Map();
+  [...locais].sort(_compararLocaisEdit).forEach(l => {
+    const chave = l.dia || 0;
+    if (!grupos.has(chave)) grupos.set(chave, []);
+    grupos.get(chave).push(l);
+  });
+  return [...grupos.entries()].sort((a, b) => a[0] - b[0]).map(([dia, itens]) => ({ dia, itens }));
+}
+
+// ── AI suggestions editing ────────────────────────────────────────
+function _parseCustoAI(custo) {
+  if (!custo) return "";
+  const s = String(custo).replace(/[Rr]?\$\s*/g, "").replace(/\./g, "").replace(/,/g, ".");
+  const nums = s.match(/\d+(\.\d+)?/g);
+  if (!nums) return "";
+  if (nums.length === 1) return parseFloat(nums[0]);
+  return Math.round((parseFloat(nums[0]) + parseFloat(nums[nums.length - 1])) / 2);
+}
+
+const _PERIODOS_AI_MR = [
+  { key: "manha", label: "Manhã",  icon: "bi-sunrise-fill",   cor: "#f59e0b" },
+  { key: "tarde", label: "Tarde",  icon: "bi-sun-fill",        cor: "#f97316" },
+  { key: "noite", label: "Noite",  icon: "bi-moon-stars-fill", cor: "#6366f1" },
+];
+
+function _hasSugestoesAIEdit() {
+  return _roteiroObjEdit
+    && Array.isArray(_roteiroObjEdit.sugestoes)
+    && _roteiroObjEdit.sugestoes.length > 0;
+}
+
+function _initAIItemAutocomplete(input) {
+  if (!window.google || !window.google.maps || !window.google.maps.places) return;
+  const ac = new google.maps.places.Autocomplete(input, {
+    fields: ["place_id", "name", "formatted_address"],
+    language: "pt-BR"
+  });
+  ac.addListener("place_changed", () => {
+    const place = ac.getPlace();
+    if (!place || !place.place_id) return;
+    const item = input.closest("[data-ai-item]");
+    if (!item) return;
+    if (place.name) input.value = place.name;
+    const titleEl = item.querySelector("[data-ai-title]");
+    if (titleEl && place.name) titleEl.textContent = place.name;
+    const endEl = item.querySelector("[data-ai-endereco]");
+    if (endEl) {
+      endEl.textContent = place.formatted_address || "";
+      endEl.style.display = place.formatted_address ? "" : "none";
+    }
+    const addressEl = item.querySelector("[data-ai-address]");
+    if (addressEl) {
+      addressEl.innerHTML = place.formatted_address
+        ? `<i class="bi bi-geo-alt me-1"></i>${escapeHtml(place.formatted_address)}`
+        : "";
+      addressEl.style.display = place.formatted_address ? "" : "none";
+    }
+    const pidEl = item.querySelector("[data-ai-place-id]");
+    if (pidEl) pidEl.value = place.place_id || "";
+    const mapsLink = item.querySelector("[data-ai-maps-link]");
+    if (mapsLink) {
+      mapsLink.href = `https://www.google.com/maps/place/?q=place_id:${place.place_id}`;
+      mapsLink.style.display = "flex";
+    }
+  });
+}
+
+function _renderAIItemCardMR(item, idx, uid, isDark) {
+  const nome = item.nome || "";
+  const endereco = item.endereco || "";
+  const placeId = item.placeId || "";
+  const custo = _parseCustoAI(item.custo);
+  const corCard = isDark ? "#1e293b" : "#f8fafc";
+  const corBorda = isDark ? "#334155" : "#e2e8f0";
+  const corForm = isDark ? "#0f172a" : "#f1f5f9";
+  const custoLabel = custo ? "$ " + custo : "$";
+
+  return `<div data-ai-item style="margin-top:5px;">
+    <div style="background:${corCard};border:1px solid ${corBorda};border-radius:8px;display:flex;align-items:center;gap:8px;padding:7px 10px;">
+      <div style="background:#f97316;color:#fff;min-width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:.75rem;flex-shrink:0;">${idx + 1}</div>
+      <div style="flex:1;min-width:0;">
+        <div data-ai-title style="font-weight:700;font-size:.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(nome || "Local")}</div>
+        <div data-ai-address style="font-size:.72rem;color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:${endereco ? "" : "none"};">${endereco ? `<i class="bi bi-geo-alt me-1"></i>${escapeHtml(endereco)}` : ""}</div>
+        ${window.placeCategoryBadgeHtml ? window.placeCategoryBadgeHtml([window.inferPlaceType ? window.inferPlaceType(nome) : "tourist_attraction"]) : ""}
+      </div>
+      <div data-ai-cost-display style="min-width:48px;text-align:right;font-size:.8rem;font-weight:700;color:#f97316;background:#fff7ed;border:1px solid #ffffff;border-radius:4px;padding:2px 6px;flex-shrink:0;">${escapeHtml(custoLabel)}</div>
+      <div style="display:flex;gap:4px;flex-shrink:0;">
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-ai-edit="${uid}" title="Editar"><i class="bi bi-pencil"></i></button>
+        <button type="button" class="btn btn-sm btn-outline-danger" data-ai-del title="Remover"><i class="bi bi-trash"></i></button>
+      </div>
+    </div>
+    <div id="aiedit-mr-${uid}" style="display:none;background:${corForm};border:1px solid ${corBorda};border-radius:0 0 8px 8px;padding:8px 10px;margin-top:-1px;">
+      <div class="row g-2">
+        <div class="col-12">
+          <label style="font-size:.72rem;font-weight:700;color:#94a3b8;">Local</label>
+          <div data-ai-edit-title style="font-size:.88rem;font-weight:700;padding:3px 0 1px;">${escapeHtml(nome || "")}</div>
+          <input type="hidden" data-ai-nome value="${escapeHtml(nome)}">
+          <input type="hidden" data-ai-place-id value="${escapeHtml(placeId)}">
+          <input type="hidden" data-ai-lat value="${escapeHtml(String(item.latitude ?? ""))}">
+          <input type="hidden" data-ai-lng value="${escapeHtml(String(item.longitude ?? ""))}">
+          <div data-ai-endereco style="font-size:.72rem;color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:${endereco ? "" : "none"};">${escapeHtml(endereco)}</div>
+          <a data-ai-maps-link href="${placeId ? `https://www.google.com/maps/place/?q=place_id:${placeId}` : "#"}" target="_blank" style="font-size:.7rem;color:#3b82f6;text-decoration:none;display:${placeId ? "flex" : "none"};align-items:center;gap:3px;margin-top:2px;"><i class="bi bi-map-fill"></i>Ver no Maps</a>
+        </div>
+        <div class="col-12">
+          <label style="font-size:.72rem;font-weight:700;color:#94a3b8;">Custo ($)</label>
+          <input type="number" min="0" step="0.01" class="form-control form-control-sm" data-ai-custo value="${escapeHtml(custo)}" placeholder="$">
+        </div>
+        <div class="col-12">
+          <label style="font-size:.72rem;font-weight:700;color:#94a3b8;">Observações</label>
+          <input type="text" class="form-control form-control-sm" data-ai-obs value="${escapeHtml(item.observacoes || "")}" placeholder="Opcional">
+        </div>
+      </div>
+      <div class="d-flex gap-2 mt-2">
+        <button type="button" class="btn btn-sm btn-primary-orange" data-ai-salvar="${uid}"><i class="bi bi-check-lg me-1"></i>Salvar</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-ai-cancelar="${uid}">Cancelar</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function _atualizarContadoresAIVisiveis(lista) {
+  if (!lista) return;
+  lista.querySelectorAll("[data-ai-dia-idx]").forEach(diaEl => {
+    const countEl = diaEl.querySelector("[data-ai-count-dia]");
+    if (!countEl) return;
+    const total = diaEl.querySelectorAll("[data-ai-item]").length;
+    countEl.textContent = `${total} ${total === 1 ? "local" : "locais"}`;
+  });
+}
+
+function _garantirLocalBaseNoDiaUnicoEdit(sugestoes) {
+  if (!_destinoPOIEdit || _diasTotaisEdit !== 1 || !_localBaseEscolhidoEdit || !Array.isArray(sugestoes) || sugestoes.length === 0) {
+    return sugestoes;
   }
 
-  if (vazio) vazio.style.display = "none";
+  const baseItem = {
+    nome:      _localBaseEscolhidoEdit.nome || _roteiroObjEdit?.cidade || "Local escolhido",
+    endereco:  _localBaseEscolhidoEdit.endereco || "",
+    placeId:   _localBaseEscolhidoEdit.placeId || "",
+    latitude:  _localBaseEscolhidoEdit.latitude ?? "",
+    longitude: _localBaseEscolhidoEdit.longitude ?? "",
+    custo:     _localBaseEscolhidoEdit.custo || null,
+  };
+  const nomeBase = _normalizar(baseItem.nome);
+  const pidBase  = String(baseItem.placeId || "").trim();
 
-  lista.innerHTML = _locaisEdit
-    .sort((a, b) => (a.dia || 0) - (b.dia || 0))
-    .map(l => `
-      <div class="d-flex align-items-center gap-2 p-2 mb-1"
-           style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;">
-        <div style="background:#f97316;color:#fff;width:32px;height:32px;border-radius:50%;
-                    display:grid;place-items:center;font-weight:800;font-size:.85rem;flex-shrink:0;">
-          ${l.dia || "?"}
+  const jaExiste = sugestoes.some(dia => {
+    const grupos = dia.periodos && typeof dia.periodos === "object"
+      ? Object.values(dia.periodos).flat()
+      : (Array.isArray(dia.locais) ? dia.locais : []);
+    return grupos.some(item => {
+      const pid = String(item?.placeId || item?.place_id || "").trim();
+      if (pidBase && pid && pid === pidBase) return true;
+      return nomeBase && _normalizar(item?.nome || item?.name || item) === nomeBase;
+    });
+  });
+  if (jaExiste) return sugestoes;
+
+  const diaUm = sugestoes[0];
+  if (diaUm.periodos && typeof diaUm.periodos === "object") {
+    if (!Array.isArray(diaUm.periodos.manha)) diaUm.periodos.manha = [];
+    diaUm.periodos.manha.unshift(baseItem);
+  } else {
+    if (!Array.isArray(diaUm.locais)) diaUm.locais = [];
+    diaUm.locais.unshift(baseItem);
+  }
+  return sugestoes;
+}
+
+function _renderLocalCardMR(l, idx, isDark) {
+  const vid = String(l.idRoteiroLocal);
+  const horFmt    = _formatarHorarioEdit(l.horario) || "";
+  const corCard   = isDark ? "#1e293b" : "#f8fafc";
+  const corBorda  = isDark ? "#334155" : "#e2e8f0";
+  const corLabel  = isDark ? "#94a3b8" : "#64748b";
+  const corForm   = isDark ? "#0f172a" : "#f1f5f9";
+  const corFormBrd = isDark ? "#334155" : "#e2e8f0";
+  const maxDiaAttr = _diasTotaisEdit > 0 ? ` max="${_diasTotaisEdit}"` : "";
+  const custoVal  = l.custo != null ? String(l.custo) : "";
+  const custoLabel = custoVal !== "" ? "$ " + custoVal : "$";
+  return `<div id="lwrap-${vid}" style="margin-top:5px;">
+    <div style="background:${corCard};border:1px solid ${corBorda};border-radius:8px;display:flex;align-items:center;gap:8px;padding:7px 10px;">
+      <div style="background:#f97316;color:#fff;min-width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:.75rem;flex-shrink:0;">${idx + 1}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:700;font-size:.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(l.nome || "Local")}</div>
+        ${l.endereco ? `<div style="font-size:.72rem;color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><i class="bi bi-geo-alt me-1"></i>${escapeHtml(l.endereco)}</div>` : ""}
+        ${window.placeCategoryBadgeHtml && (l.tipo || l.nome) ? window.placeCategoryBadgeHtml([l.tipo || (window.inferPlaceType ? window.inferPlaceType(l.nome) : "tourist_attraction")]) : ""}
+        ${l.observacoes ? `<div style="font-size:.72rem;color:${corLabel};">${escapeHtml(l.observacoes)}</div>` : ""}
+      </div>
+      <div id="lcusto-display-${vid}" style="min-width:48px;text-align:right;font-size:.8rem;font-weight:700;color:#f97316;background:#fff7ed;border:1px solid #ffffff;border-radius:4px;padding:2px 6px;flex-shrink:0;">${escapeHtml(custoLabel)}</div>
+      <div style="display:flex;gap:4px;flex-shrink:0;">
+        <button class="btn btn-sm btn-outline-secondary" data-edit-vinculo-mr="${vid}"><i class="bi bi-pencil"></i></button>
+        <button class="btn btn-sm btn-outline-danger" data-del-local-mr="${l.idLocal}" data-del-vinculo-mr="${vid}"><i class="bi bi-trash"></i></button>
+      </div>
+    </div>
+    <div id="ledit-mr-${vid}" style="display:none;background:${corForm};border:1px solid ${corFormBrd};border-radius:0 0 8px 8px;padding:8px 10px;margin-top:-1px;">
+      <input type="hidden" id="ledit-mr-dia-${vid}" value="${l.dia || ""}">
+      <div style="margin-bottom:8px;">
+        <label style="font-size:.72rem;font-weight:700;color:${corLabel};">Local</label>
+        <div style="font-size:.88rem;font-weight:700;padding:3px 0 1px;">${escapeHtml(l.nome || "")}</div>
+        ${l.endereco ? `<div style="font-size:.72rem;color:#94a3b8;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(l.endereco)}</div>` : ""}
+        ${l.placeId ? `<a href="https://www.google.com/maps/place/?q=place_id:${l.placeId}" target="_blank" style="font-size:.7rem;color:#3b82f6;text-decoration:none;display:inline-flex;align-items:center;gap:3px;margin-top:2px;"><i class="bi bi-map-fill"></i>Ver no Maps</a>` : ""}
+      </div>
+      <div class="row g-2">
+        <div class="col-12">
+          <label style="font-size:.72rem;font-weight:700;color:${corLabel};">Custo ($)</label>
+          <input type="number" min="0" step="0.01" class="form-control form-control-sm" id="ledit-mr-custo-${vid}" value="${escapeHtml(custoVal)}" placeholder="$">
         </div>
-        <div style="flex:1;min-width:0;">
-          <div class="fw-bold" style="font-size:.88rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-            ${escapeHtml(l.nome || "Local")}
-          </div>
-          ${l.observacoes ? `<div class="text-secondary" style="font-size:.75rem;">${escapeHtml(l.observacoes)}</div>` : ""}
+        <div class="col-12">
+          <label style="font-size:.72rem;font-weight:700;color:${corLabel};">Observações</label>
+          <input type="text" class="form-control form-control-sm" id="ledit-mr-obs-${vid}" value="${escapeHtml(l.observacoes || "")}" placeholder="Opcional">
         </div>
-        <button class="btn btn-sm btn-outline-danger" data-rm-local-edit="${l.idRoteiroLocal}" title="Remover">
-          <i class="bi bi-trash"></i>
+      </div>
+      <div class="d-flex gap-2 mt-2">
+        <button class="btn btn-sm btn-primary-orange" data-salvar-mr="${vid}" data-salvar-mr-local="${l.idLocal}" data-salvar-mr-ordem="${l.ordem || 1}" data-salvar-mr-status="${l.status || "PLANEJADO"}">
+          <i class="bi bi-check-lg me-1"></i>Salvar
         </button>
-      </div>`).join("");
+        <button class="btn btn-sm btn-outline-secondary" data-cancelar-mr="${vid}">Cancelar</button>
+      </div>
+    </div>
+  </div>`;
+}
 
-  lista.querySelectorAll("[data-rm-local-edit]").forEach(btn => {
+function _inferirTipoGenericoAI(nome) {
+  const n = nome.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  if (/jantar|almoco|almocar|restaurante|refeicao/.test(n)) return "restaurant";
+  if (/cafe|cafeteria|padaria|lanche|desjejum|brunch/.test(n)) return "cafe";
+  if (/museu|musee|museum/.test(n)) return "museum";
+  if (/praia/.test(n)) return "natural_feature";
+  if (/parque|jardim|bosque/.test(n)) return "park";
+  if (/feira|mercado|shopping|compras|loja/.test(n)) return "shopping_mall";
+  if (/bar|pub|cerveja|boteco|rooftop|noite/.test(n)) return "bar";
+  if (/hotel|pousada|hostel|hospedagem/.test(n)) return "lodging";
+  if (/teatro|cinema|show|concerto|espetaculo/.test(n)) return "movie_theater";
+  if (/spa|massagem|bem.estar/.test(n)) return "spa";
+  // Qualquer coisa turística/passeio genérico mapeia para tourist_attraction
+  if (/passeio|tour|caminhada|trilha|ponto turistico|centro historico|bairro|mirante|vista|galeria|cultural|ponte|passarela|passerelle|praca|plaza|monumento|avenida/.test(n)) return "tourist_attraction";
+  return null;
+}
+
+function _ehNomeGenericoAI(nome) {
+  const n = nome.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  if (/\b(em|no|na|num|numa)\b.*(restaurante|cafe|museu|parque|praia|feira|mercado|bar|hotel|pousada)/.test(n)) return true;
+  if (/^(almoco|jantar|cafe da manha|lanche|refeicao|desjejum|brunch)\b/.test(n)) return true;
+  if (/(local|tipico|regional|tradicional|popular|da cidade|do local|da regiao|principal|urbano|historico)$/.test(n)) return true;
+  // Frases descritivas genéricas de atividades
+  if (/^(passeio|visita|tour|caminhada|trilha|ponto turistico|centro historico|bairro|mirante|vista|noite|show|espetaculo)/.test(n)) return true;
+  if (/\b(local|historico|urbano|principal|da regiao|tipico)\b/.test(n)) return true;
+  return false;
+}
+
+async function _autoLookupAIAddresses(lista, cidade) {
+  try {
+    if (!window.google || !window.google.maps || !window.google.maps.places) return;
+    const lookupSeq = ++_lookupAiSeq;
+    const svc          = new google.maps.places.PlacesService(document.createElement("div"));
+    const base         = _obterBaseAtiva();
+    const OK           = google.maps.places.PlacesServiceStatus.OK;
+    const usedPlaceIds = new Set();
+    const usedAddrs    = new Set();  // endereços normalizados já usados
+    const usedCoords   = [];         // [{lat,lng}] já usados — evita mesmo local com place_id diferente
+    const MIN_KM       = 0.08;       // 80 m — raio mínimo de exclusão entre lugares
+    const baseLat      = base?.latitude != null ? parseFloat(base.latitude) : null;
+    const baseLng      = base?.longitude != null ? parseFloat(base.longitude) : null;
+    const hasBaseCoords = Number.isFinite(baseLat) && Number.isFinite(baseLng);
+    const MAX_KM_BASE  = Number(_raioFiltroKmEdit) > 0 ? Number(_raioFiltroKmEdit) : 30;
+    const cidadeBusca  = cidade || base?.city || base?.label || "";
+    if (!hasBaseCoords) {
+      setTimeout(() => {
+        if (lookupSeq === _lookupAiSeq && _obterBaseAtiva()?.latitude != null) {
+          _autoLookupAIAddresses(lista, cidade);
+        }
+      }, 500);
+      return;
+    }
+    const BLOCKED_TYPES = new Set([
+      "lodging", "supermarket", "grocery_or_supermarket", "convenience_store",
+      "gas_station", "bank", "atm", "car_dealer", "car_repair", "car_wash",
+      "hardware_store", "laundry", "storage", "moving_company", "electrician",
+      "plumber", "locksmith", "painter", "roofing_contractor", "general_contractor",
+      "insurance_agency", "real_estate_agency", "finance", "accounting",
+      "car_rental", "embassy", "post_office", "courthouse", "police",
+      "fire_station", "funeral_home", "cemetery"
+    ]);
+
+    const _normAddr = s =>
+      String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "")
+        .toLowerCase().replace(/\s+/g, " ").trim();
+
+    const _normCidade = s =>
+      String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "")
+        .toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+
+    const _coordProxima = (lat, lng) =>
+      usedCoords.some(c => _calcularKm(c.lat, c.lng, lat, lng) < MIN_KM);
+
+    const _coordsDoItem = item => {
+      const lat = parseFloat(item.querySelector("[data-ai-lat]")?.value || "");
+      const lng = parseFloat(item.querySelector("[data-ai-lng]")?.value || "");
+      return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+    };
+
+    const _dentroDoRaioCoords = (lat, lng) => {
+      if (!hasBaseCoords) return true;
+      return _calcularKm(baseLat, baseLng, lat, lng) <= MAX_KM_BASE;
+    };
+
+    const _dentroDoRaio = r => {
+      if (!hasBaseCoords) return true;
+      const loc = r.geometry?.location;
+      if (!loc) return false;
+      return _dentroDoRaioCoords(loc.lat(), loc.lng());
+    };
+
+    const _temTipoBloqueado = r => (r.types || []).some(t => BLOCKED_TYPES.has(t));
+
+    const _naCidadeBase = r => {
+      if (_destinoPOIEdit) return true;
+      const cidadeAlvo = _normCidade(base?.city || cidadeBusca);
+      if (!cidadeAlvo) return true;
+      const addr = _normCidade(r.formatted_address || r.vicinity || "");
+      if (!addr) return false;
+      return addr.includes(cidadeAlvo);
+    };
+
+    const _resultadoAceitavel = r => r?.place_id && _dentroDoRaio(r) && _noEstado(r) && !_temTipoBloqueado(r);
+
+    const _limparResolucaoItem = item => {
+      const pidEl = item.querySelector("[data-ai-place-id]");
+      const latEl = item.querySelector("[data-ai-lat]");
+      const lngEl = item.querySelector("[data-ai-lng]");
+      const addrEl = item.querySelector("[data-ai-address]");
+      const endEl = item.querySelector("[data-ai-endereco]");
+      const mapsLink = item.querySelector("[data-ai-maps-link]");
+      if (pidEl) pidEl.value = "";
+      if (latEl) latEl.value = "";
+      if (lngEl) lngEl.value = "";
+      if (addrEl) { addrEl.textContent = ""; addrEl.style.display = "none"; }
+      if (endEl) { endEl.textContent = ""; endEl.style.display = "none"; }
+      if (mapsLink) { mapsLink.href = "#"; mapsLink.style.display = "none"; }
+    };
+
+    // Valida estado apenas para Brasil (UF de 2 letras no formatted_address).
+    // Outros países têm geocodificação diferente — a restrição já vem via cidade na query.
+    const _noEstado = r => {
+      if (!_estadoBaseCode || _codigoPaisEdit !== "br") return true;
+      const addr = r.formatted_address || "";
+      if (!addr) return true; // vicinity-only sem formatted_address: aceita (raio já restringe)
+      return new RegExp(`[-\\s]${_estadoBaseCode}[,\\s]`).test(addr);
+    };
+
+    // Nomes de itens NÃO-genéricos (ex: POI "Maracanã") — itens genéricos não podem usar esses nomes
+    const reservedNames = new Set();
+    // Nomes já resolvidos nesta execução — nenhum item pode repetir
+    const usedNames = new Set();
+
+    lista.querySelectorAll("[data-ai-item]").forEach(item => {
+      const n = (item.querySelector("[data-ai-nome]")?.value || "").trim();
+      if (!n) return;
+      const t = _inferirTipoGenericoAI(n);
+      if (!_ehNomeGenericoAI(n) && !(t && n.split(" ").length > 3)) {
+        reservedNames.add(n.toLowerCase());
+      }
+    });
+
+    // Registra place_ids já existentes (itens já resolvidos)
+    // Não pré-carrega usedCoords — a proximidade só bloqueia itens resolvidos
+    // nesta mesma execução, evitando que museus do dia 2 sejam bloqueados pelo dia 1
+    lista.querySelectorAll("[data-ai-item]").forEach(item => {
+      const pidEl = item.querySelector("[data-ai-place-id]");
+      const coords = _coordsDoItem(item);
+      if (pidEl?.value && (!coords || _dentroDoRaioCoords(coords.lat, coords.lng))) {
+        usedPlaceIds.add(pidEl.value);
+      }
+    });
+
+    // Coleta itens pendentes: sem placeId, sem coordenadas ou resolvidos fora da cidade base.
+    const pendentes = [];
+    for (const item of lista.querySelectorAll("[data-ai-item]")) {
+      const pidEl    = item.querySelector("[data-ai-place-id]");
+      const endEl    = item.querySelector("[data-ai-endereco]");
+      const endVazio = !endEl?.textContent?.trim();
+      const coords    = _coordsDoItem(item);
+      const foraDaBase = !!coords && !_dentroDoRaioCoords(coords.lat, coords.lng);
+      const semCoords = !coords;
+      if (foraDaBase) _limparResolucaoItem(item);
+      if (pidEl?.value && !endVazio && !semCoords && !foraDaBase) continue; // já tem tudo e está dentro da base
+      const nomeInput = item.querySelector("[data-ai-nome]");
+      const nome      = nomeInput?.value?.trim() || "";
+      if (!nome) continue;
+      const existingPlaceId = foraDaBase ? null : (pidEl?.value || null);
+      pendentes.push({ item, pidEl, nomeInput, nome, existingPlaceId, forceGeneric: foraDaBase });
+    }
+
+    const _tipoBuscaAI = (nome, forceGeneric) => {
+      let tipo = _inferirTipoGenericoAI(nome) || (window.inferPlaceType ? window.inferPlaceType(nome) : null);
+      if (forceGeneric && (!tipo || tipo === "lodging")) tipo = "tourist_attraction";
+      return tipo;
+    };
+
+    const _labelBuscaTipo = tipo => ({
+      restaurant: "restaurantes",
+      cafe: "cafes",
+      museum: "museus",
+      natural_feature: "praias e mirantes",
+      park: "parques",
+      shopping_mall: "compras",
+      bar: "bares",
+      movie_theater: "teatros e cinemas",
+      spa: "spas",
+      stadium: "estadios",
+      tourist_attraction: "atrações turísticas",
+    }[tipo] || "atrações turísticas");
+
+    const _buscarCandidatosAI = async (nome, forceGeneric) => {
+      const tipo     = _tipoBuscaAI(nome, forceGeneric);
+      const generico = !!forceGeneric || _ehNomeGenericoAI(nome) || (tipo && nome.split(" ").length > 3);
+      let candidates = [];
+
+      if ((generico || forceGeneric) && tipo && hasBaseCoords) {
+        candidates = await new Promise(resolve => {
+          svc.nearbySearch({
+            location: new google.maps.LatLng(baseLat, baseLng),
+            radius:   MAX_KM_BASE * 1000,
+            type:     tipo,
+          }, (r, s) => resolve(s === OK && r?.length ? r.filter(_resultadoAceitavel) : []));
+        });
+      }
+
+      if (!candidates.length) {
+        const query = forceGeneric
+          ? [_labelBuscaTipo(tipo), cidadeBusca].filter(Boolean).join(" ")
+          : (cidadeBusca ? `${nome}, ${cidadeBusca}` : nome);
+        const tsParams = { query };
+        if (hasBaseCoords) {
+          tsParams.location = new google.maps.LatLng(baseLat, baseLng);
+          tsParams.radius   = MAX_KM_BASE * 1000;
+        }
+        candidates = await new Promise(resolve => {
+          svc.textSearch(tsParams, (r, s) => resolve(s === OK && r?.length ? r.filter(_resultadoAceitavel) : []));
+        });
+      }
+
+      if (!candidates.length && forceGeneric && hasBaseCoords) {
+        const tsParams = { query: ["pontos turísticos", cidadeBusca].filter(Boolean).join(" ") };
+        tsParams.location = new google.maps.LatLng(baseLat, baseLng);
+        tsParams.radius   = MAX_KM_BASE * 1000;
+        candidates = await new Promise(resolve => {
+          svc.textSearch(tsParams, (r, s) => resolve(s === OK && r?.length ? r.filter(_resultadoAceitavel) : []));
+        });
+      }
+
+      return { generico, candidates };
+    };
+
+    // FASE 1: dispara TODAS as buscas em paralelo — elimina espera sequencial
+    const searchResults = await Promise.all(pendentes.map(async ({ nome, existingPlaceId, forceGeneric }) => {
+      // Item já tem placeId — não precisa de busca, só getDetails para pegar endereço
+      if (existingPlaceId && !forceGeneric) return { generico: false, candidates: [], existingPlaceId, forceGeneric: false };
+      const resolved = await _buscarCandidatosAI(nome, forceGeneric);
+      return { ...resolved, existingPlaceId: null, forceGeneric: !!forceGeneric };
+    }));
+    if (lookupSeq !== _lookupAiSeq) return;
+
+    // FASE 2: atribuição sequencial com deduplicação total
+    for (let i = 0; i < pendentes.length; i++) {
+      const { item, pidEl, nomeInput, nome }      = pendentes[i];
+      let { generico, candidates, existingPlaceId } = searchResults[i];
+
+      // Item com placeId existente mas sem endereço — só busca detalhes e atualiza
+      if (existingPlaceId) {
+        const details = await new Promise(resolve => {
+          svc.getDetails({
+            placeId: existingPlaceId,
+            fields: ["formatted_address", "geometry", "name", "place_id", "types"],
+          }, (result, status) => resolve(status === OK ? result : null));
+        });
+        if (details && _resultadoAceitavel(details)) {
+          const addr = details.formatted_address || details.vicinity || "";
+          if (details.place_id) usedPlaceIds.add(details.place_id);
+          if (details.name) usedNames.add(details.name.toLowerCase());
+          if (addr) usedAddrs.add(_normAddr(addr));
+          if (details.geometry?.location) {
+            usedCoords.push({ lat: details.geometry.location.lat(), lng: details.geometry.location.lng() });
+          }
+          if (details.name) {
+            const titleEl = item.querySelector("[data-ai-title]");
+            const editTitleEl = item.querySelector("[data-ai-edit-title]");
+            if (titleEl) titleEl.textContent = details.name;
+            if (editTitleEl) editTitleEl.textContent = details.name;
+            if (nomeInput) nomeInput.value = details.name;
+          }
+          if (addr) {
+            const addrEl = item.querySelector("[data-ai-address]");
+            if (addrEl) { addrEl.innerHTML = `<i class="bi bi-geo-alt me-1"></i>${escapeHtml(addr)}`; addrEl.style.display = ""; }
+            const endEl = item.querySelector("[data-ai-endereco]");
+            if (endEl) { endEl.textContent = addr; endEl.style.display = ""; }
+          }
+          if (details.place_id && pidEl) {
+            pidEl.value = details.place_id;
+            const mapsLink = item.querySelector("[data-ai-maps-link]");
+            if (mapsLink) { mapsLink.href = `https://www.google.com/maps/place/?q=place_id:${details.place_id}`; mapsLink.style.display = "flex"; }
+          }
+          if (details.geometry?.location) {
+            const latEl = item.querySelector("[data-ai-lat]");
+            const lngEl = item.querySelector("[data-ai-lng]");
+            if (latEl) latEl.value = details.geometry.location.lat();
+            if (lngEl) lngEl.value = details.geometry.location.lng();
+          }
+          continue;
+        }
+
+        _limparResolucaoItem(item);
+        const fallback = await _buscarCandidatosAI(nome, true);
+        generico = fallback.generico;
+        candidates = fallback.candidates;
+        existingPlaceId = null;
+      }
+
+      let place = candidates.find(r => {
+        if (!_resultadoAceitavel(r) || usedPlaceIds.has(r.place_id)) return false;
+        const addr = _normAddr(r.formatted_address || r.vicinity || "");
+        if (addr && usedAddrs.has(addr)) return false;
+        const loc = r.geometry?.location;
+        if (loc && _coordProxima(loc.lat(), loc.lng())) return false;
+        if (r.name) {
+          const rName = r.name.toLowerCase();
+          if (usedNames.has(rName)) return false;
+          if (generico && reservedNames.has(rName)) return false;
+        }
+        return true;
+      }) || null;
+
+      // Fallback nearbySearch: só para itens genéricos sem nome específico
+      // Itens com nome específico (ex: "Beco do Batman") são removidos se não encontrados — não substituídos
+      if (!place && generico && hasBaseCoords) {
+        const fbCandidates = await new Promise(resolve => {
+          svc.nearbySearch({
+            location: new google.maps.LatLng(baseLat, baseLng),
+            radius:   MAX_KM_BASE * 1000,
+            type:     "tourist_attraction",
+          }, (r, s) => resolve(s === OK && r?.length ? r.filter(_resultadoAceitavel) : []));
+        });
+        place = fbCandidates.find(r => {
+          if (!_resultadoAceitavel(r) || usedPlaceIds.has(r.place_id)) return false;
+          if (r.name && usedNames.has(r.name.toLowerCase())) return false;
+          return true;
+        }) || null;
+      }
+      // Sem candidato válido: remove o item — não exibe local sem endereço
+      if (!place) { item.remove(); continue; }
+
+      // nearbySearch só retorna vicinity — tenta buscar formatted_address via getDetails
+      if (!place.formatted_address && place.place_id) {
+        const details = await new Promise(resolve => {
+          svc.getDetails({
+            placeId: place.place_id,
+            fields: ["formatted_address", "geometry", "name", "place_id", "types"],
+          }, (result, status) => resolve(status === OK ? result : null));
+        });
+        if (details && _resultadoAceitavel(details)) place = { ...place, ...details };
+      }
+
+      // Só remove se não existe absolutamente nenhum endereço identificável
+      const finalAddr = place.formatted_address || place.vicinity || "";
+      if (!finalAddr || !_resultadoAceitavel(place)) {
+        item.remove();
+        continue;
+      }
+
+      if (place.place_id) usedPlaceIds.add(place.place_id);
+      if (place.name)     usedNames.add(place.name.toLowerCase());
+      const usedAddr = _normAddr(place.formatted_address || place.vicinity || "");
+      if (usedAddr) usedAddrs.add(usedAddr);
+      if (place.geometry?.location)
+        usedCoords.push({ lat: place.geometry.location.lat(), lng: place.geometry.location.lng() });
+
+      if (place.name) {
+        const titleEl = item.querySelector("[data-ai-title]");
+        const editTitleEl = item.querySelector("[data-ai-edit-title]");
+        if (titleEl) titleEl.textContent = place.name;
+        if (editTitleEl) editTitleEl.textContent = place.name;
+        if (nomeInput) nomeInput.value = place.name;
+      }
+
+      const addr = place.formatted_address || place.vicinity || "";
+      if (addr) {
+        const addrEl = item.querySelector("[data-ai-address]");
+        if (addrEl) { addrEl.innerHTML = `<i class="bi bi-geo-alt me-1"></i>${escapeHtml(addr)}`; addrEl.style.display = ""; }
+        const endEl = item.querySelector("[data-ai-endereco]");
+        if (endEl) { endEl.textContent = addr; endEl.style.display = ""; }
+      }
+
+      if (place.place_id && pidEl) {
+        pidEl.value = place.place_id;
+        const mapsLink = item.querySelector("[data-ai-maps-link]");
+        if (mapsLink) { mapsLink.href = `https://www.google.com/maps/place/?q=place_id:${place.place_id}`; mapsLink.style.display = "flex"; }
+      }
+
+      if (place.geometry?.location) {
+        const latEl = item.querySelector("[data-ai-lat]");
+        const lngEl = item.querySelector("[data-ai-lng]");
+        if (latEl) latEl.value = place.geometry.location.lat();
+        if (lngEl) lngEl.value = place.geometry.location.lng();
+      }
+    }
+
+    // ── Pós-processamento: garante ao menos 1 item por período ──────────────
+    // Re-avalia base — pode ter geocodificado durante os awaits do loop acima
+    const basePP   = _obterBaseAtiva();
+    const cidadePP = cidade || (_roteiroObjEdit?.cidade) || "";
+    const isDarkPP = document.documentElement.getAttribute("data-theme") === "dark";
+
+    // Injeta card e registra dedup global para que períodos seguintes não repitam
+    const _injetarCardPP = (perEl, place, addr) => {
+      if (place.place_id) usedPlaceIds.add(place.place_id);
+      if (place.name)     usedNames.add(place.name.toLowerCase());
+      const normA = _normAddr(addr);
+      if (normA) usedAddrs.add(normA);
+      if (place.geometry?.location)
+        usedCoords.push({ lat: place.geometry.location.lat(), lng: place.geometry.location.lng() });
+
+      const uid     = `fb-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`;
+      const nextIdx = perEl.querySelectorAll("[data-ai-item]").length;
+      const data    = {
+        nome: place.name || "", endereco: addr,
+        placeId:   place.place_id || "",
+        latitude:  place.geometry?.location?.lat() ?? "",
+        longitude: place.geometry?.location?.lng() ?? "",
+      };
+      perEl.insertAdjacentHTML("beforeend", _renderAIItemCardMR(data, nextIdx, uid, isDarkPP));
+      const ins = document.getElementById(`aiedit-mr-${uid}`)?.closest("[data-ai-item]");
+      if (!ins) return;
+      ins.querySelector("[data-ai-del]")?.addEventListener("click", () => {
+        ins.remove();
+        _atualizarContadoresAIVisiveis(lista);
+        _renderMiniMapaPasso3(lista);
+      });
+      ins.querySelector("[data-ai-edit]")?.addEventListener("click", () => {
+        const f = document.getElementById(`aiedit-mr-${uid}`);
+        if (f) f.style.display = f.style.display === "none" ? "" : "none";
+      });
+      ins.querySelector("[data-ai-salvar]")?.addEventListener("click", () => {
+        const ci = ins.querySelector("[data-ai-custo]");
+        const cb = ins.querySelector("[data-ai-cost-display]");
+        if (cb && ci) cb.textContent = ci.value.trim() ? "$ " + ci.value.trim() : "$";
+        const f = document.getElementById(`aiedit-mr-${uid}`);
+        if (f) f.style.display = "none";
+      });
+      ins.querySelector("[data-ai-cancelar]")?.addEventListener("click", () => {
+        const f = document.getElementById(`aiedit-mr-${uid}`);
+        if (f) f.style.display = "none";
+      });
+    };
+
+    // Busca candidate para um período vazio usando textSearch (não depende de coordenadas)
+    // Deduplicação apenas dentro do mesmo dia — cidades pequenas podem reusar entre dias
+    const _buscarCandidatoPP = async (perKey, diaEl) => {
+      // IDs/nomes usados NO DIA corrente (não global) — permite reusar entre dias
+      const dayIds   = new Set();
+      const dayNames = new Set();
+      diaEl?.querySelectorAll("[data-ai-place-id]").forEach(el => { if (el.value) dayIds.add(el.value); });
+      diaEl?.querySelectorAll("[data-ai-nome]").forEach(el => { if (el.value?.trim()) dayNames.add(el.value.trim().toLowerCase()); });
+
+      // Queries por período: específica → genérica
+      const qMap = {
+        manha: [
+          `pontos turísticos ${cidadePP}`,
+          `atrações turísticas ${cidadePP}`,
+          `museus e parques ${cidadePP}`,
+          `estabelecimentos ${cidadePP}`,
+        ],
+        tarde: [
+          `restaurantes ${cidadePP}`,
+          `atrações turísticas ${cidadePP}`,
+          `passeios e lazer ${cidadePP}`,
+          `estabelecimentos ${cidadePP}`,
+        ],
+        noite: [
+          `bares e restaurantes ${cidadePP}`,
+          `vida noturna ${cidadePP}`,
+          `gastronomia ${cidadePP}`,
+          `estabelecimentos ${cidadePP}`,
+        ],
+      };
+      const queries = qMap[perKey] || [`atrações ${cidadePP}`];
+      const encontrados = [];
+
+      for (const q of queries) {
+        const tsParams = { query: q };
+        // Usa bias de localização quando disponível (não restrição — evita zero resultado)
+        if (basePP?.latitude != null) {
+          tsParams.location = new google.maps.LatLng(parseFloat(basePP.latitude), parseFloat(basePP.longitude));
+          tsParams.radius   = MAX_KM_BASE * 1000;
+        }
+
+        let cands = await new Promise(resolve => {
+          svc.textSearch(tsParams, (r, s) => resolve(s === OK && r?.length ? r : []));
+        });
+
+        // Filtra por distância real quando temos base (textSearch usa bias fraco)
+        if (basePP?.latitude != null) {
+          cands = cands.filter(r => {
+            const loc = r.geometry?.location;
+            if (!loc) return false;
+            return _calcularKm(parseFloat(basePP.latitude), parseFloat(basePP.longitude), loc.lat(), loc.lng()) <= MAX_KM_BASE;
+          });
+        }
+
+        for (const r of cands) {
+          if (!_resultadoAceitavel(r)) continue;
+          if (dayIds.has(r.place_id)) continue;           // só evita duplicata no mesmo dia
+          if (r.name && dayNames.has(r.name.toLowerCase())) continue;
+          encontrados.push(r);
+          dayIds.add(r.place_id);
+          if (r.name) dayNames.add(r.name.toLowerCase());
+        }
+      }
+      return encontrados;
+    };
+
+    for (const perEl of lista.querySelectorAll("[data-ai-per]")) {
+      if (lookupSeq !== _lookupAiSeq) return;
+      const perKey = perEl.getAttribute("data-ai-per");
+      if (!["manha", "tarde", "noite"].includes(perKey)) continue;
+      if (!cidadePP) continue; // sem cidade não há como buscar
+      const alvo = Math.max(1, parseInt(perEl.getAttribute("data-ai-target-count") || "1") || 1);
+      const faltantes = Math.max(0, alvo - perEl.querySelectorAll("[data-ai-item]").length);
+      if (faltantes <= 0) continue;
+
+      const diaEl = perEl.closest("[data-ai-dia-idx]");
+      const places = await _buscarCandidatoPP(perKey, diaEl);
+      if (!places?.length) continue;
+
+      places.slice(0, faltantes).forEach(place => {
+        const addr = place.formatted_address || place.vicinity || "";
+        if (addr) _injetarCardPP(perEl, place, addr);
+      });
+    }
+
+    _atualizarContadoresAIVisiveis(lista);
+    _renderMiniMapaPasso3(lista);
+    _renderMapaModalEdit(lista);
+  } catch (_) { /* API unavailable, skip entirely */ }
+}
+
+function _renderMiniMapaPasso3(lista) {
+  const mapEl = document.getElementById("miniMapaPasso3");
+  const box   = document.getElementById("miniMapaPasso3Box");
+  if (!mapEl || !box || !window.google) return;
+
+  const base = _obterBaseAtiva();
+  const pontos = [];
+  lista.querySelectorAll("[data-ai-item]").forEach(item => {
+    const nome = item.querySelector("[data-ai-title]")?.textContent?.trim()
+              || item.querySelector("[data-ai-nome]")?.value?.trim() || "";
+    const lat  = parseFloat(item.querySelector("[data-ai-lat]")?.value || "");
+    const lng  = parseFloat(item.querySelector("[data-ai-lng]")?.value || "");
+    if (nome && !isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+      if (base?.latitude != null && base?.longitude != null) {
+        const dist = _calcularKm(parseFloat(base.latitude), parseFloat(base.longitude), lat, lng);
+        if (dist > _raioFiltroKmEdit) return;
+      }
+      pontos.push({ nome, lat, lng });
+    }
+  });
+
+  if (!pontos.length) {
+    box.style.display = "none";
+    return;
+  }
+  box.style.display = "";
+
+  const mapa = new google.maps.Map(mapEl, {
+    zoom: 12,
+    center: { lat: pontos[0].lat, lng: pontos[0].lng },
+    mapTypeControl: false,
+    streetViewControl: false,
+    fullscreenControl: false,
+    zoomControl: true,
+  });
+
+  const infoWindow = new google.maps.InfoWindow();
+  const bounds     = new google.maps.LatLngBounds();
+
+  pontos.forEach((p, i) => {
+    const marker = new google.maps.Marker({
+      position: { lat: p.lat, lng: p.lng },
+      map:   mapa,
+      title: p.nome,
+      label: { text: String(i + 1), color: "#fff", fontWeight: "800", fontFamily: "Inter,sans-serif", fontSize: "11px" },
+      icon: {
+        path: google.maps.SymbolPath.CIRCLE,
+        scale: 14,
+        fillColor: "#f97316",
+        fillOpacity: 1,
+        strokeColor: "#fff",
+        strokeWeight: 2,
+      },
+      zIndex: 10,
+    });
+
+    marker.addListener("click", () => {
+      infoWindow.setContent(`
+        <div style="font-family:Inter,sans-serif;padding:2px 4px;min-width:140px;">
+          <div style="font-weight:700;font-size:.88rem;color:#0f172a;margin-bottom:2px;">${escapeHtml(p.nome)}</div>
+          <div style="font-size:.75rem;color:#f97316;font-weight:700;">#${i + 1} no roteiro</div>
+        </div>`);
+      infoWindow.open(mapa, marker);
+    });
+
+    bounds.extend({ lat: p.lat, lng: p.lng });
+  });
+
+  // Rotas entre os locais na ordem do roteiro
+  if (pontos.length > 1) {
+    new google.maps.Polyline({
+      path: pontos.map(p => ({ lat: p.lat, lng: p.lng })),
+      map: mapa,
+      strokeColor: "#f97316",
+      strokeOpacity: 0.65,
+      strokeWeight: 2.5,
+      icons: [{
+        icon: {
+          path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+          scale: 3,
+          fillColor: "#f97316",
+          fillOpacity: 1,
+          strokeColor: "#fff",
+          strokeWeight: 1,
+        },
+        offset: "100%",
+        repeat: "70px",
+      }],
+    });
+    mapa.fitBounds(bounds);
+  } else {
+    mapa.setZoom(15);
+  }
+}
+
+function renderLocaisEditAI() {
+  const lista   = document.getElementById("listaLocaisEdit");
+  const vazio   = document.getElementById("vazioLocaisEdit");
+  const isDark  = document.documentElement.getAttribute("data-theme") === "dark";
+
+  if (vazio) vazio.style.display = "none";
+  if (!lista) return;
+
+  const sugestoes = _garantirLocalBaseNoDiaUnicoEdit(_roteiroObjEdit.sugestoes);
+  const corCard   = isDark ? "#1e293b" : "#f8fafc";
+  const corBorda  = isDark ? "#334155" : "#e2e8f0";
+  const corHeader = isDark ? "#f1f5f9" : "#0f172a";
+
+  const corToggle = isDark ? "#1e293b" : "#f1f5f9";
+  const corToggleBrd = isDark ? "#334155" : "#e2e8f0";
+
+  let html = `<div style="background:${isDark ? "#172554" : "#eff6ff"};border:1px solid ${isDark ? "#1e40af" : "#bfdbfe"};border-radius:12px;padding:10px 14px;margin-bottom:10px;">
+    <div class="d-flex align-items-center gap-2">
+      <i class="bi bi-stars" style="color:#3b82f6;font-size:1.1rem;"></i>
+      <span style="font-size:.85rem;font-weight:700;color:${isDark ? "#93c5fd" : "#1e40af"};">Roteiro gerado por IA — edite os locais e custos abaixo</span>
+    </div></div>`;
+
+  sugestoes.forEach((diaObj, dIdx) => {
+    const temPeriodos = diaObj.periodos && typeof diaObj.periodos === "object";
+    const colId = `ai-dia-mr-${dIdx}`;
+    const diaNum = diaObj.dia || (dIdx + 1);
+    const locaisDesteDia = _locaisEdit.filter(l => (l.dia || 0) === diaNum);
+    const totalLocais = temPeriodos
+      ? _PERIODOS_AI_MR.reduce((s, p) => s + (diaObj.periodos[p.key] || []).length, 0)
+      : (diaObj.locais || []).length;
+
+    html += `<div class="mb-2" data-ai-dia-idx="${dIdx}" style="border:1px solid ${corToggleBrd};border-radius:10px;overflow:hidden;">`;
+    html += `<button type="button"
+        class="w-100 d-flex align-items-center justify-content-between gap-3 px-3 py-2 border-0"
+        style="background:${corToggle};cursor:pointer;"
+        data-bs-toggle="collapse" data-bs-target="#${colId}" aria-expanded="${dIdx === 0}">
+      <span style="font-size:.85rem;font-weight:800;color:${corHeader};">Dia ${diaObj.dia || (dIdx + 1)}</span>
+      <div class="d-flex align-items-center gap-2">
+        <span data-ai-count-dia style="font-size:.72rem;font-weight:700;color:#6366f1;">${totalLocais} ${totalLocais === 1 ? "local" : "locais"}</span>
+        <i class="bi bi-chevron-down" style="color:#94a3b8;font-size:.75rem;transition:transform .2s;"></i>
+      </div>
+    </button>`;
+    html += `<div id="${colId}" class="collapse ${dIdx === 0 ? "show" : ""}">`;
+    html += `<div style="padding:10px 12px;background:${isDark ? "#0f172a" : "#fff"};">`;
+
+    if (temPeriodos) {
+      _PERIODOS_AI_MR.forEach(per => {
+        const itens = diaObj.periodos[per.key] || [];
+        const locaisDestePer = locaisDesteDia.filter(l => {
+          const hNorm = _normalizarHorarioEdit(l.horario);
+          if (!hNorm) return false;
+          const h = hNorm.slice(0, 5);
+          if (per.key === "manha") return h < "12:00";
+          if (per.key === "tarde") return h >= "12:00" && h < "18:00";
+          return h >= "18:00";
+        });
+        html += `<div class="mb-2" data-ai-per="${per.key}" data-ai-target-count="${itens.length}">`;
+        html += `<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;">
+          <i class="bi ${per.icon}" style="color:${per.cor};font-size:.85rem;"></i>
+          <span style="font-size:.78rem;font-weight:700;color:${per.cor};">${per.label}</span>
+        </div>`;
+        itens.forEach((item, idx) => {
+          html += _renderAIItemCardMR(item, idx, `p-${dIdx}-${per.key}-${idx}`, isDark);
+        });
+        locaisDestePer.forEach((l, idx) => { html += _renderLocalCardMR(l, idx, isDark); });
+        html += `</div>`;
+      });
+      const locaisSemPer = locaisDesteDia.filter(l => !_normalizarHorarioEdit(l.horario));
+      if (locaisSemPer.length > 0) {
+        html += `<div class="mt-2 pt-2" style="border-top:1px solid ${isDark ? "#334155" : "#e2e8f0"};">
+          <div style="font-size:.75rem;font-weight:700;color:#64748b;margin-bottom:5px;"><i class="bi bi-pin-map me-1"></i>Sem período</div>`;
+        locaisSemPer.forEach((l, idx) => { html += _renderLocalCardMR(l, idx, isDark); });
+        html += `</div>`;
+      }
+    } else {
+      const itens = diaObj.locais || [];
+      html += `<div data-ai-per="locais" data-ai-target-count="${itens.length}">`;
+      itens.forEach((item, idx) => {
+        html += _renderAIItemCardMR(item, idx, `l-${dIdx}-${idx}`, isDark);
+      });
+      html += `</div>`;
+      if (locaisDesteDia.length > 0) {
+        html += `<div class="mt-2 pt-2" style="border-top:1px solid ${isDark ? "#334155" : "#e2e8f0"};">
+          <div style="font-size:.75rem;font-weight:700;color:#f97316;margin-bottom:5px;"><i class="bi bi-pin-map me-1"></i>Locais adicionados</div>`;
+        locaisDesteDia.forEach((l, idx) => { html += _renderLocalCardMR(l, idx, isDark); });
+        html += `</div>`;
+      }
+    }
+
+    html += `</div></div></div>`;
+  });
+
+  if (!_ocultarBtnSalvarSugestoes) {
+    html += `<button type="button" id="btnSalvarSugestoesAIMR" class="btn btn-primary-orange w-100 fw-bold mt-2">
+      <i class="bi bi-check-lg me-1"></i>Salvar Sugestões IA</button>`;
+  }
+
+  lista.innerHTML = html;
+
+  lista.querySelectorAll("[data-ai-nome]").forEach(input => _initAIItemAutocomplete(input));
+
+  lista.querySelectorAll("[data-del-local-mr]").forEach(btn => {
     btn.addEventListener("click", async () => {
-      const id = btn.getAttribute("data-rm-local-edit");
+      const idLocal   = btn.getAttribute("data-del-local-mr");
+      const idVinculo = btn.getAttribute("data-del-vinculo-mr");
       btn.disabled = true;
       try {
-        const r = await fetch(`${_URL_API}/roteiros/${_roteiroIdEdit}/locais/${id}`, { method: "DELETE" });
+        const r = await authFetch(`${_URL_API}/roteiros/${_roteiroIdEdit}/locais/${idLocal}`, { method: "DELETE" });
         if (r.ok || r.status === 204) {
-          _locaisEdit = _locaisEdit.filter(l => String(l.idRoteiroLocal) !== String(id));
+          _locaisEdit = _locaisEdit.filter(l => String(l.idRoteiroLocal) !== String(idVinculo));
+          renderLocaisEdit();
+        } else { alert("Não foi possível remover."); btn.disabled = false; }
+      } catch { alert("Erro ao conectar."); btn.disabled = false; }
+    });
+  });
+
+  lista.querySelectorAll("[data-ai-del]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      btn.closest("[data-ai-item]")?.remove();
+      _atualizarContadoresAIVisiveis(lista);
+      _renderMiniMapaPasso3(lista);
+    });
+  });
+
+  lista.querySelectorAll("[data-ai-add-item]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const perDiv  = btn.closest("[data-ai-per]");
+      const nextIdx = perDiv.querySelectorAll("[data-ai-item]").length + 1;
+      const uid = `new-${Date.now()}-${nextIdx}`;
+      btn.insertAdjacentHTML("beforebegin", _renderAIItemCardMR({ nome: "" }, nextIdx - 1, uid, isDark));
+      const inserted = document.getElementById(`aiedit-mr-${uid}`)?.closest("[data-ai-item]");
+      if (inserted) {
+        inserted.querySelector("[data-ai-edit]")?.addEventListener("click", () => {
+          const uid = inserted.querySelector("[data-ai-edit]")?.getAttribute("data-ai-edit");
+          const form = document.getElementById(`aiedit-mr-${uid}`);
+          if (form) form.style.display = form.style.display === "none" ? "" : "none";
+        });
+        const nomeInput = inserted.querySelector("[data-ai-nome]");
+        const custoInput = inserted.querySelector("[data-ai-custo]");
+        inserted.querySelector("[data-ai-del]")?.addEventListener("click", () => {
+          inserted.remove();
+          _atualizarContadoresAIVisiveis(lista);
+          _renderMiniMapaPasso3(lista);
+        });
+        nomeInput?.addEventListener("input", () => {
+          const title = inserted.querySelector("[data-ai-title]");
+          if (title) title.textContent = nomeInput.value.trim() || "Local";
+        });
+        custoInput?.addEventListener("input", () => {
+          const costBox = inserted.querySelector("[data-ai-cost-display]");
+          if (costBox) costBox.textContent = custoInput.value.trim() ? "$ " + custoInput.value.trim() : "$";
+        });
+        _initAIItemAutocomplete(nomeInput);
+        _atualizarContadoresAIVisiveis(lista);
+      }
+    });
+  });
+
+  lista.querySelectorAll("[data-ai-edit]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const uid = btn.getAttribute("data-ai-edit");
+      const form = document.getElementById(`aiedit-mr-${uid}`);
+      if (form) form.style.display = form.style.display === "none" ? "" : "none";
+    });
+  });
+
+  lista.querySelectorAll("[data-ai-salvar]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const uid = btn.getAttribute("data-ai-salvar");
+      const item = btn.closest("[data-ai-item]");
+      const custoInput = item?.querySelector("[data-ai-custo]");
+      const costBox = item?.querySelector("[data-ai-cost-display]");
+      if (costBox && custoInput) costBox.textContent = custoInput.value.trim() ? "$ " + custoInput.value.trim() : "$";
+      const form = document.getElementById(`aiedit-mr-${uid}`);
+      if (form) form.style.display = "none";
+    });
+  });
+
+  lista.querySelectorAll("[data-ai-cancelar]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const uid = btn.getAttribute("data-ai-cancelar");
+      const form = document.getElementById(`aiedit-mr-${uid}`);
+      if (form) form.style.display = "none";
+    });
+  });
+
+  lista.querySelectorAll("[data-ai-nome]").forEach(input => {
+    input.addEventListener("input", () => {
+      const item = input.closest("[data-ai-item]");
+      const title = item?.querySelector("[data-ai-title]");
+      if (title) title.textContent = input.value.trim() || "Local";
+    });
+  });
+
+  lista.querySelectorAll("[data-ai-custo]").forEach(input => {
+    input.addEventListener("input", () => {
+      const item = input.closest("[data-ai-item]");
+      const costBox = item?.querySelector("[data-ai-cost-display]");
+      if (costBox) costBox.textContent = input.value.trim() ? "$ " + input.value.trim() : "$";
+    });
+  });
+
+  lista.querySelectorAll("[data-ai-custo]").forEach(input => {
+    input.addEventListener("input", () => {
+      const item = input.closest("[data-ai-item]");
+      const valueBox = item?.children?.[0]?.children?.[2];
+      if (valueBox) valueBox.textContent = input.value.trim() ? "$ " + input.value.trim() : "$";
+    });
+  });
+
+  lista.querySelectorAll("[data-edit-vinculo-mr]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const vid  = btn.getAttribute("data-edit-vinculo-mr");
+      const form = document.getElementById(`ledit-mr-${vid}`);
+      if (form) form.style.display = form.style.display === "none" ? "" : "none";
+    });
+  });
+
+  lista.querySelectorAll("[data-cancelar-mr]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const vid  = btn.getAttribute("data-cancelar-mr");
+      const form = document.getElementById(`ledit-mr-${vid}`);
+      if (form) form.style.display = "none";
+    });
+  });
+
+  lista.querySelectorAll("[data-salvar-mr]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const vid    = btn.getAttribute("data-salvar-mr");
+      const idLocal = btn.getAttribute("data-salvar-mr-local");
+      const ordem  = parseInt(btn.getAttribute("data-salvar-mr-ordem")) || 1;
+      const status = btn.getAttribute("data-salvar-mr-status") || "PLANEJADO";
+      const dia    = parseInt(document.getElementById(`ledit-mr-dia-${vid}`).value) || null;
+      const obs    = document.getElementById(`ledit-mr-obs-${vid}`).value.trim() || null;
+      const custoRaw = document.getElementById(`ledit-mr-custo-${vid}`)?.value.trim();
+      const custo = custoRaw ? parseFloat(custoRaw) : null;
+      const horario = (_locaisEdit.find(l => String(l.idRoteiroLocal) === String(vid)) || {}).horario || null;
+      if (!dia) { alert("Informe o dia da atividade."); return; }
+      if (_diasTotaisEdit > 0 && dia > _diasTotaisEdit) {
+        alert(`O dia não pode ultrapassar a duração do roteiro (${_diasTotaisEdit} dias).`);
+        return;
+      }
+      btn.disabled = true;
+      btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
+      try {
+        const res = await authFetch(`${_URL_API}/roteiros/${_roteiroIdEdit}/locais/${idLocal}`, {
+          method:  "PUT",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ idLocal: parseInt(idLocal), dia, ordem, observacoes: obs, horario, status, custo })
+        });
+        if (res.ok) {
+          const updated = await res.json();
+          const i = _locaisEdit.findIndex(l => String(l.idRoteiroLocal) === String(vid));
+          if (i !== -1) _locaisEdit[i] = updated;
+          renderLocaisEdit();
+        } else { alert("Erro ao salvar. HTTP " + res.status); btn.disabled = false; btn.innerHTML = `<i class="bi bi-check-lg me-1"></i>Salvar`; }
+      } catch { alert("Erro ao conectar."); btn.disabled = false; btn.innerHTML = `<i class="bi bi-check-lg me-1"></i>Salvar`; }
+    });
+  });
+
+  lista.querySelectorAll("[id^='ledit-mr-custo-']").forEach(input => {
+    const vid = input.id.replace("ledit-mr-custo-", "");
+    input.addEventListener("input", () => {
+      const display = document.getElementById(`lcusto-display-${vid}`);
+      if (display) display.textContent = input.value.trim() ? "$ " + input.value.trim() : "$";
+    });
+  });
+
+  const btnSalvar = document.getElementById("btnSalvarSugestoesAIMR");
+  if (btnSalvar) btnSalvar.addEventListener("click", _salvarSugestoesAIEdit);
+
+  _autoLookupAIAddresses(lista, _roteiroObjEdit ? _roteiroObjEdit.cidade : "");
+}
+
+function _getAiSugestoesEditadasEdit() {
+  const lista = document.getElementById("listaLocaisEdit");
+  if (!lista || !_roteiroObjEdit) return null;
+  const sugestoes = _roteiroObjEdit.sugestoes;
+  const result = [];
+  const base = _obterBaseAtiva();
+  const _itemDentroDaBase = (latVal, lngVal) => {
+    if (!base || base.latitude == null || base.longitude == null) return true;
+    const lat = parseFloat(latVal);
+    const lng = parseFloat(lngVal);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return true;
+    return _calcularKm(
+      parseFloat(base.latitude), parseFloat(base.longitude),
+      lat, lng
+    ) <= _raioFiltroKmEdit;
+  };
+
+  lista.querySelectorAll("[data-ai-dia-idx]").forEach((diaEl, dIdx) => {
+    const diaOriginal = sugestoes[dIdx] || {};
+    const temPeriodos = diaOriginal.periodos && typeof diaOriginal.periodos === "object";
+    const obj = { dia: diaOriginal.dia || (dIdx + 1) };
+
+    if (temPeriodos) {
+      obj.periodos = {};
+      diaEl.querySelectorAll("[data-ai-per]").forEach(perEl => {
+        const perKey = perEl.getAttribute("data-ai-per");
+        const itens = [];
+        perEl.querySelectorAll("[data-ai-item]").forEach(itemEl => {
+          const nome     = (itemEl.querySelector("[data-ai-nome]")  || {}).value || "";
+          const custoRaw = (itemEl.querySelector("[data-ai-custo]") || {}).value || "";
+          const custo    = custoRaw !== "" ? parseFloat(custoRaw) : null;
+          const endereco = ((itemEl.querySelector("[data-ai-endereco]") || {}).textContent || "").trim();
+          const placeId  = ((itemEl.querySelector("[data-ai-place-id]") || {}).value || "").trim();
+          const obs      = ((itemEl.querySelector("[data-ai-obs]")  || {}).value || "").trim();
+          const latVal   = ((itemEl.querySelector("[data-ai-lat]")  || {}).value || "").trim();
+          const lngVal   = ((itemEl.querySelector("[data-ai-lng]")  || {}).value || "").trim();
+          if (!_itemDentroDaBase(latVal, lngVal)) return;
+          if (nome.trim()) itens.push({
+            nome: nome.trim(),
+            custo: custo != null ? `R$ ${custo.toLocaleString("pt-BR", {minimumFractionDigits: 0, maximumFractionDigits: 2})}` : "",
+            ...(endereco && { endereco }),
+            ...(placeId  && { placeId  }),
+            ...(obs      && { observacoes: obs }),
+            ...(latVal   && { latitude:  parseFloat(latVal)  }),
+            ...(lngVal   && { longitude: parseFloat(lngVal)  }),
+          });
+        });
+        obj.periodos[perKey] = itens;
+      });
+    } else {
+      const locais = [];
+      diaEl.querySelectorAll("[data-ai-item]").forEach(itemEl => {
+        const nome     = (itemEl.querySelector("[data-ai-nome]")  || {}).value || "";
+        const custo    = (itemEl.querySelector("[data-ai-custo]") || {}).value || "";
+        const endereco = ((itemEl.querySelector("[data-ai-endereco]") || {}).textContent || "").trim();
+        const placeId  = ((itemEl.querySelector("[data-ai-place-id]") || {}).value || "").trim();
+        const obs      = ((itemEl.querySelector("[data-ai-obs]")  || {}).value || "").trim();
+        const latVal2 = ((itemEl.querySelector("[data-ai-lat]") || {}).value || "").trim();
+        const lngVal2 = ((itemEl.querySelector("[data-ai-lng]") || {}).value || "").trim();
+        if (!_itemDentroDaBase(latVal2, lngVal2)) return;
+        if (nome.trim()) locais.push({
+          nome: nome.trim(), custo: custo.trim(),
+          ...(endereco && { endereco }),
+          ...(placeId  && { placeId  }),
+          ...(obs      && { observacoes: obs }),
+          ...(latVal2  && { latitude:  parseFloat(latVal2)  }),
+          ...(lngVal2  && { longitude: parseFloat(lngVal2)  }),
+        });
+      });
+      obj.locais = locais;
+    }
+
+    result.push(obj);
+  });
+
+  return result;
+}
+
+window.getSugestoesEditadasLocais = function () {
+  return _getAiSugestoesEditadasEdit();
+};
+
+async function _salvarSugestoesAIEdit() {
+  const btnSalvar = document.getElementById("btnSalvarSugestoesAIMR");
+  if (btnSalvar) { btnSalvar.disabled = true; btnSalvar.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Salvando...`; }
+
+  try {
+    const sugestoesEditadas = _getAiSugestoesEditadasEdit();
+    if (!sugestoesEditadas) throw new Error("Erro ao coletar sugestões.");
+
+    const r = _roteiroObjEdit;
+    const body = {
+      idUsuario:           r.idUsuario,
+      titulo:              r.titulo,
+      pais:                r.pais,
+      cidade:              r.cidade,
+      tipoRoteiro:         r.tipoRoteiro,
+      statusRoteiro:       r.statusRoteiro,
+      visibilidadeRoteiro: r.visibilidadeRoteiro,
+      dataInicio:          r.dataInicio,
+      dataFim:             r.dataFim,
+      observacoes:         r.observacoes,
+      diasTotais:          r.diasTotais,
+      orcamento:           r.orcamento,
+      sugestoes:           sugestoesEditadas,
+    };
+
+    const res = await authFetch(`${_URL_API}/roteiros/${_roteiroIdEdit}`, {
+      method:  "PUT",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify(body),
+    });
+
+    if (res.ok) {
+      _roteiroObjEdit = Object.assign({}, _roteiroObjEdit, { sugestoes: sugestoesEditadas });
+      const modal = document.getElementById("modalEditarRoteiro");
+      if (modal) {
+        const bsModal = bootstrap.Modal.getInstance(modal);
+        if (bsModal) bsModal.hide();
+      }
+      window.location.reload();
+    } else {
+      throw new Error("HTTP " + res.status);
+    }
+  } catch(e) {
+    alert("Erro ao salvar sugestões: " + (e.message || "Erro desconhecido"));
+    if (btnSalvar) { btnSalvar.disabled = false; btnSalvar.innerHTML = `<i class="bi bi-check-lg me-1"></i>Salvar Sugestões IA`; }
+  }
+}
+
+function _renderLocaisReaisEdit(lista) {
+  const isDark      = document.documentElement.getAttribute("data-theme") === "dark";
+  const baseAtiva   = _obterBaseAtiva();
+  const corHeader   = isDark ? "#f1f5f9" : "#0f172a";
+  const corCount    = isDark ? "#94a3b8" : "#64748b";
+  const corBorda    = isDark ? "#334155" : "#eef2f7";
+  const corEndereco = isDark ? "#cbd5e1" : "#94a3b8";
+  const corCard     = isDark ? "#1e293b" : "#f8fafc";
+  const corCardBrd  = isDark ? "#334155" : "#e2e8f0";
+  const maxDiaAttr  = _diasTotaisEdit > 0 ? ` max="${_diasTotaisEdit}"` : "";
+
+  const locaisHtml  = _agruparLocaisEdit(_locaisEdit).map(({ dia, itens }) => `
+    <section style="margin-top:12px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;
+                  margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid ${corBorda};">
+        <div style="font-size:.82rem;font-weight:800;color:${corHeader};">${dia ? `Dia ${dia}` : "Sem dia definido"}</div>
+        <div style="font-size:.72rem;font-weight:700;color:${corCount};">${itens.length} ${itens.length === 1 ? "local" : "locais"}</div>
+      </div>
+      ${itens.map((l, idx) => {
+        const vid = String(l.idRoteiroLocal);
+        const dist = _distanciaBase(l, baseAtiva);
+        const ok   = dist != null ? dist <= _raioFiltroKmEdit : null;
+        const distHtml = dist != null
+          ? `<div style="font-size:.72rem;color:${ok ? (isDark ? "#4ade80" : "#15803d") : (isDark ? "#f87171" : "#dc2626")};margin-top:2px;">
+               <i class="bi bi-signpost me-1"></i>${_fmtKm(dist)} km da base${ok ? "" : " · fora do raio"}
+             </div>` : "";
+        const horFmt = _formatarHorarioEdit(l.horario) || "";
+        const corForm = isDark ? "#1e293b" : "#f1f5f9";
+        const corFormBrd = isDark ? "#334155" : "#e2e8f0";
+        const corLabel = isDark ? "#94a3b8" : "#64748b";
+        return `
+          <div id="lwrap-${vid}" style="margin-bottom:6px;">
+            <div style="background:${corCard};border:1px solid ${corCardBrd};border-radius:10px;
+                        display:flex;align-items:center;gap:10px;padding:10px 12px;">
+              <div style="background:#f97316;color:#fff;min-width:30px;height:30px;border-radius:50%;
+                          display:grid;place-items:center;font-weight:800;font-size:.82rem;flex-shrink:0;">
+                ${idx + 1}
+              </div>
+              <div style="flex:1;min-width:0;">
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px;flex-wrap:wrap;">
+                  <div style="font-weight:800;font-size:.88rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                    ${escapeHtml(l.nome || "Local")}
+                  </div>
+                  ${horFmt ? `<span style="display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:999px;
+                                            background:#fff7ed;color:#c2410c;font-size:.7rem;font-weight:800;">
+                                 <i class="bi bi-clock"></i>${horFmt}
+                               </span>` : ""}
+                </div>
+                ${l.observacoes ? `<div style="font-size:.75rem;color:${isDark ? "#94a3b8" : "#64748b"};">${escapeHtml(l.observacoes)}</div>` : ""}
+                ${l.endereco    ? `<div style="font-size:.72rem;color:${corEndereco};margin-top:1px;"><i class="bi bi-geo-alt me-1"></i>${escapeHtml(l.endereco)}</div>` : ""}
+                ${distHtml}
+              </div>
+              <div style="display:flex;gap:4px;flex-shrink:0;">
+                <button class="btn btn-sm btn-outline-secondary" data-edit-vinculo-mr="${vid}" title="Editar">
+                  <i class="bi bi-pencil"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-danger"
+                        data-del-local-mr="${l.idLocal}" data-del-vinculo-mr="${vid}"
+                        title="Remover">
+                  <i class="bi bi-trash"></i>
+                </button>
+              </div>
+            </div>
+            <div id="ledit-mr-${vid}" style="display:none;background:${corForm};border:1px solid ${corFormBrd};
+                 border-radius:0 0 10px 10px;padding:10px 12px;margin-top:-1px;">
+              <div class="row g-2">
+                <div class="col-6">
+                  <label style="font-size:.75rem;font-weight:700;color:${corLabel};">Dia</label>
+                  <input type="number" min="1"${maxDiaAttr} class="form-control form-control-sm"
+                         id="ledit-mr-dia-${vid}" value="${l.dia || ""}">
+                </div>
+                <div class="col-6">
+                  <label style="font-size:.75rem;font-weight:700;color:${corLabel};">Custo (R$)</label>
+                  <input type="number" min="0" step="0.01" class="form-control form-control-sm"
+                         id="ledit-mr-custo-${vid}" value="${l.custo != null ? String(l.custo) : ""}" placeholder="R$">
+                </div>
+                <div class="col-12">
+                  <label style="font-size:.75rem;font-weight:700;color:${corLabel};">Observações</label>
+                  <input type="text" class="form-control form-control-sm"
+                         id="ledit-mr-obs-${vid}" value="${escapeHtml(l.observacoes || "")}" placeholder="Opcional">
+                </div>
+              </div>
+              <div class="d-flex gap-2 mt-2">
+                <button class="btn btn-sm btn-primary-orange"
+                        data-salvar-mr="${vid}"
+                        data-salvar-mr-local="${l.idLocal}"
+                        data-salvar-mr-ordem="${l.ordem || 1}"
+                        data-salvar-mr-status="${l.status || "PLANEJADO"}">
+                  <i class="bi bi-check-lg me-1"></i>Salvar
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" data-cancelar-mr="${vid}">Cancelar</button>
+              </div>
+            </div>
+          </div>`;
+      }).join("")}
+    </section>`
+  ).join("");
+
+  lista.insertAdjacentHTML("beforeend", locaisHtml);
+
+  lista.querySelectorAll("[data-edit-vinculo-mr]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const vid  = btn.getAttribute("data-edit-vinculo-mr");
+      const form = document.getElementById(`ledit-mr-${vid}`);
+      if (form) form.style.display = form.style.display === "none" ? "" : "none";
+    });
+  });
+
+  lista.querySelectorAll("[data-cancelar-mr]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const vid  = btn.getAttribute("data-cancelar-mr");
+      const form = document.getElementById(`ledit-mr-${vid}`);
+      if (form) form.style.display = "none";
+    });
+  });
+
+  lista.querySelectorAll("[data-salvar-mr]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const vid    = btn.getAttribute("data-salvar-mr");
+      const idLocal = btn.getAttribute("data-salvar-mr-local");
+      const ordem  = parseInt(btn.getAttribute("data-salvar-mr-ordem")) || 1;
+      const status = btn.getAttribute("data-salvar-mr-status") || "PLANEJADO";
+      const dia    = parseInt(document.getElementById(`ledit-mr-dia-${vid}`).value) || null;
+      const obs    = document.getElementById(`ledit-mr-obs-${vid}`).value.trim() || null;
+      const custoRaw = document.getElementById(`ledit-mr-custo-${vid}`)?.value.trim();
+      const custo  = custoRaw ? parseFloat(custoRaw) : null;
+      const horario = (_locaisEdit.find(l => String(l.idRoteiroLocal) === String(vid)) || {}).horario || null;
+
+      if (!dia) { alert("Informe o dia da atividade."); return; }
+      if (_diasTotaisEdit > 0 && dia > _diasTotaisEdit) {
+        alert(`O dia não pode ultrapassar a duração do roteiro (${_diasTotaisEdit} dias). Ajuste a duração na aba Informações.`);
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
+      try {
+        const res = await authFetch(`${_URL_API}/roteiros/${_roteiroIdEdit}/locais/${idLocal}`, {
+          method:  "PUT",
+          headers: { "Content-Type": "application/json" },
+          body:    JSON.stringify({ idLocal: parseInt(idLocal), dia, ordem, observacoes: obs, horario, status, custo })
+        });
+        if (res.ok) {
+          const updated = await res.json();
+          const idx = _locaisEdit.findIndex(l => String(l.idRoteiroLocal) === String(vid));
+          if (idx !== -1) _locaisEdit[idx] = updated;
+          renderLocaisEdit();
+        } else { alert("Erro ao salvar. HTTP " + res.status); btn.disabled = false; btn.innerHTML = `<i class="bi bi-check-lg me-1"></i>Salvar`; }
+      } catch { alert("Erro ao conectar ao servidor."); btn.disabled = false; btn.innerHTML = `<i class="bi bi-check-lg me-1"></i>Salvar`; }
+    });
+  });
+
+  lista.querySelectorAll("[data-del-local-mr]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const idLocal   = btn.getAttribute("data-del-local-mr");
+      const idVinculo = btn.getAttribute("data-del-vinculo-mr");
+      btn.disabled = true;
+      try {
+        const r = await authFetch(`${_URL_API}/roteiros/${_roteiroIdEdit}/locais/${idLocal}`, { method: "DELETE" });
+        if (r.ok || r.status === 204) {
+          _locaisEdit = _locaisEdit.filter(l => String(l.idRoteiroLocal) !== String(idVinculo));
           renderLocaisEdit();
         } else { alert("Não foi possível remover."); btn.disabled = false; }
       } catch { alert("Erro ao conectar ao servidor."); btn.disabled = false; }
@@ -101,7 +2012,282 @@ function renderLocaisEdit() {
   });
 }
 
-// Adicionar local no modal de edição
+// ── Render locais ─────────────────────────────────────────────────
+function renderLocaisEdit() {
+  const lista = document.getElementById("listaLocaisEdit");
+  const vazio = document.getElementById("vazioLocaisEdit");
+  if (!lista) return;
+
+  const temSugestoes = _hasSugestoesAIEdit();
+  const temLocais    = _locaisEdit.length > 0;
+
+  if (!temSugestoes && !temLocais) {
+    lista.innerHTML = "";
+    if (vazio) { vazio.style.display = ""; lista.appendChild(vazio); }
+    return;
+  }
+
+  if (vazio) vazio.style.display = "none";
+  lista.innerHTML = "";
+
+  if (temSugestoes) {
+    renderLocaisEditAI(); // locais reais por dia já incluídos dentro de cada accordion
+    return;
+  }
+
+  _renderLocaisReaisEdit(lista);
+  _renderMiniMapaLocaisEdit();
+}
+
+// ── Carregar locais ───────────────────────────────────────────────
+function carregarLocaisEdit(roteiroId) {
+  _roteiroIdEdit = roteiroId;
+  _locaisEdit    = [];
+  authFetch(`${_URL_API}/roteiros/${roteiroId}/locais`)
+    .then(r => r.json())
+    .then(data => {
+      _locaisEdit = Array.isArray(data) ? data : [];
+      if (_locaisEdit.length === 0 && !_hasSugestoesAIEdit()) {
+        // Fallback: busca /completo que retorna locais E sugestoes juntos
+        authFetch(`${_URL_API}/roteiros/${roteiroId}/completo`)
+          .then(r => r.json())
+          .then(completo => {
+            if (completo && Array.isArray(completo.locais) && completo.locais.length > 0) {
+              _locaisEdit = completo.locais;
+            }
+            if (completo && completo.roteiro && Array.isArray(completo.roteiro.sugestoes) && completo.roteiro.sugestoes.length > 0) {
+              _roteiroObjEdit = Object.assign({}, _roteiroObjEdit, { sugestoes: completo.roteiro.sugestoes });
+            }
+            renderLocaisEdit();
+            _renderMiniMapaLocaisEdit();
+          })
+          .catch(() => { renderLocaisEdit(); _renderMiniMapaLocaisEdit(); });
+      } else {
+        renderLocaisEdit();
+        _renderMiniMapaLocaisEdit();
+      }
+    })
+    .catch(() => { _locaisEdit = []; renderLocaisEdit(); _renderMiniMapaLocaisEdit(); });
+}
+
+function _renderMiniMapaLocaisEdit() {
+  _renderMapaModalEdit(document.getElementById("listaLocaisEdit"));
+}
+
+function _renderMapaModalEdit(lista) {
+  const box   = document.getElementById("miniMapaEditBox");
+  const mapEl = document.getElementById("miniMapaEdit");
+  if (!box || !mapEl || !window.google) return;
+
+  const pontos = [];
+  const vistos = new Set();
+
+  // 1. Locais de IA presentes no DOM (já com lat/lng resolvidos pelo _autoLookupAIAddresses)
+  if (lista) {
+    lista.querySelectorAll("[data-ai-item]").forEach(item => {
+      const nome = (item.querySelector("[data-ai-title]") || {}).textContent?.trim()
+                || (item.querySelector("[data-ai-nome]") || {}).value?.trim() || "";
+      const lat  = parseFloat((item.querySelector("[data-ai-lat]") || {}).value || "");
+      const lng  = parseFloat((item.querySelector("[data-ai-lng]") || {}).value || "");
+      if (nome && !isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+        const chave = `${lat.toFixed(5)},${lng.toFixed(5)}`;
+        if (!vistos.has(chave)) { vistos.add(chave); pontos.push({ nome, lat, lng }); }
+      }
+    });
+  }
+
+  // 2. Locais reais já salvos no banco (_locaisEdit)
+  _locaisEdit.forEach(l => {
+    if (l.latitude == null || l.longitude == null) return;
+    const lat = parseFloat(l.latitude), lng = parseFloat(l.longitude);
+    if (isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0)) return;
+    const chave = `${lat.toFixed(5)},${lng.toFixed(5)}`;
+    if (!vistos.has(chave)) { vistos.add(chave); pontos.push({ nome: l.nome || "Local", lat, lng }); }
+  });
+
+  if (!pontos.length) { box.style.display = "none"; return; }
+  box.style.display = "";
+
+  const mapa = new google.maps.Map(mapEl, {
+    zoom: 12,
+    center: { lat: pontos[0].lat, lng: pontos[0].lng },
+    mapTypeControl: false, streetViewControl: false, fullscreenControl: false, zoomControl: true
+  });
+
+  const infoWindow = new google.maps.InfoWindow();
+  const bounds     = new google.maps.LatLngBounds();
+
+  pontos.forEach((p, i) => {
+    const marker = new google.maps.Marker({
+      position: { lat: p.lat, lng: p.lng },
+      map: mapa,
+      title: p.nome,
+      label: { text: String(i + 1), color: "#fff", fontWeight: "800", fontFamily: "Inter,sans-serif", fontSize: "11px" },
+      icon: { path: google.maps.SymbolPath.CIRCLE, scale: 14, fillColor: "#f97316", fillOpacity: 1, strokeColor: "#fff", strokeWeight: 2 },
+      zIndex: 10
+    });
+    marker.addListener("click", () => {
+      infoWindow.setContent(`<div style="font-family:Inter,sans-serif;padding:2px 4px;min-width:120px;"><div style="font-weight:700;font-size:.85rem;color:#0f172a;">${escapeHtml(p.nome)}</div><div style="font-size:.72rem;color:#f97316;font-weight:700;">#${i + 1} no roteiro</div></div>`);
+      infoWindow.open(mapa, marker);
+    });
+    bounds.extend({ lat: p.lat, lng: p.lng });
+  });
+
+  if (pontos.length > 1) {
+    new google.maps.Polyline({
+      path: pontos.map(p => ({ lat: p.lat, lng: p.lng })),
+      map: mapa, strokeColor: "#f97316", strokeOpacity: 0.65, strokeWeight: 2.5,
+      icons: [{ icon: { path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW, scale: 3, fillColor: "#f97316", fillOpacity: 1, strokeColor: "#fff", strokeWeight: 1 }, offset: "100%", repeat: "70px" }]
+    });
+    mapa.fitBounds(bounds);
+  } else {
+    mapa.setZoom(15);
+  }
+}
+
+// ── Event listeners: bases ────────────────────────────────────────
+document.getElementById("btnAdicionarBaseEdit")?.addEventListener("click", async () => {
+  const paisEl   = document.getElementById("basePaisEdit");
+  const cidadeEl = document.getElementById("baseCidadeEdit");
+  const diasEl   = document.getElementById("baseDiasEdit");
+  const paiTxt   = paisEl?.value?.trim();
+  const cidTxt   = cidadeEl?.value?.trim();
+  const dias     = parseInt(diasEl?.value) > 0 ? parseInt(diasEl.value) : null;
+
+  if (!paiTxt || !cidTxt) { _mostrarErroBase("Informe o pais e a cidade base."); return; }
+  _ocultarErroBase();
+
+  try {
+    const geocoded = _cidadeBaseSelecionadaEdit?.latitude != null
+      ? { latitude: _cidadeBaseSelecionadaEdit.latitude, longitude: _cidadeBaseSelecionadaEdit.longitude }
+      : await _geocodificarBase(paiTxt, cidTxt);
+
+    const pais   = _paisBaseSelecionadoEdit?.nome || paiTxt;
+    const cidade = _cidadeBaseSelecionadaEdit?.nome || cidTxt;
+
+    const duplicada = _basesEdit.find(b =>
+      _normalizar(b.country) === _normalizar(pais) && _normalizar(b.city) === _normalizar(cidade)
+    );
+
+    if (duplicada) {
+      duplicada.latitude  = geocoded.latitude;
+      duplicada.longitude = geocoded.longitude;
+      duplicada.dias      = dias;
+      duplicada.stateCode = _cidadeBaseSelecionadaEdit?.stateCode || geocoded.stateCode || duplicada.stateCode || null;
+      duplicada.stateName = _cidadeBaseSelecionadaEdit?.stateName || geocoded.stateName || duplicada.stateName || null;
+      _baseAtivaIdEdit    = duplicada.id;
+      if (duplicada.stateCode) { _estadoBaseCode = duplicada.stateCode; _estadoBaseName = duplicada.stateName || null; }
+    } else {
+      const nova = {
+        id:        `base-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+        country:   pais,
+        city:      cidade,
+        label:     `${cidade}, ${pais}`,
+        latitude:  geocoded.latitude,
+        longitude: geocoded.longitude,
+        stateCode: _cidadeBaseSelecionadaEdit?.stateCode || geocoded.stateCode || null,
+        stateName: _cidadeBaseSelecionadaEdit?.stateName || geocoded.stateName || null,
+        dias,
+      };
+      _basesEdit.push(nova);
+      _baseAtivaIdEdit = nova.id;
+      if (nova.stateCode) { _estadoBaseCode = nova.stateCode; _estadoBaseName = nova.stateName || null; }
+    }
+
+    _salvarBasesEdit();
+    _salvarFiltroEdit();
+    _renderBases();
+    renderLocaisEdit();
+    _aplicarBoundsEstado(); // restringe busca ao estado/região da base recém-adicionada
+
+    _cidadeBaseSelecionadaEdit = null;
+    _paisBaseSelecionadoEdit   = null;
+    if (paisEl)   paisEl.value   = "";
+    if (cidadeEl) cidadeEl.value = "";
+    if (diasEl)   diasEl.value   = "";
+  } catch (erro) {
+    _mostrarErroBase(erro.message || "Nao foi possivel adicionar a base.");
+  }
+});
+
+document.getElementById("baseFiltroAtivaEdit")?.addEventListener("change", e => {
+  _baseAtivaIdEdit = e.target.value || null;
+  _salvarFiltroEdit();
+  _renderBases();
+  renderLocaisEdit();
+});
+
+document.getElementById("raioBaseKmEdit")?.addEventListener("input", e => {
+  _raioFiltroKmEdit = Math.max(1, parseInt(e.target.value) || 50);
+  e.target.value = _raioFiltroKmEdit;
+  _salvarFiltroEdit();
+  renderLocaisEdit();
+});
+
+// ── Event listener: recomendações ────────────────────────────────
+document.addEventListener("click", function(e) {
+  const btn = e.target.closest("#btnBuscarRecomendacoesEdit");
+  if (!btn) return;
+
+  const categoria = (document.getElementById("categoriaRecomendacaoEdit") || {}).value || "tourist_attraction";
+  const loadEl    = document.getElementById("loadingRecomendacoesEdit");
+  const alertaEl  = document.getElementById("alertaRecomendacoesEdit");
+  const listaEl   = document.getElementById("listaRecomendacoesEdit");
+  const cidade    = _roteiroObjEdit ? (_roteiroObjEdit.cidade || _roteiroObjEdit.pais || "") : "";
+
+  if (!cidade) {
+    if (alertaEl) { alertaEl.textContent = "O roteiro não possui cidade definida."; alertaEl.style.display = ""; }
+    return;
+  }
+  if (!window.google || !window.google.maps || !window.google.maps.places) {
+    if (alertaEl) { alertaEl.textContent = "Google Maps ainda não carregou. Tente novamente."; alertaEl.style.display = ""; }
+    return;
+  }
+
+  const labelMap = {
+    tourist_attraction: "atrações turísticas",
+    restaurant:         "restaurantes",
+    lodging:            "hospedagem",
+    museum:             "museus",
+    park:               "parques",
+    shopping_mall:      "shoppings",
+    night_club:         "vida noturna",
+    bar:                "bares",
+    cafe:               "cafés",
+    beach:              "praias"
+  };
+  const label = labelMap[categoria] || categoria;
+  const query = label + " em " + cidade;
+
+  if (alertaEl) alertaEl.style.display = "none";
+  if (listaEl)  listaEl.innerHTML = "";
+  if (loadEl)   loadEl.style.display = "";
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Buscando...';
+
+  const params = { query: query };
+  const lat = parseFloat(_roteiroObjEdit?.latDestino);
+  const lng = parseFloat(_roteiroObjEdit?.lngDestino);
+  if (Number.isFinite(lat) && Number.isFinite(lng)) {
+    params.location = new google.maps.LatLng(lat, lng);
+    params.radius   = 50000;
+  }
+
+  const svc = new google.maps.places.PlacesService(document.createElement("div"));
+  svc.textSearch(params, function(lugares, st) {
+    if (loadEl) loadEl.style.display = "none";
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-search me-1"></i>Buscar';
+    if (st !== google.maps.places.PlacesServiceStatus.OK || !lugares || !lugares.length) {
+      _renderRecomendacoes([]);
+      return;
+    }
+    const sorted = lugares.filter(function(l) { return l.rating; }).sort(function(a, b) { return (b.rating || 0) - (a.rating || 0); });
+    _renderRecomendacoes(sorted.slice(0, 15));
+  });
+});
+
+// ── Event listener: adicionar local ──────────────────────────────
 document.getElementById("btnAdicionarLocalEdit")?.addEventListener("click", async () => {
   const erroEl = document.getElementById("erroLocalEdit");
 
@@ -115,24 +2301,41 @@ document.getElementById("btnAdicionarLocalEdit")?.addEventListener("click", asyn
     erroEl.style.display = "";
     return;
   }
-
-  const dia   = document.getElementById("localDiaEdit")?.value?.trim();
-  const obs   = document.getElementById("localObsEdit")?.value?.trim();
+  const dia       = document.getElementById("localDiaEdit")?.value?.trim();
+  const obs       = document.getElementById("localObsEdit")?.value?.trim();
+  const periodo = document.getElementById("localPeriodoEdit")?.value || "";
 
   if (!dia) {
     erroEl.textContent = "Informe o dia da atividade.";
     erroEl.style.display = "";
     return;
   }
+  if (_diasTotaisEdit > 0 && parseInt(dia) > _diasTotaisEdit) {
+    erroEl.textContent = `O dia não pode ultrapassar a duração do roteiro (${_diasTotaisEdit} dias). Ajuste a duração na aba Informações.`;
+    erroEl.style.display = "";
+    return;
+  }
+
+  if (!periodo) {
+    erroEl.textContent = "Selecione o período da atividade: Manhã, Tarde ou Noite.";
+    erroEl.style.display = "";
+    document.getElementById("localPeriodoEdit")?.focus();
+    return;
+  }
+
   erroEl.style.display = "none";
 
+  const horario = periodo === "manha" ? "08:00:00"
+    : periodo === "tarde" ? "14:00:00"
+    : periodo === "noite" ? "20:00:00"
+    : null;
+
   const btn = document.getElementById("btnAdicionarLocalEdit");
-  btn.disabled  = true;
+  btn.disabled = true;
   btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
 
   try {
-    // 1. Criar/buscar local no banco
-    const resLocal = await fetch(`${_URL_API}/locais`, {
+    const resLocal = await authFetch(`${_URL_API}/locais`, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({
@@ -149,62 +2352,291 @@ document.getElementById("btnAdicionarLocalEdit")?.addEventListener("click", asyn
     if (resLocal.ok || resLocal.status === 201) {
       local = await resLocal.json();
     } else {
-      const resGet = await fetch(`${_URL_API}/locais/place/${_localSelecionadoEdit.placeId}`);
+      const resGet = await authFetch(`${_URL_API}/locais/place/${encodeURIComponent(_localSelecionadoEdit.placeId)}`);
       local = await resGet.json();
     }
 
-    // 2. Vincular ao roteiro
-    const resVinculo = await fetch(`${_URL_API}/roteiros/${_roteiroIdEdit}/locais`, {
+    const resVinculo = await authFetch(`${_URL_API}/roteiros/${_roteiroIdEdit}/locais`, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({
         idLocal:     local.idLocal,
-        dia:         parseInt(dia),
+        dia:         parseInt(dia, 10),
         ordem:       _locaisEdit.length + 1,
         observacoes: obs || null,
-        horario:     document.getElementById("localHorarioEdit")?.value || null,
+        horario:     horario,
         status:      "PLANEJADO",
       }),
     });
 
-    if (resVinculo.ok || resVinculo.status === 201) {
-      const vinculo = await resVinculo.json();
-      _locaisEdit.push(vinculo);
-      renderLocaisEdit();
+    if (!(resVinculo.ok || resVinculo.status === 201)) throw new Error("Erro ao vincular local.");
 
-      // Reset
-      document.getElementById("buscaLocalEdit").value     = "";
-      document.getElementById("localDiaEdit").value       = "";
-      document.getElementById("localObsEdit").value       = "";
-      document.getElementById("localHorarioEdit").value   = "";
-      document.getElementById("localPreviewEdit").style.display = "none";
-      _localSelecionadoEdit = null;
-    } else {
-      throw new Error("Erro ao vincular");
-    }
+    const vinculo = await resVinculo.json();
+    _locaisEdit.push(vinculo);
+    renderLocaisEdit();
+
+    ["buscaLocalEdit","localDiaEdit","localObsEdit"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = "";
+    });
+    const periodoEl = document.getElementById("localPeriodoEdit");
+    if (periodoEl) periodoEl.value = "";
+    const prevEl = document.getElementById("localPreviewEdit");
+    if (prevEl) prevEl.style.display = "none";
+    _localSelecionadoEdit = null;
   } catch {
     erroEl.textContent = "Erro ao salvar local. Verifique o backend.";
     erroEl.style.display = "";
   } finally {
-    btn.disabled  = false;
-    btn.innerHTML = `<i class="bi bi-plus-lg"></i> Add`;
+    btn.disabled = false;
+    btn.innerHTML = `<i class="bi bi-plus-lg me-1"></i>Adicionar Local ao Roteiro`;
   }
 });
 
-// Expõe função para roteiros.js chamar ao abrir o modal
-window.abrirLocaisEdit = function (roteiroId) {
-  // Reset campos
-  const buscaEl = document.getElementById("buscaLocalEdit");
-  if (buscaEl) buscaEl.value = "";
-  const diaEl = document.getElementById("localDiaEdit");
-  if (diaEl) diaEl.value = "";
-  const obsEl = document.getElementById("localObsEdit");
-  if (obsEl) obsEl.value = "";
-  const horarioEl = document.getElementById("localHorarioEdit");
-  if (horarioEl) horarioEl.value = "";
-  const prevEl = document.getElementById("localPreviewEdit");
-  if (prevEl) prevEl.style.display = "none";
+// ── Abrir aba locais (chamado de roteiros.js) ─────────────────────
+window.abrirLocaisEdit = function (roteiroId, cidadeRoteiro, opts) {
+  _roteiroIdEdit             = roteiroId;
+  _diasTotaisEdit            = (opts && opts.diasTotais) || 0;
+  _userIdEdit                = (opts && opts.userId)     || null;
+  _roteiroObjEdit            = (opts && opts.roteiro)    || null;
+  _cidadeBaseSelecionadaEdit = null;
+  _paisBaseSelecionadoEdit   = null;
+
+  // Oculta o botão "Salvar Sugestões IA" no contexto de criar-roteiro
+  _ocultarBtnSalvarSugestoes = !!(opts && opts.ocultarBtnSalvarSugestoes);
+  _destinoPOIEdit = !!(opts && opts.destinoPOI);
+  _localBaseEscolhidoEdit = (opts && opts.localBase) || null;
+
+  // Código ISO-2 do país e estado: sempre vem do roteiro atual.
+  _codigoPaisEdit = (opts && opts.codigoPais) || null;
+  _estadoBaseCode = (opts && opts.stateCode)  || null;
+  _estadoBaseName = (opts && opts.stateName)  || null;
+  // Reseta o autocomplete — será recriado APÓS as bases serem carregadas (para ter bounds disponíveis)
+  _autocompleteEdit = null;
+
+  _configurarAutocompleteBases();
+
+  // Limpa formulários
+  ["buscaLocalEdit","localDiaEdit","localObsEdit",
+   "basePaisEdit","baseCidadeEdit","baseDiasEdit"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = "";
+  });
+
+  const diaSelectEdit = document.getElementById("localDiaEdit");
+  if (diaSelectEdit) {
+    const numDias = _diasTotaisEdit > 0 ? _diasTotaisEdit
+      : (_roteiroObjEdit && _roteiroObjEdit.sugestoes ? _roteiroObjEdit.sugestoes.length : 0);
+    diaSelectEdit.innerHTML = '<option value="" disabled selected>Selecione</option>';
+    for (let d = 1; d <= (numDias || 1); d++) {
+      const opt = document.createElement("option");
+      opt.value = d;
+      opt.textContent = "Dia " + d;
+      diaSelectEdit.appendChild(opt);
+    }
+    diaSelectEdit.value = "";
+  }
+
+  const prevEl    = document.getElementById("localPreviewEdit");
+  const listaRec  = document.getElementById("listaRecomendacoesEdit");
+  const alertaRec = document.getElementById("alertaRecomendacoesEdit");
+
+  if (prevEl)    prevEl.style.display    = "none";
+  if (listaRec)  listaRec.innerHTML      = "";
+  if (alertaRec) alertaRec.style.display = "none";
+
   _localSelecionadoEdit = null;
 
+  const criandoRoteiro = !!(opts && opts.ocultarBtnSalvarSugestoes);
+  _resetarEstadoBasesEdit();
+  _locaisEdit = [];
+  const listaLocais = document.getElementById("listaLocaisEdit");
+  const miniMapaBox = document.getElementById("miniMapaPasso3Box");
+  if (listaLocais) listaLocais.innerHTML = "";
+  if (miniMapaBox) miniMapaBox.style.display = "none";
+
+  const coordsDestino = _coordenadasDestinoEdit(opts || {});
+  if ((criandoRoteiro || _basesEdit.length === 0) && coordsDestino && cidadeRoteiro) {
+    let paisHint = opts?.pais || opts?.roteiro?.pais || "";
+
+    const baseDestino = {
+      id:        `base-destino-${roteiroId}`,
+      country:   paisHint || cidadeRoteiro,
+      city:      cidadeRoteiro,
+      label:     [cidadeRoteiro, paisHint].filter(Boolean).join(", "),
+      latitude:  coordsDestino.latitude,
+      longitude: coordsDestino.longitude,
+      stateCode: _estadoBaseCode || null,
+      stateName: _estadoBaseName || null,
+      dias:      _diasTotaisEdit || null,
+    };
+    _basesEdit.push(baseDestino);
+    _baseAtivaIdEdit = baseDestino.id;
+  }
+
+  // Tenta popular stateCode a partir da base do roteiro atual.
+  if (!_estadoBaseCode) {
+    const b = _obterBaseAtiva();
+    if (b?.stateCode) { _estadoBaseCode = b.stateCode; _estadoBaseName = b.stateName || null; }
+  }
+
+  // Cria o autocomplete AGORA que as bases estão carregadas — bounds já estarão disponíveis
+  garantirAutocompleteEdit();
+
+  // Se não há base com coordenadas, pré-preenche e auto-cria a partir dos dados do roteiro
+  if (_basesEdit.length === 0) {
+    let paisHint   = opts?.pais || opts?.roteiro?.pais || "";
+    let cidadeHint = cidadeRoteiro || "";
+
+    if (cidadeHint) {
+      // Pré-preenche os campos para o usuário ver
+      const paisEl   = document.getElementById("basePaisEdit");
+      const cidadeEl = document.getElementById("baseCidadeEdit");
+      if (paisEl && paisHint)     paisEl.value   = paisHint;
+      if (cidadeEl && cidadeHint) cidadeEl.value = cidadeHint;
+
+      // Auto-geocodifica e cria a base silenciosamente
+      const tentarCriarBase = () => {
+        _geocodificarBase(paisHint, cidadeHint)
+          .then(geocoded => {
+            // Evita duplicata se o usuário já adicionou manualmente enquanto carregava
+            if (_basesEdit.length > 0) return;
+
+            const nova = {
+              id:        `base-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+              country:   paisHint || cidadeHint,
+              city:      cidadeHint,
+              label:     [cidadeHint, paisHint].filter(Boolean).join(", "),
+              latitude:  geocoded.latitude,
+              longitude: geocoded.longitude,
+              stateCode: geocoded.stateCode || null,
+              stateName: geocoded.stateName || null,
+              dias:      null,
+            };
+            _basesEdit.push(nova);
+            _baseAtivaIdEdit = nova.id;
+            if (geocoded.stateCode) { _estadoBaseCode = geocoded.stateCode; _estadoBaseName = geocoded.stateName || null; }
+            // Recria o autocomplete com bounds do estado agora que temos coordenadas
+            _autocompleteEdit = null;
+            garantirAutocompleteEdit();
+            _salvarBasesEdit();
+            _salvarFiltroEdit();
+
+            // Limpa os campos (base já foi criada)
+            const paisEl2   = document.getElementById("basePaisEdit");
+            const cidadeEl2 = document.getElementById("baseCidadeEdit");
+            if (paisEl2)   paisEl2.value   = "";
+            if (cidadeEl2) cidadeEl2.value = "";
+
+            _renderBases();
+            renderLocaisEdit();
+            _aplicarBoundsEstado(); // restringe busca ao estado/região da base
+          })
+          .catch(() => {
+            // Falhou silenciosamente — campos permanecem preenchidos para adição manual
+          });
+      };
+
+      if (window.google && google.maps?.places?.PlacesService) {
+        tentarCriarBase();
+      } else {
+        // Maps ainda não carregou, espera o callback initMapsEdit
+        const _origInit = window.initMapsEdit;
+        window.initMapsEdit = function () {
+          _origInit?.();
+          tentarCriarBase();
+          window.initMapsEdit = _origInit; // restaura
+        };
+      }
+    }
+  }
+
+  _renderBases();
   carregarLocaisEdit(roteiroId);
 };
+
+// ── Otimização por proximidade (Nearest Neighbor por dia) ─────────
+function _nearestNeighborDia(locais) {
+  const comCoord = locais.filter(l => l.latitude != null && l.longitude != null);
+  const semCoord = locais.filter(l => l.latitude == null  || l.longitude == null);
+
+  if (comCoord.length <= 1) return locais;
+
+  const visitados = [comCoord[0]];
+  const restantes = comCoord.slice(1);
+
+  while (restantes.length > 0) {
+    const ultimo = visitados[visitados.length - 1];
+    let minDist = Infinity, minIdx = 0;
+    restantes.forEach((loc, i) => {
+      const d = _calcularKm(
+        parseFloat(ultimo.latitude),  parseFloat(ultimo.longitude),
+        parseFloat(loc.latitude),     parseFloat(loc.longitude)
+      );
+      if (d < minDist) { minDist = d; minIdx = i; }
+    });
+    visitados.push(restantes[minIdx]);
+    restantes.splice(minIdx, 1);
+  }
+
+  return [...visitados, ...semCoord];
+}
+
+async function _otimizarRoteiroPorProximidade() {
+  if (_locaisEdit.length === 0) return;
+
+  const btn = document.getElementById("btnOtimizarRoteiro");
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1" style="width:.8rem;height:.8rem;"></span>Otimizando…`;
+  }
+
+  try {
+    const grupos = {};
+    _locaisEdit.forEach(l => {
+      const dia = l.dia ?? 0;
+      if (!grupos[dia]) grupos[dia] = [];
+      grupos[dia].push(l);
+    });
+
+    const novaOrdem = [];
+    Object.keys(grupos).sort((a, b) => Number(a) - Number(b)).forEach(dia => {
+      _nearestNeighborDia(grupos[dia]).forEach((l, i) => novaOrdem.push({ ...l, ordem: i + 1 }));
+    });
+
+    const alterados = novaOrdem.filter(novo => {
+      const orig = _locaisEdit.find(l => l.idRoteiroLocal === novo.idRoteiroLocal);
+      return orig && orig.ordem !== novo.ordem;
+    });
+
+    if (alterados.length === 0) return;
+
+    await Promise.all(alterados.map(l =>
+      authFetch(`${_URL_API}/roteiros/${_roteiroIdEdit}/locais/${l.idLocal}`, {
+        method:  "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          idLocal:     l.idLocal,
+          status:      l.status,
+          observacoes: l.observacoes,
+          dia:         l.dia,
+          ordem:       l.ordem,
+          horario:     l.horario,
+        }),
+      })
+    ));
+
+    _locaisEdit = novaOrdem;
+    renderLocaisEdit();
+  } catch {
+    alert("Erro ao otimizar o roteiro. Tente novamente.");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<i class="bi bi-magic me-1"></i>Otimizar`;
+    }
+  }
+}
+
+document.getElementById("btnOtimizarRoteiro")
+  ?.addEventListener("click", _otimizarRoteiroPorProximidade);

@@ -120,6 +120,23 @@
   border-radius: 0 12px 12px 0;
   border-color: #e2e8f0;
 }
+.auth-input .password-toggle{
+  border-color: #e2e8f0;
+  border-left: 0;
+  background: #fff;
+  color: #64748b;
+  border-radius: 0 12px 12px 0;
+}
+.auth-input .password-toggle:hover,
+.auth-input .password-toggle:focus{
+  background: #fff;
+  color: #0f172a;
+  box-shadow: none;
+}
+.auth-input .has-password-toggle{
+  border-right: 0;
+  border-radius: 0;
+}
 .auth-input .form-control:focus{
   border-color: rgba(59,130,246,.6);
   box-shadow: 0 0 0 .2rem rgba(59,130,246,.12);

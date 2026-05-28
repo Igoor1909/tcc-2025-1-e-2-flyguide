@@ -1,4 +1,4 @@
-/* ================================================================
+﻿/* ================================================================
    FlyGuide - imagens.js
    Funções de imagem compartilhadas entre páginas:
    - Carrega imagens do backend (GET /imagens)
@@ -7,13 +7,44 @@
 
 const IMG_FALLBACK = "https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=800&q=75";
 
-let imagensCache = [];
+const IMAGENS_DEFAULT = [
+  { idImagem: 1,  chave: "cidade",      nome: "Cidade",       emoji: "🏙️", url: "https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=800&q=75" },
+  { idImagem: 2,  chave: "praia",       nome: "Praia",        emoji: "🏖️", url: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800&q=75" },
+  { idImagem: 3,  chave: "natureza",    nome: "Natureza",     emoji: "🌿", url: "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=800&q=75" },
+  { idImagem: 4,  chave: "montanha",    nome: "Montanha",     emoji: "🏔️", url: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=800&q=75" },
+  { idImagem: 5,  chave: "aventura",    nome: "Aventura",     emoji: "🧗", url: "https://images.unsplash.com/photo-1501555088652-021faa106b9b?w=800&q=75" },
+  { idImagem: 6,  chave: "cultural",    nome: "Cultural",     emoji: "🏛️", url: "https://images.unsplash.com/photo-1533929736458-ca588d08c8be?w=800&q=75" },
+  { idImagem: 7,  chave: "gastronomia", nome: "Gastronomia",  emoji: "🍽️", url: "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=800&q=75" },
+  { idImagem: 8,  chave: "luxo",        nome: "Luxo",         emoji: "✨", url: "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800&q=75" },
+  { idImagem: 9,  chave: "neve",        nome: "Neve / Frio",  emoji: "❄️", url: "https://images.unsplash.com/photo-1491002052546-bf38f186af56?w=800&q=75" },
+  { idImagem: 10, chave: "mochilao",    nome: "Mochilão",     emoji: "🎒", url: "https://images.unsplash.com/photo-1527631746610-bca00a040d60?w=800&q=75" },
+];
+
+// Pré-populado para renderizar imediatamente sem esperar o backend
+let imagensCache = [...IMAGENS_DEFAULT];
+
+// Renderiza o seletor assim que o DOM estiver pronto (sem esperar fetch)
+document.addEventListener("DOMContentLoaded", () => {
+  const container = document.getElementById("imgSelector");
+  if (container) renderSeletorImagens("imgSelector", "itImagem", IMAGENS_DEFAULT[0].idImagem);
+});
 
 function carregarImagens() {
-  return fetch("http://localhost:8080/imagens")
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+
+  return fetch("https://tcc-2025-1-e-2-flyguide-production.up.railway.app/imagens", { signal: controller.signal })
     .then(r => r.json())
-    .then(data => { imagensCache = data; return data; })
-    .catch(() => { imagensCache = []; return []; });
+    .then(data => {
+      clearTimeout(timeout);
+      imagensCache = (Array.isArray(data) && data.length > 0) ? data : IMAGENS_DEFAULT;
+      return imagensCache;
+    })
+    .catch(() => {
+      clearTimeout(timeout);
+      imagensCache = IMAGENS_DEFAULT;
+      return IMAGENS_DEFAULT;
+    });
 }
 
 function renderSeletorImagens(containerId, hiddenId, idSelecionado) {
@@ -23,16 +54,12 @@ function renderSeletorImagens(containerId, hiddenId, idSelecionado) {
   container.innerHTML = imagensCache.map(img => `
     <div class="img-option ${img.idImagem === idSelecionado ? "selected" : ""}"
          data-id="${img.idImagem}"
+         data-chave="${img.chave}"
          style="position:relative;border-radius:14px;overflow:hidden;cursor:pointer;
                 border:3px solid ${img.idImagem === idSelecionado ? "#f97316" : "transparent"};
                 transition:border-color .2s,transform .15s;aspect-ratio:16/9;">
       <img src="${img.url.replace("w=800", "w=300")}" alt="${img.nome}"
            style="width:100%;height:100%;object-fit:cover;display:block;">
-      <div style="position:absolute;bottom:0;left:0;right:0;
-                  background:linear-gradient(0deg,rgba(0,0,0,.65),transparent);
-                  color:#fff;font-size:.75rem;font-weight:700;padding:6px 8px;">
-        ${img.emoji || ""} ${img.nome}
-      </div>
       <div class="chk-icon"
            style="position:absolute;top:8px;right:8px;background:#f97316;color:#fff;
                   border-radius:50%;width:22px;height:22px;
@@ -61,3 +88,6 @@ function renderSeletorImagens(containerId, hiddenId, idSelecionado) {
     });
   });
 }
+
+
+

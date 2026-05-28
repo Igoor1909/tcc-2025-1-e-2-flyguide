@@ -5,6 +5,14 @@
   - Botões finais (Cancelar / Criar Roteiro)
 */
 
+.dia-group-header { font-weight: 800; font-size: 1rem; color: #0f172a; }
+html[data-theme="dark"] .dia-group-header { color: #f1f5f9 !important; }
+
+#roteiroSalvoAlert { transition: opacity .3s; }
+html[data-theme="dark"] #roteiroSalvoAlert { background:#052e16 !important; border-color:#166534 !important; color:#86efac !important; }
+
+html[data-theme="dark"] #mapaAtividadesBox .pb-2 { border-color:#334155 !important; }
+
 .page-head{
   padding: 18px 22px;
   display:flex;
@@ -30,6 +38,156 @@
   color: var(--fg-muted);
   text-align:center;
   padding: 22px 12px;
+}
+
+.base-filter-box{
+  background: linear-gradient(180deg, rgba(249,115,22,.06), rgba(255,255,255,.96));
+}
+
+.base-filter-box .row.g-3{
+  margin-top: 6px;
+}
+
+.base-filter-pill{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:10px 14px;
+  border-radius:999px;
+  background:#fff;
+  border:1px solid #eef2f7;
+  box-shadow: var(--fg-shadow-soft);
+  color:#334155;
+  font-size:.85rem;
+  font-weight:700;
+}
+
+.base-filter-controls{
+  margin-top: 6px;
+  padding:14px;
+  border-radius:16px;
+  background:rgba(255,255,255,.42);
+  border:1px solid rgba(226,232,240,.72);
+}
+
+#listaBasesFiltro{
+  display:grid;
+  gap:12px;
+}
+
+.base-card{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:14px;
+  padding:14px;
+  border-radius:14px;
+  border:1px solid #e2e8f0;
+  background:#fff;
+  transition:border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+}
+
+.base-card.is-active{
+  border-color:#fdba74;
+  box-shadow:0 12px 28px rgba(249,115,22,.10);
+  transform:translateY(-1px);
+}
+
+.base-card-main{
+  display:flex;
+  gap:12px;
+  min-width:0;
+  flex:1;
+}
+
+.base-card-icon{
+  width:40px;
+  height:40px;
+  border-radius:12px;
+  display:grid;
+  place-items:center;
+  background:#fff7ed;
+  color:#f97316;
+  font-size:1rem;
+  flex-shrink:0;
+}
+
+.base-card-title{
+  font-weight:800;
+  color:#0f172a;
+  line-height:1.2;
+}
+
+.base-card-subtitle{
+  margin-top:4px;
+  font-size:.82rem;
+  color:#64748b;
+}
+
+.base-card-actions{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+}
+
+.base-chip{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:5px 9px;
+  border-radius:999px;
+  background:#f8fafc;
+  border:1px solid #e2e8f0;
+  color:#475569;
+  font-size:.75rem;
+  font-weight:700;
+}
+
+html[data-theme="dark"] .base-filter-box{
+  background: linear-gradient(180deg, rgba(249,115,22,.10), rgba(30,41,59,.98));
+  border-color:#334155;
+}
+
+html[data-theme="dark"] .base-filter-pill{
+  background:#0f172a;
+  border-color:#334155;
+  color:#e2e8f0;
+}
+
+html[data-theme="dark"] .base-filter-controls{
+  background:rgba(30,41,59,.44);
+  border-color:rgba(71,85,105,.62);
+}
+
+html[data-theme="dark"] .base-card{
+  background:#0f172a;
+  border-color:#334155;
+  box-shadow:none;
+}
+
+html[data-theme="dark"] .base-card.is-active{
+  border-color:#f97316;
+  box-shadow:0 12px 28px rgba(249,115,22,.16);
+}
+
+html[data-theme="dark"] .base-card-icon{
+  background:rgba(249,115,22,.12);
+  color:#fb923c;
+}
+
+html[data-theme="dark"] .base-card-title{
+  color:#f1f5f9;
+}
+
+html[data-theme="dark"] .base-card-subtitle{
+  color:#94a3b8;
+}
+
+html[data-theme="dark"] .base-chip{
+  background:#1e293b;
+  border-color:#334155;
+  color:#cbd5e1;
 }
 
 .footer-actions{

@@ -61,6 +61,11 @@
     html[data-theme="dark"] .bg-white { background: #1e293b !important; border-color: #475569 !important; color: #94a3b8 !important; }
     html[data-theme="dark"] .local-search-box { background: #1e293b !important; border-color: #334155 !important; }
     html[data-theme="dark"] .local-preview { background: #0f172a !important; border-color: #334155 !important; }
+    html[data-theme="dark"] .local-preview.preview-ok   { background: #052e16 !important; border-color: #166534 !important; }
+    html[data-theme="dark"] .local-preview.preview-warn { background: #450a0a !important; border-color: #991b1b !important; }
+    html[data-theme="dark"] #listaRecomendacoes > div   { background: #1e293b !important; border-color: #334155 !important; }
+    html[data-theme="dark"] #legendaMapa span[style]    { color: inherit !important; }
+    html[data-theme="dark"] #mapaAtividades             { border-color: #334155 !important; }
 
     html[data-theme="dark"] .modal-content { background: #1e293b !important; border-color: #334155 !important; color: #f1f5f9 !important; }
     html[data-theme="dark"] .modal-header { border-bottom-color: #334155 !important; background: #1e293b !important; }
@@ -171,6 +176,23 @@
     html[data-theme="dark"] #darkToggle:hover { background: #1e293b !important; border-color: #475569 !important; color: #f1f5f9 !important; }
     html[data-theme="dark"] #darkToggle .toggle-switch { background: #f97316 !important; }
     html[data-theme="dark"] #darkToggle .toggle-switch::after { transform: translateX(18px); }
+
+    html[data-theme="dark"] #formAvaliacao { background: #1e293b !important; }
+    html[data-theme="dark"] #formAvaliacao .av-label { color: #f1f5f9 !important; }
+    html[data-theme="dark"] #formAvaliacao textarea,
+    html[data-theme="dark"] #formAvaliacao input,
+    html[data-theme="dark"] #formAvaliacao .form-control { background: #0f172a !important; border-color: #334155 !important; color: #f1f5f9 !important; }
+    html[data-theme="dark"] #formAvaliacao textarea::placeholder,
+    html[data-theme="dark"] #formAvaliacao .form-control::placeholder { color: #475569 !important; }
+    html[data-theme="dark"] .comentario-item { border-bottom-color: #334155 !important; }
+    html[data-theme="dark"] #secaoAvaliacoes .section-card { background: #1e293b !important; }
+
+    html[data-theme="dark"] .rascunho-card { background: #1e293b !important; border-color: #334155 !important; }
+    html[data-theme="dark"] .rascunho-card:hover { border-color: #475569 !important; box-shadow: 0 4px 18px rgba(0,0,0,.3) !important; }
+    html[data-theme="dark"] .rascunho-badge { background: #431407 !important; color: #fb923c !important; border-color: #7c2d12 !important; }
+    html[data-theme="dark"] .rascunho-meta { color: #94a3b8 !important; }
+    html[data-theme="dark"] .btn-edit-info { border-color: #818cf8 !important; color: #818cf8 !important; background: transparent !important; }
+    html[data-theme="dark"] .btn-edit-info:hover { background: #818cf8 !important; color: #0f172a !important; }
   `;
   document.head.appendChild(style);
 
@@ -185,22 +207,34 @@
   // Lê o atributo style como STRING para preservar o hex original
   var LIGHT_PATTERNS = [
     "#fff", "#ffffff", "#f8fafc", "#f0fdf4",
-    "#fef2f2", "#f1f5f9", "#f9fafb", "#f5f5f5"
+    "#fef2f2", "#f1f5f9", "#f9fafb", "#f5f5f5",
+    "#fff7ed", "#fef3c7", "#eef2f7", "#e2e8f0"
   ];
 
   function styleAttrHasLightBg(el) {
     var attr = (el.getAttribute("style") || "").toLowerCase().replace(/\s/g, "");
-    // Procura por background: ou background-color: com cor clara
     return LIGHT_PATTERNS.some(function (c) {
       return attr.indexOf("background:" + c) !== -1 ||
              attr.indexOf("background-color:" + c) !== -1;
     });
   }
 
+  // Retorna true se o elemento É ou está dentro do container do mapa (nunca mexer nesses)
+  function isInsideMap(el) {
+    var p = el;
+    while (p) {
+      if (p.id === "mapaRoteiro" || p.id === "mapaAtividades") return true;
+      if (p.classList && p.classList.contains("gm-style")) return true;
+      p = p.parentElement;
+    }
+    return false;
+  }
+
   function fixInlineStyles(on) {
     document.querySelectorAll("[style]").forEach(function (el) {
-      // Nunca mexe no botão toggle
+      // Nunca mexe no botão toggle nem em internos do Google Maps
       if (el.id === "darkToggle" || el.id === "darkToggleSeparator") return;
+      if (isInsideMap(el)) return;
 
       if (on) {
         if (styleAttrHasLightBg(el)) {
@@ -232,7 +266,7 @@
         m.addedNodes.forEach(function (node) {
           if (node.nodeType !== 1) return;
           // Verifica o próprio nó
-          if (node.getAttribute && node.getAttribute("style") && styleAttrHasLightBg(node)) {
+          if (node.getAttribute && node.getAttribute("style") && styleAttrHasLightBg(node) && !isInsideMap(node)) {
             if (!node.dataset.darkOrigStyle) {
               node.dataset.darkOrigStyle = node.getAttribute("style");
               node.style.setProperty("background", "#1e293b", "important");
@@ -241,9 +275,11 @@
               node.style.setProperty("border-color", "#334155", "important");
             }
           }
-          // Verifica filhos
+          // Verifica filhos (ignora internos do Google Maps)
+          if (node.classList && node.classList.contains("gm-style")) return;
           node.querySelectorAll && node.querySelectorAll("[style]").forEach(function (child) {
             if (child.id === "darkToggle" || child.id === "darkToggleSeparator") return;
+            if (isInsideMap(child)) return;
             if (styleAttrHasLightBg(child) && !child.dataset.darkOrigStyle) {
               child.dataset.darkOrigStyle = child.getAttribute("style");
               child.style.setProperty("background", "#1e293b", "important");

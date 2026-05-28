@@ -1,4 +1,4 @@
-/* ================================================================
+﻿/* ================================================================
    FlyGuide - feed.js
    Feed público de roteiros (pages/index.html)
    Depende de: app.js, imagens.js
@@ -7,10 +7,12 @@
 (function iniciarFeed() {
   if (document.body.getAttribute("data-pagina") !== "feed") return;
 
-  const URL_API_BASE = "http://localhost:8080";
-  const SESSION_KEY  = "flyguide.userId";
-  const userId       = sessionStorage.getItem(SESSION_KEY);
-  let todosRoteiros  = [];
+  const URL_API_BASE    = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app";
+  const userId          = getUserIdFromToken();
+  let todosRoteiros     = [];
+  let roteirosVisiveis  = [];
+  let paginaFeed        = 0;
+  const POR_PAGINA      = 12;
 
   const badgeClasse = {
     "Aventura": "badge-green", "Cultural": "badge-purple", "Mochilão": "badge-yellow",
@@ -31,24 +33,47 @@
     return `${formatarDataCurta(dataInicio)} → ${formatarDataCurta(dataFim)}`;
   }
 
+  function estimarOrcamento(r) {
+    if (r.orcamento && r.orcamento > 0) {
+      return `R$ ${Number(r.orcamento).toLocaleString("pt-BR")}`;
+    }
+    if (!Array.isArray(r.sugestoes) || r.sugestoes.length === 0) return "—";
+    let total = 0, temValor = false;
+    r.sugestoes.forEach(d => {
+      const locais = d.periodos
+        ? ["manha","tarde","noite"].flatMap(p => Array.isArray(d.periodos[p]) ? d.periodos[p] : [])
+        : (Array.isArray(d.locais) ? d.locais : []);
+      locais.forEach(l => {
+        const custo = typeof l === "object" ? l.custo : null;
+        if (!custo || /varia/i.test(custo)) return;
+        if (/gratuito/i.test(custo)) { temValor = true; return; }
+        const nums = (custo.match(/\d[\d.,]*/g) || []).map(n => parseFloat(n.replace(",",".")));
+        if (!nums.length) return;
+        total += nums.length >= 2 ? (nums[0] + nums[1]) / 2 : nums[0];
+        temValor = true;
+      });
+    });
+    return temValor ? `~R$ ${Math.round(total).toLocaleString("pt-BR")}` : "—";
+  }
+
   function renderCardFeed(r) {
-    const imgUrl = r.imagemUrl || IMG_FALLBACK;
-    const badge  = badgeClasse[r.tipoRoteiro] || "";
-    const dias   = r.diasTotais ? `${r.diasTotais} dia${r.diasTotais > 1 ? "s" : ""}` : "—";
-    const orc    = r.orcamento  ? `R$ ${Number(r.orcamento).toLocaleString("pt-BR")}` : "—";
-    const desc   = (r.observacoes || "Sem descrição").substring(0, 120);
+    const imgUrl  = r.imagemUrl || IMG_FALLBACK;
+    const badge   = badgeClasse[r.tipoRoteiro] || "";
+    const dias    = r.diasTotais ? `${r.diasTotais} dia${r.diasTotais > 1 ? "s" : ""}` : "—";
+    const orc     = estimarOrcamento(r);
+    const desc    = (r.observacoes || "Sem descrição").substring(0, 120);
     const reticencias = r.observacoes && r.observacoes.length > 120 ? "..." : "";
+    const isOwner = userId && String(r.idUsuario) === String(userId);
 
     return `
       <div class="col-12 col-md-6 col-xl-4">
         <div class="trip-card h-100">
-          <div class="trip-cover" style="background-image:url('${imgUrl}');">
+          <div class="trip-cover" style="background-image:url('${imgUrl}');" role="img" aria-label="Imagem de capa do roteiro ${escapeHtml(r.titulo || "Sem título")}">
             <span class="badge-pill ${badge}">${r.tipoRoteiro || "Viagem"}</span>
-            <div class="like-btn" data-like data-roteiro-id="${r.idRoteiro}" title="Curtir"><i class="bi bi-heart"></i></div>
-            <div class="like-btn" data-save data-roteiro-id="${r.idRoteiro}" title="Salvar roteiro" style="right:54px;"><i class="bi bi-bookmark"></i></div>
+            ${!isOwner ? `<button class="like-btn" data-save data-roteiro-id="${r.idRoteiro}" aria-label="Salvar roteiro: ${escapeHtml(r.titulo || "Sem título")}" title="Salvar roteiro" type="button"><i class="bi bi-bookmark-plus" aria-hidden="true"></i></button>` : ""}
             <div class="trip-title">
               <h5>${escapeHtml(r.titulo || "Sem título")}</h5>
-              <div class="loc"><i class="bi bi-geo-alt-fill"></i>${escapeHtml(r.cidade || "—")}</div>
+              <div class="loc"><i class="bi bi-geo-alt-fill" aria-hidden="true"></i>${escapeHtml(r.cidade || "—")}</div>
             </div>
           </div>
           <div class="trip-body">
@@ -63,17 +88,19 @@
             </div>
           </div>
           <div class="trip-footer">
-            <div><i class="bi bi-calendar-event me-1" style="color:#f97316;font-size:.85rem;"></i>${formatarPeriodo(r.dataInicio, r.dataFim)}</div>
+            <div style="display:flex;flex-direction:column;gap:4px;">
+              ${r.nomeUsuario ? `<div style="display:flex;align-items:center;gap:5px;font-size:.78rem;color:#64748b;"><i class="bi bi-person-fill" style="color:#94a3b8;"></i>${escapeHtml(r.nomeUsuario)}</div>` : ""}
+            </div>
             <div style="display:flex;align-items:center;gap:12px;">
-              <span id="count-likes-${r.idRoteiro}" style="display:flex;align-items:center;gap:4px;font-size:.82rem;color:#94a3b8;">
-                <i class="bi bi-heart-fill" style="color:#f97316;"></i>${r.totalLikes || 0}
+              <span style="display:flex;align-items:center;gap:4px;font-size:.82rem;color:#94a3b8;">
+                <i class="bi bi-star-fill" style="color:#facc15;"></i>
+                <span style="color:#facc15;font-weight:600;">${r.mediaAvaliacao > 0 ? r.mediaAvaliacao.toFixed(1) : "—"}</span>
               </span>
               <span style="display:flex;align-items:center;gap:4px;font-size:.82rem;color:#94a3b8;">
-                <i class="bi bi-chat-fill" style="color:#f97316;"></i>${r.totalComentarios || 0}
+                <i class="bi bi-chat-fill" style="color:#f97316;"></i>${r.totalAvaliacoes || 0}
               </span>
-              ${r.mediaAvaliacao > 0 ? `<span style="display:flex;align-items:center;gap:3px;font-size:.82rem;"><i class="bi bi-star-fill" style="color:#facc15;"></i><span style="color:#facc15;font-weight:600;">${r.mediaAvaliacao.toFixed(1)}</span><span style="color:#94a3b8;">(${r.totalAvaliacoes || 0})</span></span>` : ""}
-              <a href="detalhes-roteiro.html?id=${r.idRoteiro}">
-                <i class="bi bi-eye"></i>Ver Detalhes
+              <a href="detalhes-roteiro.html?id=${r.idRoteiro}" aria-label="Ver detalhes do roteiro: ${escapeHtml(r.titulo || "Sem título")}">
+                <i class="bi bi-eye" aria-hidden="true"></i>Ver Detalhes
               </a>
             </div>
           </div>
@@ -84,17 +111,17 @@
   async function clonarRoteiro(roteiroId, btn, icon, marcarSalvo) {
     icon.className = "bi bi-hourglass-split";
     try {
-      const res = await fetch(`${URL_API_BASE}/roteiros/${roteiroId}/clonar?idUsuario=${userId}`, {
+      const res = await authFetch(`${URL_API_BASE}/roteiros/${roteiroId}/clonar?idUsuario=${userId}`, {
         method: "POST"
       });
       if (res.ok || res.status === 201) {
         if (marcarSalvo) {
           btn.classList.add("saved");
-          btn.style.background = "rgba(249,115,22,.92)";
-          btn.style.borderColor = "#f97316";
+          btn.style.background = "";
+          btn.style.borderColor = "";
         }
         icon.className = "bi bi-bookmark-fill";
-        icon.style.color = "#fff";
+        icon.style.color = "";
 
         const toast = document.createElement("div");
         toast.style.cssText = [
@@ -113,13 +140,37 @@
           setTimeout(() => toast.remove(), 300);
         }, 3500);
       } else {
-        icon.className = "bi bi-bookmark";
+        icon.className = "bi bi-bookmark-plus";
         alert("Não foi possível salvar o roteiro.");
       }
     } catch (_) {
-      icon.className = "bi bi-bookmark";
+      icon.className = "bi bi-bookmark-plus";
       alert("Erro ao conectar ao servidor.");
     }
+  }
+
+  function renderPaginacaoFeed(container, total) {
+    const totalPags = Math.ceil(total / POR_PAGINA);
+    let pag = document.getElementById("feedPaginacao");
+    if (!pag) {
+      pag = document.createElement("div");
+      pag.id = "feedPaginacao";
+      pag.style.cssText = "display:flex;align-items:center;justify-content:center;gap:12px;margin-top:28px;flex-wrap:wrap;";
+      container.after(pag);
+    }
+    pag.innerHTML = `
+      ${paginaFeed > 0 ? `<button id="feedPrev" class="btn btn-outline-secondary" style="border-radius:999px;padding:6px 18px;font-weight:700;">← Anterior</button>` : ""}
+      <span style="font-size:.88rem;color:#64748b;">Página ${paginaFeed + 1} de ${totalPags}</span>
+      ${paginaFeed < totalPags - 1 ? `<button id="feedNext" class="btn btn-outline-secondary" style="border-radius:999px;padding:6px 18px;font-weight:700;">Próxima →</button>` : ""}
+    `;
+    document.getElementById("feedPrev")?.addEventListener("click", () => {
+      paginaFeed--; renderFeed(roteirosVisiveis);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+    document.getElementById("feedNext")?.addEventListener("click", () => {
+      paginaFeed++; renderFeed(roteirosVisiveis);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
   }
 
   function renderFeed(roteiros) {
@@ -132,11 +183,14 @@
     if (roteiros.length === 0) {
       lista.style.display = "none";
       vazio.style.display = "";
+      document.getElementById("feedPaginacao")?.remove();
       return;
     }
     vazio.style.display = "none";
     lista.style.display = "";
-    lista.innerHTML     = roteiros.map(renderCardFeed).join("");
+    const inicio = paginaFeed * POR_PAGINA;
+    lista.innerHTML = roteiros.slice(inicio, inicio + POR_PAGINA).map(renderCardFeed).join("");
+    renderPaginacaoFeed(lista, roteiros.length);
 
     // Bind botões de salvar
     lista.querySelectorAll("[data-save]").forEach(async btn => {
@@ -146,15 +200,15 @@
       // Verifica se o usuário já clonou este roteiro
       if (userId) {
         try {
-          const res = await fetch(`${URL_API_BASE}/roteiros/${roteiroId}/clonou?idUsuario=${userId}`);
+          const res = await authFetch(`${URL_API_BASE}/roteiros/${roteiroId}/clonou?idUsuario=${userId}`);
           if (res.ok) {
             const jaClonou = await res.json();
             if (jaClonou) {
               btn.classList.add("saved");
-              btn.style.background = "rgba(249,115,22,.92)";
-              btn.style.borderColor = "#f97316";
+              btn.style.background = "";
+              btn.style.borderColor = "";
               icon.className = "bi bi-bookmark-fill";
-              icon.style.color = "#fff";
+              icon.style.color = "";
             }
           }
         } catch (_) {}
@@ -168,6 +222,9 @@
 
         const roteiroId = btn.getAttribute("data-roteiro-id");
         const icon = btn.querySelector("i");
+
+        const permitido = await verificarLimiteFree();
+        if (!permitido) { mostrarModalLimite(); return; }
 
         if (btn.classList.contains("saved")) {
           const modal = document.createElement("div");
@@ -190,92 +247,184 @@
         await clonarRoteiro(roteiroId, btn, icon, true);
       });
     });
+  }
 
-    // Bind botões de curtir
-    lista.querySelectorAll("[data-like]").forEach(async btn => {
-      const roteiroId = btn.getAttribute("data-roteiro-id");
-      const icon = btn.querySelector("i");
+  // ── Limite de roteiros (FREE = 20 total em Meus Roteiros) ────────
+  const LIMITE_FREE = 20;
 
-      try {
-        const resCount = await fetch(`${URL_API_BASE}/roteiros/${roteiroId}/likes/count`);
-        if (resCount.ok) {
-          const count = await resCount.json();
-          if (count > 0) {
-            btn.setAttribute("data-count", count);
-            btn.title = `${count} ${count === 1 ? "pessoa curtiu" : "pessoas curtiram"}`;
-          }
-        }
-      } catch (_) {}
+  async function verificarLimiteFree() {
+    if (!userId) return true;
+    try {
+      const [resR, resU] = await Promise.all([
+        authFetch(`${URL_API_BASE}/roteiros/usuario/${userId}`),
+        authFetch(`${URL_API_BASE}/users/search-completo/${userId}`)
+      ]);
+      const lista = resR.ok ? await resR.json() : [];
+      const usr   = resU.ok ? await resU.json() : null;
+      if ((usr?.usuario?.tipoConta || "FREE") === "PREMIUM") return true;
+      return !Array.isArray(lista) || lista.length < LIMITE_FREE;
+    } catch { return true; }
+  }
 
-      if (userId) {
-        try {
-          const resJa = await fetch(`${URL_API_BASE}/roteiros/${roteiroId}/likes/${userId}`);
-          if (resJa.ok) {
-            const jaCurtiu = await resJa.json();
-            if (jaCurtiu) {
-              btn.classList.add("liked");
-              icon?.classList.replace("bi-heart", "bi-heart-fill");
-            }
-          }
-        } catch (_) {}
-      }
+  function mostrarModalLimite() {
+    const modal = document.createElement("div");
+    modal.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;";
+    modal.innerHTML =
+      '<div style="background:#1e293b;border:1px solid #334155;border-radius:18px;padding:32px 28px;max-width:380px;width:92%;text-align:center;">'
+      + '<div style="font-size:2.4rem;margin-bottom:10px;">🗺️</div>'
+      + '<h5 style="color:#f1f5f9;margin-bottom:8px;font-weight:800;">Limite atingido</h5>'
+      + '<p style="color:#94a3b8;font-size:.9rem;margin-bottom:20px;">Você já possui <strong style="color:#f97316;">20 roteiros</strong> no plano gratuito.<br>Assine o Premium para criar e salvar roteiros ilimitados.</p>'
+      + '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">'
+      + '<button id="_limBtn1" style="background:none;border:1px solid #334155;border-radius:10px;padding:9px 20px;color:#94a3b8;cursor:pointer;font-size:.9rem;">Fechar</button>'
+      + '<a href="planos-premium.html" style="background:#f97316;border:none;border-radius:10px;padding:9px 20px;color:#fff;cursor:pointer;font-size:.9rem;font-weight:700;text-decoration:none;">⭐ Ver Planos</a>'
+      + '</div></div>';
+    document.body.appendChild(modal);
+    modal.querySelector("#_limBtn1").onclick = () => modal.remove();
+    modal.onclick = (ev) => { if (ev.target === modal) modal.remove(); };
+  }
 
-      btn.addEventListener("click", async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
+  // ── Filtros premium ──────────────────────────────────────────────
+  let _premiumChecked    = false;
+  let _isPremium         = false;
+  let _filtroPais        = null;
+  let _filtroOrcMin      = null;
+  let _filtroOrcMax      = null;
+  let _filtroDiasMin     = null;
+  let _filtroDiasMax     = null;
+  let _filtroAvalMin     = null;
+  let _filtroTotalAvalMin = null;
 
-        if (!userId) { window.location.href = "login.html"; return; }
+  async function _verificarPremium() {
+    if (_premiumChecked) return _isPremium;
+    if (!userId) { _premiumChecked = true; return false; }
+    try {
+      const res = await authFetch(`${URL_API_BASE}/users/search-completo/${userId}`);
+      const usr = await res.json();
+      _isPremium = (usr?.usuario?.tipoConta || "FREE") === "PREMIUM";
+    } catch { _isPremium = false; }
+    _premiumChecked = true;
+    return _isPremium;
+  }
 
-        const curtido = btn.classList.contains("liked");
-        btn.classList.toggle("liked");
-        icon?.classList.toggle("bi-heart");
-        icon?.classList.toggle("bi-heart-fill");
-
-        const countEl = document.getElementById(`count-likes-${roteiroId}`);
-        if (countEl) {
-          const atual = parseInt(countEl.textContent.trim()) || 0;
-          const novo  = curtido ? Math.max(0, atual - 1) : atual + 1;
-          countEl.innerHTML = `<i class="bi bi-heart-fill" style="color:#f97316;"></i>${novo}`;
-        }
-
-        try {
-          const method = curtido ? "DELETE" : "POST";
-          await fetch(`${URL_API_BASE}/roteiros/${roteiroId}/likes/${userId}`, { method });
-        } catch (_) {
-          btn.classList.toggle("liked");
-          icon?.classList.toggle("bi-heart");
-          icon?.classList.toggle("bi-heart-fill");
-          if (countEl) {
-            const atual = parseInt(countEl.textContent.trim()) || 0;
-            const revert = curtido ? atual + 1 : Math.max(0, atual - 1);
-            countEl.innerHTML = `<i class="bi bi-heart-fill" style="color:#f97316;"></i>${revert}`;
-          }
-        }
-      });
+  function _mostrarSecaoFiltros(secao) {
+    ["filtrosVerificando","filtrosBloqueados","filtrosPremium"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = el.id === secao ? "" : "none";
     });
   }
 
+  function _inicializarFiltrosPremium() {
+    const sliderOrcMin  = document.getElementById("filtroOrcMin");
+    const sliderOrcMax  = document.getElementById("filtroOrcMax");
+    const sliderDiasMin = document.getElementById("filtroDiasMin");
+    const sliderDiasMax = document.getElementById("filtroDiasMax");
+    const sliderAval    = document.getElementById("filtroAvaliacao");
+    const sliderTotAval = document.getElementById("filtroTotalAval");
+    const inputPais     = document.getElementById("filtroPais");
+    if (!sliderOrcMax || sliderOrcMax.dataset.inicializado) return;
+    sliderOrcMax.dataset.inicializado = "1";
+
+    function atualizarLabels() {
+      const orcMin  = parseInt(sliderOrcMin.value);
+      const orcMax  = parseInt(sliderOrcMax.value);
+      const diasMin = parseInt(sliderDiasMin.value);
+      const diasMax = parseInt(sliderDiasMax.value);
+      const aval    = parseFloat(sliderAval.value);
+      const totAval = parseInt(sliderTotAval.value);
+
+      document.getElementById("filtroOrcMinVal").textContent  = `R$ ${orcMin.toLocaleString("pt-BR")}`;
+      document.getElementById("filtroOrcMaxVal").textContent  = orcMax  >= 50000 ? "Sem limite" : `R$ ${orcMax.toLocaleString("pt-BR")}`;
+      document.getElementById("filtroDiasMinVal").textContent = `${diasMin} dia${diasMin > 1 ? "s" : ""}`;
+      document.getElementById("filtroDiasMaxVal").textContent = diasMax >= 30    ? "Sem limite" : `${diasMax} dia${diasMax > 1 ? "s" : ""}`;
+      document.getElementById("filtroAvaliacaoVal").textContent = aval  > 0    ? `${aval.toFixed(1)} ⭐` : "Qualquer";
+      document.getElementById("filtroTotalAvalVal").textContent = totAval > 0  ? `${totAval} ou mais` : "Sem filtro";
+    }
+
+    [sliderOrcMin, sliderOrcMax, sliderDiasMin, sliderDiasMax, sliderAval, sliderTotAval]
+      .forEach(el => el.addEventListener("input", atualizarLabels));
+
+    document.getElementById("btnAplicarFiltros")?.addEventListener("click", () => {
+      const orcMin  = parseInt(sliderOrcMin.value);
+      const orcMax  = parseInt(sliderOrcMax.value);
+      const diasMin = parseInt(sliderDiasMin.value);
+      const diasMax = parseInt(sliderDiasMax.value);
+      const aval    = parseFloat(sliderAval.value);
+      const totAval = parseInt(sliderTotAval.value);
+
+      _filtroPais        = (inputPais?.value || "").trim() || null;
+      _filtroOrcMin      = orcMin  > 0     ? orcMin  : null;
+      _filtroOrcMax      = orcMax  < 50000 ? orcMax  : null;
+      _filtroDiasMin     = diasMin > 1     ? diasMin : null;
+      _filtroDiasMax     = diasMax < 30    ? diasMax : null;
+      _filtroAvalMin     = aval    > 0     ? aval    : null;
+      _filtroTotalAvalMin = totAval > 0    ? totAval : null;
+
+      const temFiltro = _filtroPais || _filtroOrcMin != null || _filtroOrcMax != null
+        || _filtroDiasMin != null || _filtroDiasMax != null
+        || _filtroAvalMin != null || _filtroTotalAvalMin != null;
+      const aviso = document.getElementById("filtrosAtivosAviso");
+      if (aviso) aviso.style.display = temFiltro ? "" : "none";
+      filtrarEAplicar();
+      bootstrap.Offcanvas.getInstance(document.getElementById("offcanvasFilters"))?.hide();
+    });
+
+    document.getElementById("btnLimparFiltros")?.addEventListener("click", () => {
+      sliderOrcMin.value  = 0;
+      sliderOrcMax.value  = 50000;
+      sliderDiasMin.value = 1;
+      sliderDiasMax.value = 30;
+      sliderAval.value    = 0;
+      sliderTotAval.value = 0;
+      if (inputPais) inputPais.value = "";
+      _filtroPais = _filtroOrcMin = _filtroOrcMax = null;
+      _filtroDiasMin = _filtroDiasMax = _filtroAvalMin = _filtroTotalAvalMin = null;
+      atualizarLabels();
+      const aviso = document.getElementById("filtrosAtivosAviso");
+      if (aviso) aviso.style.display = "none";
+      filtrarEAplicar();
+    });
+  }
+
+  document.getElementById("btnFiltrosAvancados")?.addEventListener("click", () => {
+    const offcanvasEl = document.getElementById("offcanvasFilters");
+    if (!offcanvasEl) return;
+    bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl).show();
+    _inicializarFiltrosPremium();
+  });
+
+  // ── Filtro principal ─────────────────────────────────────────────
   function filtrarEAplicar() {
     const busca = (document.getElementById("feedBusca")?.value || "").toLowerCase().trim();
     const tipo  = document.getElementById("feedTipo")?.value || "";
 
-    renderFeed(todosRoteiros.filter(r => {
+    roteirosVisiveis = todosRoteiros.filter(r => {
       const matchBusca = !busca
         || (r.titulo     || "").toLowerCase().includes(busca)
         || (r.cidade     || "").toLowerCase().includes(busca)
         || (r.observacoes|| "").toLowerCase().includes(busca);
-      const matchTipo = !tipo || r.tipoRoteiro === tipo;
-      return matchBusca && matchTipo;
-    }));
+      const matchTipo     = !tipo || r.tipoRoteiro === tipo;
+      const matchPais     = !_filtroPais || (r.pais || "").toLowerCase().includes(_filtroPais.toLowerCase());
+      const matchOrcMin   = _filtroOrcMin      == null || (r.orcamento     != null && Number(r.orcamento)     >= _filtroOrcMin);
+      const matchOrcMax   = _filtroOrcMax      == null || (r.orcamento     != null && Number(r.orcamento)     <= _filtroOrcMax);
+      const matchDiasMin  = _filtroDiasMin     == null || (r.diasTotais    != null && Number(r.diasTotais)    >= _filtroDiasMin);
+      const matchDiasMax  = _filtroDiasMax     == null || (r.diasTotais    != null && Number(r.diasTotais)    <= _filtroDiasMax);
+      const matchAval     = _filtroAvalMin     == null || (Number(r.mediaAvaliacao || 0) >= _filtroAvalMin);
+      const matchTotAval  = _filtroTotalAvalMin == null || (Number(r.totalAvaliacoes || 0) >= _filtroTotalAvalMin);
+      return matchBusca && matchTipo && matchPais && matchOrcMin && matchOrcMax && matchDiasMin && matchDiasMax && matchAval && matchTotAval;
+    });
+    paginaFeed = 0;
+    renderFeed(roteirosVisiveis);
   }
 
   document.getElementById("feedBusca")?.addEventListener("input",  filtrarEAplicar);
   document.getElementById("feedTipo")?.addEventListener("change",   filtrarEAplicar);
 
-  fetch(`${URL_API_BASE}/roteiros`)
+  fetch(`${URL_API_BASE}/roteiros/publicos`)
     .then(r => { if (!r.ok) throw new Error(); return r.json(); })
     .then(data => {
-      todosRoteiros = data.filter(r => r.visibilidadeRoteiro === "PUBLIC");
+      const lista = Array.isArray(data) ? data : (data.content || []);
+      // Nunca exibe RASCUNHO no feed público — roteiro só aparece após Finalizar
+      todosRoteiros = lista.filter(r => r.statusRoteiro !== "RASCUNHO");
       filtrarEAplicar();
     })
     .catch(() => {
@@ -283,3 +432,6 @@
       document.getElementById("feedVazio").style.display   = "";
     });
 })();
+
+
+

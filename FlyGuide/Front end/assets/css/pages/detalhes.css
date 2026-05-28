@@ -6,6 +6,11 @@
   - Correção do bug: conteúdo abaixo do hero ficando "por baixo" da imagem
 */
 
+/* Chevron do accordion de dias */
+#listaLocais .collapse.show ~ * .bi-chevron-down,
+#listaLocais [aria-expanded="true"] .bi-chevron-down { transform: rotate(180deg); }
+html[data-theme="dark"] #listaLocais section { border-color: #334155 !important; }
+
 /* Container logo abaixo do hero (usa margin negativo para sobrepor) */
 .details-top{
   margin-top: -62px;
@@ -25,16 +30,20 @@
   z-index: 2;
 }
 
-.icon-btn{
+.icon-btn,
+button.icon-btn{
   width: 40px; height: 40px;
   border-radius: 12px;
   border: 1px solid rgba(226,232,240,.9);
   background: rgba(255,255,255,.92);
   display:grid; place-items:center;
   cursor:pointer;
+  padding: 0;
 }
-.icon-btn i{ color:#0f172a; opacity:.85; }
-.icon-btn.danger i{ color:#ef4444; }
+.icon-btn i,
+button.icon-btn i{ color:#0f172a; opacity:.85; }
+.icon-btn.danger i,
+button.icon-btn.danger i{ color:#ef4444; }
 
 .back-btn{
   position:absolute;
@@ -104,6 +113,9 @@
   margin-top: 16px;
 }
 .section-title{ font-weight: 800; margin-bottom: 12px; }
+
+.dia-header-label{ font-weight: 800; font-size: 1rem; color: #0f172a; }
+html[data-theme="dark"] .dia-header-label{ color: #f1f5f9 !important; }
 
 .day-item{
   border-radius: 14px;
@@ -176,10 +188,21 @@
 .pac-container {
   z-index: 10055 !important; /* Acima do modal Bootstrap (z-index 1055) */
 }
-/* Fix: modal-dialog-scrollable esconde o dropdown — libera overflow no modal-body quando na aba locais */
-#modalEditarDetalhe .modal-body {
-  overflow: visible !important;
+
+/* Avaliações por dia */
+#secaoAvaliacoesDia > div[style*="border"] {
+  transition: box-shadow .2s;
 }
-#modalEditarDetalhe .modal-dialog {
-  overflow: visible !important;
+#secaoAvaliacoesDia > div[style*="border"]:hover {
+  box-shadow: 0 4px 14px rgba(249,115,22,.1);
+}
+html[data-theme="dark"] #secaoAvaliacoesDia > div[style*="border"] {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+}
+html[data-theme="dark"] #secaoAvaliacoesDia span[style*="color:#1e293b"] {
+  color: #f1f5f9 !important;
+}
+html[data-theme="dark"] #secaoAvaliacoesDia div[style*="border-left"] {
+  color: #94a3b8 !important;
 }

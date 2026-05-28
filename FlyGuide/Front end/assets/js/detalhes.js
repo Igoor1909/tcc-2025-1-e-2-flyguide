@@ -1,4 +1,4 @@
-/* ================================================================
+﻿/* ================================================================
    FlyGuide - detalhes.js
    Página de detalhes de um roteiro (pages/detalhes-roteiro.html)
    Depende de: app.js, imagens.js
@@ -7,11 +7,13 @@
 (function iniciarDetalhes() {
   if (document.body.getAttribute("data-pagina") !== "detalhes-roteiro") return;
 
-  const URL_API_BASE = "http://localhost:8080";
-  const SESSION_KEY  = "flyguide.userId";
+  const URL_API_BASE = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app";
   const params       = new URLSearchParams(window.location.search);
   const roteiroId    = params.get("id");
-  const userId       = sessionStorage.getItem(SESSION_KEY);
+  const userId       = getUserIdFromToken();
+  const EMPTY_TEXT   = "\u2014";
+  const PUBLICO      = "P\u00fablico";
+  const PRIVADO      = "Privado";
 
   const loading  = document.getElementById("detalhesLoading");
   const erro     = document.getElementById("detalhesErro");
@@ -21,49 +23,702 @@
 
   function setText(id, val) {
     const el = document.getElementById(id);
-    if (el) el.textContent = val || "—";
+    if (el) el.textContent = val || EMPTY_TEXT;
   }
 
   function formatarData(dataStr) {
-    if (!dataStr) return "—";
+    if (!dataStr) return EMPTY_TEXT;
     const [y, m, d] = dataStr.split("-");
     const meses = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
     return `${parseInt(d)} ${meses[parseInt(m) - 1]} ${y}`;
   }
 
-  function renderLocais(locais) {
-    if (!locais || locais.length === 0) {
-      document.getElementById("secaoSemLocais").style.display = "";
-      return;
-    }
-    document.getElementById("secaoLocais").style.display = "";
-    const lista = document.getElementById("listaLocais");
-    lista.innerHTML = locais
-      .sort((a, b) => (a.dia || 0) - (b.dia || 0) || (a.ordem || 0) - (b.ordem || 0))
-      .map((l, idx) => `
-        <div class="day-item">
-          <div class="day-bubble">${l.dia || idx + 1}</div>
-          <div class="day-main">
-            <div class="topline">
-              <div class="name">${escapeHtml(l.nome || "Local")}</div>
-            </div>
-            ${l.observacoes ? `<div class="text-secondary mt-1" style="font-size:.9rem;">${escapeHtml(l.observacoes)}</div>` : ""}
-            ${l.endereco ? `
-              <div class="costline mt-1">
-                <i class="bi bi-geo-alt-fill" style="color:#f97316;"></i>
-                <span style="font-size:.82rem;color:#64748b;">${escapeHtml(l.endereco)}</span>
-              </div>` : ""}
-            ${l.latitude && l.longitude ? `
-              <a href="https://www.google.com/maps/search/?api=1&query=${l.latitude},${l.longitude}"
-                 target="_blank"
-                 style="display:inline-flex;align-items:center;gap:6px;margin-top:6px;font-size:.78rem;color:#f97316;font-weight:700;text-decoration:none;">
-                <i class="bi bi-map"></i> Ver no Google Maps
-              </a>` : ""}
-          </div>
-        </div>`).join("");
+  function normalizarHorario(valor) {
+    const horario = String(valor || "").trim();
+    if (!horario) return null;
+    if (/^\d{2}:\d{2}$/.test(horario)) return `${horario}:00`;
+    if (/^\d{2}:\d{2}:\d{2}$/.test(horario)) return horario;
+    return null;
   }
 
-  fetch(`${URL_API_BASE}/roteiros/${roteiroId}/completo`)
+  function formatarHorario(valor) {
+    const horario = normalizarHorario(valor);
+    return horario ? horario.slice(0, 5) : "";
+  }
+
+  function horarioParaOrdem(valor) {
+    const horario = normalizarHorario(valor);
+    if (!horario) return Number.MAX_SAFE_INTEGER;
+    const [hora, minuto] = horario.split(":").map(Number);
+    return (hora * 60) + minuto;
+  }
+
+  function compararLocais(a, b) {
+    return (a.dia || 0) - (b.dia || 0)
+      || horarioParaOrdem(a.horario) - horarioParaOrdem(b.horario)
+      || (a.ordem || 0) - (b.ordem || 0)
+      || String(a.nome || "").localeCompare(String(b.nome || ""), "pt-BR");
+  }
+
+  function calcularAberturaAgora(periods) {
+    if (!periods || !periods.length) return null;
+    if (periods.length === 1 && periods[0].open?.time === "0000" && !periods[0].close) return true;
+    const now  = new Date();
+    const day  = now.getDay();
+    const hhmm = now.getHours() * 100 + now.getMinutes();
+    return periods.some(p => {
+      if (!p.open) return false;
+      const od = p.open.day, ot = parseInt(p.open.time || "0000");
+      const cd = p.close != null ? p.close.day : od;
+      const ct = p.close != null ? parseInt(p.close.time || "2359") : 2359;
+      if (od === cd) return day === od && hhmm >= ot && hhmm < ct;
+      if (day === od) return hhmm >= ot;
+      if (day === cd) return hhmm < ct;
+      return (od < cd) ? (day > od && day < cd) : (day > od || day < cd);
+    });
+  }
+
+  function badgeAberturaHtml() {
+    return "";
+  }
+
+  // Converte o price_level (0-4) da Google Places API em badge HTML
+  function priceLevelHtml(level) {
+    if (level === undefined || level === null) return "";
+    const cfg = [
+      { signo: "",      label: "Gratuito",    cor: "#16a34a", bg: "#dcfce7" },
+      { signo: "$",     label: "Acessível",   cor: "#15803d", bg: "#d1fae5" },
+      { signo: "$$",    label: "Moderado",    cor: "#b45309", bg: "#fef3c7" },
+      { signo: "$$$",   label: "Caro",        cor: "#dc2626", bg: "#fee2e2" },
+      { signo: "$$$$",  label: "Muito caro",  cor: "#991b1b", bg: "#fecaca" },
+    ][level] || null;
+    if (!cfg) return "";
+    return `<span data-price-level="${level}" style="font-size:.72rem;font-weight:700;color:${cfg.cor};background:${cfg.bg};padding:2px 8px;border-radius:999px;">${cfg.signo ? cfg.signo + " · " : ""}${cfg.label}</span>`;
+  }
+
+  window.buscarHorariosDetalhes = function buscarHorariosDetalhes(locais) {
+    if (!window.google?.maps?.places) return;
+    const service = new google.maps.places.PlacesService(document.createElement("div"));
+    const vistos = new Set();
+    locais.forEach(l => {
+      if (!l.placeId || vistos.has(l.placeId)) return;
+      vistos.add(l.placeId);
+      service.getDetails({ placeId: l.placeId, fields: ["opening_hours"] }, (place, status) => {
+        if (status !== google.maps.places.PlacesServiceStatus.OK || !place) return;
+        const data = {
+          periods:     place.opening_hours?.periods      || [],
+          weekdayText: place.opening_hours?.weekday_text || [],
+          priceLevel:  null,
+        };
+        locais.filter(x => x.placeId === l.placeId).forEach(x => injetarBadgeDetalhe(x, data));
+      });
+    });
+  }
+
+  function injetarBadgeDetalhe(l, hoursData) {
+    const el = document.getElementById(`detalhe-local-${l.idRoteiroLocal}`);
+    if (!el || !hoursData) return;
+
+    // Badge abertura
+    if (!el.querySelector("[data-abertura]") && hoursData.periods.length > 0) {
+      const aberto = calcularAberturaAgora(hoursData.periods);
+      if (aberto !== null) {
+        el.insertAdjacentHTML("beforeend",
+          `<div data-abertura="1" style="font-size:.78rem;margin-top:4px;color:${aberto ? "#16a34a" : "#dc2626"};"><i class="bi bi-clock me-1"></i>${aberto ? "Aberto agora" : "Fechado agora"}</div>`);
+      }
+    }
+  }
+
+  function agruparLocaisPorDia(locais) {
+    const grupos = new Map();
+
+    [...locais].sort(compararLocais).forEach((local) => {
+      const chave = local.dia || 0;
+      if (!grupos.has(chave)) grupos.set(chave, []);
+      grupos.get(chave).push(local);
+    });
+
+    return [...grupos.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([dia, itens]) => ({ dia, itens }));
+  }
+
+  const SUGESTOES_TIPO = {
+    "Praia":       [{busca:"praia",custo:"Gratuito"},{busca:"passeio barco",custo:"R$ 80 a R$ 200"},{busca:"restaurante beira mar",custo:"R$ 60 a R$ 150"},{busca:"pôr do sol praia",custo:"Gratuito"}],
+    "Natureza":    [{busca:"trilha ecológica",custo:"Gratuito a R$ 30"},{busca:"cachoeira",custo:"Gratuito a R$ 20"},{busca:"mirante parque",custo:"Gratuito"},{busca:"parque nacional",custo:"R$ 20 a R$ 60"}],
+    "Aventura":    [{busca:"tirolesa",custo:"R$ 80 a R$ 150"},{busca:"rafting rio",custo:"R$ 120 a R$ 250"},{busca:"escalada",custo:"R$ 100 a R$ 200"},{busca:"mountain bike trilha",custo:"R$ 50 a R$ 120"}],
+    "Cultural":    [{busca:"museu histórico",custo:"R$ 15 a R$ 40"},{busca:"centro cultural",custo:"Gratuito a R$ 20"},{busca:"catedral igreja",custo:"Gratuito"},{busca:"mercado artesanal",custo:"Gratuito"}],
+    "Gastronomia": [{busca:"mercado gastronômico",custo:"R$ 30 a R$ 80"},{busca:"restaurante tradicional",custo:"R$ 50 a R$ 120"},{busca:"aula culinária",custo:"R$ 150 a R$ 300"},{busca:"feira gastronomia",custo:"Gratuito"}],
+    "Mochilão":    [{busca:"hostel",custo:"R$ 40 a R$ 80/noite"},{busca:"tour a pé free walking",custo:"Gratuito"},{busca:"bar",custo:"R$ 20 a R$ 50"},{busca:"ponto turístico",custo:"Gratuito a R$ 30"}],
+    "Luxo":        [{busca:"restaurante fine dining",custo:"R$ 300 a R$ 600"},{busca:"spa bem-estar",custo:"R$ 200 a R$ 500"},{busca:"tour privativo",custo:"R$ 500+"},{busca:"loja boutique luxo",custo:"Preço varia"}],
+    "Família":     [{busca:"parque diversões",custo:"R$ 100 a R$ 250"},{busca:"zoológico aquário",custo:"R$ 40 a R$ 100"},{busca:"museu interativo",custo:"R$ 25 a R$ 60"},{busca:"restaurante família",custo:"R$ 40 a R$ 100"}],
+    "default":     [{busca:"centro histórico",custo:"Gratuito"},{busca:"ponto turístico",custo:"Gratuito a R$ 40"},{busca:"museu",custo:"R$ 15 a R$ 40"},{busca:"restaurante",custo:"R$ 40 a R$ 100"}],
+  };
+
+  function parseCustoMedia(custo) {
+    if (!custo || custo === "—" || /varia/i.test(custo)) return null;
+    if (/gratuito/i.test(custo)) return 0;
+    const nums = (custo.match(/\d[\d.,]*/g) || []).map(n => parseFloat(n.replace(",", ".")));
+    if (!nums.length) return null;
+    return nums.length >= 2 ? (nums[0] + nums[1]) / 2 : nums[0];
+  }
+
+  function calcularTotalSugestoes(dias) {
+    let total = 0;
+    let temValor = false;
+    (dias || []).forEach(d => {
+      locaisDoDia(d).forEach(l => {
+        const local = normalizarLocal(l);
+        const val   = parseCustoMedia(local.custo);
+        if (val !== null) { total += val; temValor = true; }
+      });
+    });
+    return temValor ? total : null;
+  }
+
+  function atualizarOrcamento(roteiro, dias) {
+    const orcEl   = document.getElementById("detalheOrcamento");
+    const labelEl = document.getElementById("detalheOrcamentoLabel");
+    if (!orcEl) return;
+    if (roteiro.orcamento && roteiro.orcamento > 0) {
+      orcEl.textContent  = "R$ " + Number(roteiro.orcamento).toLocaleString("pt-BR", { minimumFractionDigits: 0 });
+      return;
+    }
+    const total = calcularTotalSugestoes(dias);
+    if (total !== null) {
+      orcEl.textContent  = "R$ " + Math.round(total).toLocaleString("pt-BR");
+      if (labelEl) labelEl.textContent = "Estimado por atividade";
+    }
+  }
+
+  function normalizarLocal(l) {
+    if (!l) return { nome: "", custo: null, _replace: false, _busca: null, _checkin: false, _checkout: false, endereco: null };
+    if (typeof l === "string") return { nome: l, custo: null, _replace: false, _busca: null, _checkin: false, _checkout: false, endereco: null };
+    return { nome: l.nome || "", custo: l.custo || null, _replace: !!l._replace, _busca: l._busca || null,
+             _checkin: !!l._checkin, _checkout: !!l._checkout, endereco: l.endereco || null };
+  }
+
+  const PERIODOS_CONFIG = [
+    { key: "manha", label: "Manhã",  icon: "bi-sunrise-fill",   cor: "#f59e0b" },
+    { key: "tarde", label: "Tarde",  icon: "bi-sun-fill",        cor: "#f97316" },
+    { key: "noite", label: "Noite",  icon: "bi-moon-stars-fill", cor: "#6366f1" },
+  ];
+
+  // Retorna array plano de todos os locais de um dia (periodos ou locais flat)
+  function locaisDoDia(d) {
+    if (d.periodos) {
+      return PERIODOS_CONFIG.flatMap(p => Array.isArray(d.periodos[p.key]) ? d.periodos[p.key] : []);
+    }
+    return Array.isArray(d.locais) ? d.locais : [];
+  }
+
+  function gerarSugestoesFrontend(roteiro) {
+    const dias   = roteiro.diasTotais || 1;
+    const cidade = roteiro.cidade || "destino";
+    const tipo   = roteiro.tipoRoteiro || "default";
+    const lista  = SUGESTOES_TIPO[tipo] || SUGESTOES_TIPO["default"];
+    const result = [];
+    for (let dia = 1; dia <= dias; dia++) {
+      const manha = [];
+      const tarde = [];
+      const noite = [];
+      if (dia === 1) manha.push({ nome: "Chegada em " + cidade + " e check-in", custo: "Preço varia" });
+      manha.push({ nome: lista[(dia - 1) % lista.length].busca, custo: lista[(dia - 1) % lista.length].custo, _busca: lista[(dia - 1) % lista.length].busca + " " + cidade, _replace: true });
+      tarde.push({ nome: lista[dia % lista.length].busca, custo: lista[dia % lista.length].custo, _busca: lista[dia % lista.length].busca + " " + cidade, _replace: true });
+      tarde.push({ nome: lista[(dia + 1) % lista.length].busca, custo: lista[(dia + 1) % lista.length].custo, _busca: lista[(dia + 1) % lista.length].busca + " " + cidade, _replace: true });
+      if (dia === dias && dias > 1) noite.push({ nome: "Últimas compras e retorno", custo: "Preço varia" });
+      noite.push({ nome: lista[(dia + 2) % lista.length].busca, custo: lista[(dia + 2) % lista.length].custo, _busca: lista[(dia + 2) % lista.length].busca + " " + cidade, _replace: true });
+      result.push({ dia, periodos: { manha, tarde, noite } });
+    }
+    return result;
+  }
+
+  function enrichWithMaps(cidade, pais, latSalva, lngSalva) {
+    if (!window.google?.maps?.places) {
+      setTimeout(() => enrichWithMaps(cidade, pais, latSalva, lngSalva), 600);
+      return;
+    }
+    const service = new google.maps.places.PlacesService(document.createElement("div"));
+    const items   = [...document.querySelectorAll("#aiDiasContainer [data-maps-query]")];
+    if (items.length === 0) return;
+
+    let pending   = items.length;
+    const aiPlaces    = [];
+    const usedPlaceIds = new Set();
+
+    // Tipos que nunca devem aparecer em roteiro turístico
+    const _BLOCKED_TYPES = new Set([
+      "lodging", "supermarket", "grocery_or_supermarket", "convenience_store",
+      "gas_station", "bank", "atm", "car_dealer", "car_repair", "car_wash",
+      "hardware_store", "laundry", "storage", "moving_company", "electrician",
+      "plumber", "locksmith", "painter", "roofing_contractor", "general_contractor",
+      "insurance_agency", "real_estate_agency", "finance", "accounting",
+      "car_rental", "embassy", "post_office", "courthouse", "police",
+      "fire_station", "funeral_home", "cemetery"
+    ]);
+
+    // Escolhe o melhor resultado excluindo tipos não turísticos e lugares já exibidos
+    function _pickPlace(results, minRatings) {
+      if (!results?.length) return null;
+      const valid = results.filter(r =>
+        r?.place_id &&
+        !usedPlaceIds.has(r.place_id) &&
+        !(r.types || []).some(t => _BLOCKED_TYPES.has(t))
+      );
+      return valid.find(r => (r.user_ratings_total || 0) >= minRatings) || valid[0] || null;
+    }
+
+    function onAllDone() {
+      if (aiPlaces.length > 0 && typeof window.renderMapaAiSugestoes === "function") {
+        window.renderMapaAiSugestoes(aiPlaces);
+      }
+    }
+
+    function _distKm(lat1, lng1, lat2, lng2) {
+      const R = 6371, toRad = d => d * Math.PI / 180;
+      const dLat = toRad(lat2 - lat1), dLng = toRad(lng2 - lng1);
+      const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLng/2)**2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    }
+
+
+
+    // Map common PT activity keywords to a Google Places type for nearbySearch
+    const _inferType = window.inferPlaceType;
+
+    function applyPlace(place, el, replace, dia, query) {
+      if (!place) return;
+      if (replace && place.name) {
+        const nameEl = el.querySelector(".ai-place-name");
+        if (nameEl) nameEl.textContent = place.name;
+      }
+      const addr = place.formatted_address || place.vicinity || "";
+      if (addr) {
+        const addrEl = el.querySelector(".ai-place-addr");
+        if (addrEl) { addrEl.innerHTML = `<i class="bi bi-geo-alt me-1"></i>${escapeHtml(addr)}`; addrEl.style.display = ""; }
+        el.dataset.addr = addr;
+      }
+      if (place.rating) {
+        const ratingEl = el.querySelector(".ai-place-rating");
+        if (ratingEl) {
+          ratingEl.innerHTML = `<i class="bi bi-star-fill" style="color:#facc15;font-size:.75rem;"></i> ${place.rating.toFixed(1)}`;
+          ratingEl.style.display = "inline-flex";
+        }
+      }
+      const openNow = place.opening_hours?.open_now ?? place.opening_hours?.isOpen?.() ?? null;
+      if (openNow !== null && openNow !== undefined) {
+        const mainEl = el.querySelector(".day-main");
+        if (mainEl && !mainEl.querySelector("[data-abertura]")) {
+          mainEl.insertAdjacentHTML("beforeend",
+            `<div data-abertura="1" style="font-size:.78rem;margin-top:4px;color:${openNow ? "#16a34a" : "#dc2626"};"><i class="bi bi-clock me-1"></i>${openNow ? "Aberto agora" : "Fechado agora"}</div>`);
+        }
+      }
+      // Badge de categoria
+      if (place.types?.length && !el.querySelector(".ai-place-category")) {
+        const badgeHtml = window.placeCategoryBadgeHtml(place.types);
+        if (badgeHtml) {
+          const addrEl = el.querySelector(".ai-place-addr");
+          if (addrEl) addrEl.insertAdjacentHTML("afterend", badgeHtml);
+        }
+      }
+
+      const mapsLink = el.querySelector(".ai-maps-link");
+      if (mapsLink) {
+        mapsLink.href = place.place_id
+          ? `https://www.google.com/maps/place/?q=place_id:${place.place_id}`
+          : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+      }
+      if (place.geometry?.location) {
+        const nomeFinal = replace && place.name
+          ? place.name
+          : (el.querySelector(".ai-place-name")?.textContent || query);
+        aiPlaces.push({ dia, nome: nomeFinal, lat: place.geometry.location.lat(), lng: place.geometry.location.lng() });
+      }
+    }
+
+    function runSearches(destLat, destLng) {
+      const destLocation = destLat != null ? new google.maps.LatLng(destLat, destLng) : null;
+
+      items.forEach(el => {
+        const query   = el.getAttribute("data-maps-query");
+        const replace = el.hasAttribute("data-maps-replace");
+        const dia     = parseInt(el.getAttribute("data-dia")) || 0;
+        if (!query) { if (--pending === 0) onAllDone(); return; }
+
+        function done(rawPlace) {
+          let place = rawPlace;
+          if (place && destLat != null && place.geometry?.location) {
+            if (_distKm(destLat, destLng, place.geometry.location.lat(), place.geometry.location.lng()) > 200) {
+              place = null;
+            }
+          }
+          if (place?.place_id) usedPlaceIds.add(place.place_id);
+          applyPlace(place, el, replace, dia, query);
+          if (--pending === 0) onAllDone();
+        }
+
+        if (destLocation && replace) {
+          const nameText = el.querySelector(".ai-place-name")?.textContent || "";
+          const type = _inferType(nameText);
+          // Usa a cidade como keyword SOMENTE no item de chegada, para garantir que o destino
+          // específico apareça. Os demais itens buscam só por tipo, trazendo variedade de lugares.
+          const isChegada = /check.in|chegada/i.test(nameText);
+          const searchParams = { location: destLocation, radius: 100000, type };
+          if (isChegada && cidade) searchParams.keyword = cidade;
+          service.nearbySearch(searchParams, (results, status) => {
+            done(status === google.maps.places.PlacesServiceStatus.OK ? _pickPlace(results, 10) : null);
+          });
+
+        } else if (destLocation) {
+          service.nearbySearch({
+            location: destLocation,
+            radius:   100000,
+            keyword:  query,
+          }, (results, status) => {
+            done(status === google.maps.places.PlacesServiceStatus.OK ? _pickPlace(results, 5) : null);
+          });
+
+        } else {
+          const geoQuery = [query, cidade, pais].filter(Boolean).join(", ");
+          service.textSearch({ query: geoQuery }, (results, status) => {
+            done(status === google.maps.places.PlacesServiceStatus.OK ? _pickPlace(results, 10) : null);
+          });
+        }
+      });
+    }
+
+    // Se o roteiro já tem coordenadas salvas, usa diretamente — sem geocoding
+    if (latSalva != null && lngSalva != null) {
+      runSearches(latSalva, lngSalva);
+    } else if (cidade || pais) {
+      // Geocoding com fallback progressivo: "Tóquio, Japão" → "Tóquio" → "Japão"
+      const geoQueries = [[cidade, pais], [cidade], [pais]]
+        .map(parts => parts.filter(Boolean).join(", "))
+        .filter(Boolean);
+      let geoIdx = 0;
+      function tryGeocode() {
+        if (geoIdx >= geoQueries.length) { runSearches(null, null); return; }
+        new google.maps.Geocoder().geocode({ address: geoQueries[geoIdx++] }, (results, status) => {
+          if (status === "OK" && results?.[0]?.geometry?.location) {
+            const loc = results[0].geometry.location;
+            runSearches(loc.lat(), loc.lng());
+          } else {
+            tryGeocode();
+          }
+        });
+      }
+      tryGeocode();
+    } else {
+      runSearches(null, null);
+    }
+  }
+
+  function renderSugestoesItinerario(roteiro) {
+    let dias = null;
+    if (Array.isArray(roteiro.sugestoes) && roteiro.sugestoes.length > 0) {
+      const first       = roteiro.sugestoes[0];
+      const temPeriodos = first?.periodos && typeof first.periodos === "object";
+      const firstLocal  = first?.locais?.[0];
+      const temLocais   = firstLocal && typeof firstLocal === "object" && firstLocal.custo;
+      if (temPeriodos || temLocais) dias = roteiro.sugestoes;
+    }
+    if (!Array.isArray(dias) || dias.length === 0) dias = gerarSugestoesFrontend(roteiro);
+    if (!dias || dias.length === 0) return false;
+
+    const secao = document.getElementById("secaoSemLocais");
+    if (!secao) return false;
+
+    secao.style.display = "";
+    secao.innerHTML = `
+      <div class="section-title">Roteiro Dia a Dia</div>
+      <div style="background:#f0f4ff;border:1px solid #c7d2fe;border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px;">
+        <i class="bi bi-robot" style="color:#6366f1;font-size:1.1rem;flex-shrink:0;"></i>
+        <span style="font-size:.85rem;color:#4338ca;font-weight:600;">Sugest&otilde;es de atividades &mdash; enriquecidas com dados do Google Maps.</span>
+      </div>
+      <div id="aiDiasContainer"></div>`;
+
+    document.getElementById("aiDiasContainer").innerHTML = dias.map((d, diaIdx) => {
+      const locaisList = locaisDoDia(d);
+      const collapseId = `ai-dia-collapse-${d.dia}`;
+      const aberto     = diaIdx === 0 ? "show" : "";
+      const expandido  = diaIdx === 0 ? "true" : "false";
+
+      let gIdx = 0;
+
+      function mkItemHtml(local, dia, bubbleCor) {
+        // Special fixed marker for check-in / checkout
+        if (local._checkin || local._checkout) {
+          const isCI   = !!local._checkin;
+          const icon   = isCI ? "bi-key-fill" : "bi-box-arrow-right";
+          const bg     = isCI ? "#f0fdf4" : "#fff7ed";
+          const clr    = isCI ? "#16a34a" : "#ea580c";
+          const border = isCI ? "#bbf7d0" : "#fed7aa";
+          const label  = isCI ? "Check-in" : "Checkout";
+          gIdx++;
+          return `<div class="day-item" data-dia="${dia}" style="border-left:3px solid ${clr};background:${bg};border-radius:10px;margin-bottom:6px;">
+            <div class="day-bubble" style="background:${clr}22;color:${clr};"><i class="bi ${icon}"></i></div>
+            <div class="day-main">
+              <div class="topline">
+                <div class="name" style="color:${clr};font-weight:800;">${escapeHtml(label)}</div>
+              </div>
+            </div>
+          </div>`;
+        }
+
+        const query    = local._busca || (local.nome + (roteiro.cidade ? ", " + roteiro.cidade : ""));
+        const mapsQ    = encodeURIComponent(query);
+        const dataRep  = local._replace ? "data-maps-replace" : "";
+        const curIdx   = gIdx++;
+        const bStyle   = bubbleCor
+          ? `background:${bubbleCor}22;color:${bubbleCor};`
+          : `background:#e0e7ff;color:#4338ca;`;
+        const _endAI = local.endereco ? escapeHtml(local.endereco) : "";
+        return `<div class="day-item" id="ai-place-${diaIdx}-${curIdx}"
+             data-maps-query="${escapeHtml(query)}" ${dataRep} data-dia="${dia}"${_endAI ? ` data-addr="${_endAI}"` : ""}>
+          <div class="day-bubble" style="${bStyle}">${curIdx + 1}</div>
+          <div class="day-main">
+            <div class="topline" style="flex-wrap:wrap;gap:6px;">
+              <div class="name ai-place-name">${escapeHtml(local.nome)}</div>
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                ${local.custo ? `<span class="ai-place-custo" style="font-size:.72rem;font-weight:700;color:#15803d;background:#dcfce7;padding:2px 8px;border-radius:999px;">${escapeHtml(local.custo.replace(/[Rr]\$\s*/g, "$ ").trim())}</span>` : ""}
+                <span class="ai-place-rating" style="display:none;align-items:center;gap:3px;font-size:.75rem;font-weight:700;color:#92400e;background:#fef3c7;padding:2px 8px;border-radius:999px;"></span>
+              </div>
+            </div>
+            <div class="ai-place-addr" style="${_endAI ? "" : "display:none;"}font-size:.78rem;color:#64748b;margin-top:3px;">${_endAI ? `<i class="bi bi-geo-alt me-1"></i>${_endAI}` : ""}</div>
+            <div style="margin-top:6px;display:flex;gap:10px;align-items:center;">
+              <a class="ai-maps-link" href="https://www.google.com/maps/search/?api=1&query=${mapsQ}"
+                 target="_blank" rel="noopener"
+                 style="display:inline-flex;align-items:center;gap:5px;font-size:.78rem;color:#f97316;font-weight:700;text-decoration:none;">
+                <i class="bi bi-map"></i> Ver no Maps
+              </a>
+            </div>
+          </div>
+        </div>`;
+      }
+
+      let itemsHtml = "";
+      if (d.periodos) {
+        PERIODOS_CONFIG.forEach(pc => {
+          const pLocais = Array.isArray(d.periodos[pc.key]) ? d.periodos[pc.key] : [];
+          if (!pLocais.length) return;
+          gIdx = 0;
+          const perColId = `per-det-${diaIdx}-${pc.key}`;
+          itemsHtml += `<div style="margin-bottom:8px;" data-period-key="${pc.key}" data-period-cor="${pc.cor}" data-period-icon="${pc.icon}" data-period-label="${pc.label}">
+            <button class="w-100 d-flex align-items-center justify-content-between border-0 px-2 py-1"
+                    style="background:${pc.cor}18;border-radius:8px;cursor:pointer;"
+                    data-bs-toggle="collapse" data-bs-target="#${perColId}" aria-expanded="true">
+              <div style="display:flex;align-items:center;gap:6px;">
+                <i class="bi ${pc.icon}" style="color:${pc.cor};font-size:.82rem;"></i>
+                <span style="font-size:.78rem;font-weight:700;color:${pc.cor};">${pc.label}</span>
+                <span class="per-count-badge" style="font-size:.68rem;font-weight:700;color:${pc.cor};opacity:.7;">${pLocais.length} ${pLocais.length === 1 ? "local" : "locais"}</span>
+              </div>
+              <i class="bi bi-chevron-down" style="color:${pc.cor};font-size:.72rem;transition:transform .2s;opacity:.7;"></i>
+            </button>
+            <div id="${perColId}" class="collapse show" style="padding:4px 0 0 0;">
+              ${pLocais.map(l => mkItemHtml(normalizarLocal(l), d.dia, pc.cor)).join("")}
+            </div>
+          </div>`;
+        });
+      } else {
+        (Array.isArray(d.locais) ? d.locais : []).forEach(l => {
+          itemsHtml += mkItemHtml(normalizarLocal(l), d.dia, null);
+        });
+      }
+
+      return `<section style="margin-bottom:12px;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;">
+        <button class="w-100 d-flex align-items-center justify-content-between gap-3 px-4 py-3 border-0 bg-transparent"
+                style="cursor:pointer;"
+                data-bs-toggle="collapse"
+                data-bs-target="#${collapseId}"
+                aria-expanded="${expandido}">
+          <div class="dia-header-label mb-0">Dia ${d.dia}</div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:.78rem;font-weight:700;color:#6366f1;">${locaisList.length} ${locaisList.length === 1 ? "local" : "locais"}</span>
+            <i class="bi bi-chevron-down" style="color:#94a3b8;transition:transform .2s;"></i>
+          </div>
+        </button>
+        <div id="${collapseId}" class="collapse ${aberto}">
+          <div style="padding:0 16px 16px;">
+            ${itemsHtml}
+          </div>
+        </div>
+      </section>`;
+    }).join("");
+
+    atualizarOrcamento(roteiro, dias);
+    enrichWithMaps(roteiro.cidade, roteiro.pais, roteiro.latDestino ?? null, roteiro.lngDestino ?? null);
+    return true;
+  }
+
+  function _localCardHtml(l, cor) {
+    const bStyle = cor ? `background:${cor}22;color:${cor};` : `background:#fff7ed;color:#f97316;`;
+    return `<div class="day-item" data-real-local${l.placeId ? ` data-real-place-id="${escapeHtml(l.placeId)}"` : ""}${l.endereco ? ` data-addr="${escapeHtml(l.endereco)}"` : ""}>
+      <div class="day-bubble" data-real-bubble style="${bStyle}">?</div>
+      <div class="day-main" id="detalhe-local-${l.idRoteiroLocal}">
+        <div class="topline" style="gap:10px;flex-wrap:wrap;">
+          <div class="name">${escapeHtml(l.nome || "Local")}</div>
+          <span class="real-place-rating" style="display:none;align-items:center;gap:3px;font-size:.75rem;font-weight:700;color:#92400e;background:#fef3c7;padding:2px 8px;border-radius:999px;"></span>
+        </div>
+        ${l.observacoes ? `<div class="text-secondary mt-1" style="font-size:.9rem;">${escapeHtml(l.observacoes)}</div>` : ""}
+        ${l.endereco ? `<div class="costline mt-1"><i class="bi bi-geo-alt-fill" style="color:#f97316;"></i><span style="font-size:.82rem;color:#64748b;">${escapeHtml(l.endereco)}</span></div>` : ""}
+        ${badgeAberturaHtml(l.placeId)}
+        ${l.latitude && l.longitude ? `<a href="https://www.google.com/maps/search/?api=1&query=${l.latitude},${l.longitude}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;margin-top:6px;font-size:.78rem;color:#f97316;font-weight:700;text-decoration:none;"><i class="bi bi-map"></i> Ver no Google Maps</a>` : ""}
+      </div>
+    </div>`;
+  }
+
+  function enrichRealLocais() {
+    if (!window.google?.maps?.places) { setTimeout(enrichRealLocais, 600); return; }
+    const service = new google.maps.places.PlacesService(document.createElement("div"));
+    document.querySelectorAll("[data-real-place-id]").forEach(el => {
+      const placeId = el.getAttribute("data-real-place-id");
+      if (!placeId) return;
+      service.getDetails({ placeId, fields: ["rating"] }, (place, status) => {
+        if (status !== google.maps.places.PlacesServiceStatus.OK || !place?.rating) return;
+        const ratingEl = el.querySelector(".real-place-rating");
+        if (ratingEl) {
+          ratingEl.innerHTML = `<i class="bi bi-star-fill" style="color:#facc15;font-size:.75rem;"></i> ${place.rating.toFixed(1)}`;
+          ratingEl.style.display = "inline-flex";
+        }
+      });
+    });
+  }
+
+  function _renumerarDia(collapseInner) {
+    if (!collapseInner) return;
+    collapseInner.querySelectorAll("[data-period-key]").forEach(perDiv => {
+      perDiv.querySelectorAll(".day-item").forEach((item, i) => {
+        const bubble = item.querySelector(".day-bubble");
+        if (bubble) bubble.textContent = i + 1;
+      });
+    });
+  }
+
+  function renderLocais(locais, roteiro) {
+    if (!locais || locais.length === 0) {
+      if (!renderSugestoesItinerario(roteiro || {})) {
+        document.getElementById("secaoSemLocais").style.display = "";
+      }
+      return;
+    }
+
+    // If AI suggestions exist: inject real locais into the correct period within each day accordion
+    if (renderSugestoesItinerario(roteiro || {})) {
+      const container = document.getElementById("aiDiasContainer");
+      if (container) {
+        function _horarioToPeriodo(horario) {
+          if (!horario) return null;
+          var hStr = Array.isArray(horario)
+            ? String(horario[0] || 0).padStart(2, "0") + ":" + String(horario[1] || 0).padStart(2, "0")
+            : String(horario).slice(0, 5);
+          if (hStr < "12:00") return "manha";
+          if (hStr < "18:00") return "tarde";
+          return "noite";
+        }
+
+        const grupos = agruparLocaisPorDia(locais);
+        grupos.forEach(({ dia, itens }) => {
+          let daySection = null;
+          container.querySelectorAll("section").forEach(sec => {
+            const hdr = sec.querySelector(".dia-header-label");
+            if (hdr && hdr.textContent.trim() === `Dia ${dia}`) daySection = sec;
+          });
+
+          const collapseInner = daySection ? daySection.querySelector(".collapse > div") : null;
+
+          itens.forEach(local => {
+            const per = _horarioToPeriodo(local.horario);
+            let perContainer = collapseInner && per ? collapseInner.querySelector(`[data-period-key="${per}"]`) : null;
+
+            if (!perContainer && collapseInner) {
+              const cfg = PERIODOS_CONFIG.find(p => p.key === per) || { key: per || "sem", label: per === "manha" ? "Manhã" : per === "tarde" ? "Tarde" : per === "noite" ? "Noite" : "Outros", icon: "bi-pin-map-fill", cor: "#64748b" };
+              const newPerColId = `per-det-new-${per}-${Date.now()}`;
+              collapseInner.insertAdjacentHTML("beforeend",
+                `<div style="margin-bottom:8px;" data-period-key="${cfg.key}" data-period-cor="${cfg.cor}" data-period-icon="${cfg.icon}" data-period-label="${cfg.label}">
+                  <button class="w-100 d-flex align-items-center justify-content-between border-0 px-2 py-1"
+                          style="background:${cfg.cor}18;border-radius:8px;cursor:pointer;"
+                          data-bs-toggle="collapse" data-bs-target="#${newPerColId}" aria-expanded="true">
+                    <div style="display:flex;align-items:center;gap:6px;">
+                      <i class="bi ${cfg.icon}" style="color:${cfg.cor};font-size:.82rem;"></i>
+                      <span style="font-size:.78rem;font-weight:700;color:${cfg.cor};">${cfg.label}</span>
+                      <span class="per-count-badge" style="font-size:.68rem;font-weight:700;color:${cfg.cor};opacity:.7;">0 locais</span>
+                    </div>
+                    <i class="bi bi-chevron-down" style="color:${cfg.cor};font-size:.72rem;transition:transform .2s;opacity:.7;"></i>
+                  </button>
+                  <div id="${newPerColId}" class="collapse show" style="padding:4px 0 0 0;"></div>
+                </div>`);
+              perContainer = collapseInner.querySelector(`[data-period-key="${cfg.key}"]`);
+            }
+
+            if (perContainer) {
+              const perCor = perContainer.getAttribute("data-period-cor") || null;
+              const perBody = perContainer.querySelector(".collapse") || perContainer;
+              perBody.insertAdjacentHTML("beforeend", _localCardHtml(local, perCor));
+            } else if (collapseInner) {
+              collapseInner.insertAdjacentHTML("beforeend", _localCardHtml(local, null));
+            } else {
+              // Day section doesn't exist — create it
+              const collapseId = `dia-collapse-extra-${dia ?? "sem"}`;
+              container.insertAdjacentHTML("beforeend", `
+                <section style="margin-bottom:12px;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;">
+                  <button class="w-100 d-flex align-items-center justify-content-between gap-3 px-4 py-3 border-0 bg-transparent"
+                          style="cursor:pointer;" data-bs-toggle="collapse" data-bs-target="#${collapseId}" aria-expanded="false">
+                    <div class="dia-header-label mb-0">${dia ? `Dia ${dia}` : "Sem dia definido"}</div>
+                    <div style="display:flex;align-items:center;gap:10px;">
+                      <span style="font-size:.78rem;font-weight:700;color:#6366f1;">1 local</span>
+                      <i class="bi bi-chevron-down" style="color:#94a3b8;transition:transform .2s;"></i>
+                    </div>
+                  </button>
+                  <div id="${collapseId}" class="collapse">
+                    <div style="padding:0 16px 16px;">${_localCardHtml(local)}</div>
+                  </div>
+                </section>`);
+            }
+          });
+
+          // Renumber items and update counts (day header + period badges)
+          if (daySection && collapseInner) {
+            _renumerarDia(collapseInner);
+            const total = collapseInner.querySelectorAll(".day-item").length;
+            const countSpan = daySection.querySelector("span[style*='#6366f1']");
+            if (countSpan) countSpan.textContent = `${total} ${total === 1 ? "local" : "locais"}`;
+            collapseInner.querySelectorAll("[data-period-key]").forEach(perDiv => {
+              const n = perDiv.querySelectorAll(".day-item").length;
+              const badge = perDiv.querySelector(".per-count-badge");
+              if (badge) badge.textContent = `${n} ${n === 1 ? "local" : "locais"}`;
+            });
+          }
+        });
+        enrichRealLocais();
+      }
+      return;
+    }
+
+    // No AI suggestions — render real locais only
+    document.getElementById("secaoLocais").style.display = "";
+    const lista = document.getElementById("listaLocais");
+    const grupos = agruparLocaisPorDia(locais);
+    lista.innerHTML = grupos.map(({ dia, itens }, grupoIdx) => {
+      const collapseId = `dia-collapse-${dia ?? "sem"}`;
+      const aberto = grupoIdx === 0 ? "show" : "";
+      return `
+      <section style="margin-bottom:12px;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;">
+        <button class="w-100 d-flex align-items-center justify-content-between gap-3 px-4 py-3 border-0 bg-transparent"
+                style="cursor:pointer;" data-bs-toggle="collapse" data-bs-target="#${collapseId}" aria-expanded="${grupoIdx === 0}">
+          <div class="dia-header-label mb-0">${dia ? `Dia ${dia}` : "Sem dia definido"}</div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:.78rem;font-weight:700;color:#64748b;">${itens.length} ${itens.length === 1 ? "parada" : "paradas"}</span>
+            <i class="bi bi-chevron-down" style="color:#94a3b8;transition:transform .2s;"></i>
+          </div>
+        </button>
+        <div id="${collapseId}" class="collapse ${aberto}">
+          <div style="padding:0 16px 16px;">${itens.map(_localCardHtml).join("")}</div>
+        </div>
+      </section>`;
+    }).join("");
+  }
+
+  authFetch(`${URL_API_BASE}/roteiros/${roteiroId}/completo`)
     .then(r => { if (!r.ok) throw new Error(); return r.json(); })
     .then(data => {
       const r      = data.roteiro;
@@ -87,14 +742,27 @@
       setText("detalheTitulo",  r.titulo);
       setText("detalheCidade",  r.cidade);
       setText("detalheTipo",    r.tipoRoteiro || "Viagem");
-      setText("detalheVis",     r.visibilidadeRoteiro === "PUBLIC" ? "Público" : "Privado");
+      setText("detalheVis",     r.visibilidadeRoteiro === PUBLICO ? PUBLICO : PRIVADO);
+      if (r.nomeUsuario) {
+        const autorWrap = document.getElementById("detalheAutorWrap");
+        if (autorWrap) { autorWrap.style.display = "flex"; }
+        setText("detalheAutor", r.nomeUsuario);
+      }
 
       // Stats
-      setText("detalheDias", r.diasTotais ? `${r.diasTotais} dia${r.diasTotais > 1 ? "s" : ""}` : "—");
-      if (r.dataInicio && r.dataFim) {
-        setText("detalhePeriodo", `${formatarData(r.dataInicio)} - ${formatarData(r.dataFim)}`);
+      setText("detalheDias", r.diasTotais ? `${r.diasTotais} dia${r.diasTotais > 1 ? "s" : ""}` : EMPTY_TEXT);
+      const periodoEl = document.getElementById("detalhePeriodo");
+      if (periodoEl) {
+        if (r.dataInicio && r.dataFim) {
+          periodoEl.textContent = `${formatarData(r.dataInicio)} - ${formatarData(r.dataFim)}`;
+          periodoEl.style.display = "";
+        } else {
+          periodoEl.style.display = "none";
+        }
       }
-      setText("detalheOrcamento", r.orcamento ? `R$ ${Number(r.orcamento).toLocaleString("pt-BR")}` : "—");
+      if (r.orcamento && r.orcamento > 0) {
+        setText("detalheOrcamento", `R$ ${Number(r.orcamento).toLocaleString("pt-BR")}`);
+      }
 
       // Descrição
       if (r.observacoes) {
@@ -103,56 +771,477 @@
       }
 
       // Locais/atividades
-      renderLocais(locais);
+      renderLocais(locais, r);
+      renderAvaliacoesDia(roteiroId);
+      if (window.google?.maps?.places) {
+        buscarHorariosDetalhes(locais);
+      } else {
+        window._flyguide_pendente_horarios = locais;
+      }
+
+      // Exportar PDF (visível para todos)
+      document.getElementById("btnExportarPdf")?.addEventListener("click", () => {
+        exportarPDF(r, locais);
+      });
 
       // Botões editar/excluir — só para o dono
       if (userId && String(r.idUsuario) === String(userId)) {
-        const acoes = document.getElementById("detalhesAcoes");
-        if (acoes) acoes.style.display = "";
+        document.getElementById("btnEditarDetalhes").style.display = "";
+        document.getElementById("btnExcluirDetalhes").style.display = "";
 
         document.getElementById("btnEditarDetalhes")?.addEventListener("click", () => {
-          abrirModalEdicaoDetalhes(r);
+          abrirModalEdicaoDetalhes(r, locais);
         });
 
-        const modalExcluir = new bootstrap.Modal(document.getElementById("modalExcluirDetalhe"));
-        document.getElementById("btnExcluirDetalhes")?.addEventListener("click", () => modalExcluir.show());
-        document.getElementById("btnConfirmarExclusaoDetalhe")?.addEventListener("click", async () => {
-          const btn = document.getElementById("btnConfirmarExclusaoDetalhe");
-          btn.disabled  = true;
-          btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Excluindo...`;
+        document.getElementById("btnExcluirDetalhes")?.addEventListener("click", async () => {
+          if (!await _confirmarExclusaoRoteiroDetalhe()) return;
+          const btnEl = document.getElementById("btnExcluirDetalhes");
+          if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`; }
           try {
-            const res = await fetch(`${URL_API_BASE}/roteiros/${roteiroId}`, { method: "DELETE" });
+            const res = await authFetch(`${URL_API_BASE}/roteiros/${roteiroId}?idUsuario=${userId}`, { method: "DELETE" });
             if (res.ok || res.status === 204) {
-              alert("Roteiro excluído com sucesso!");
               window.location.href = "meus-roteiros.html";
-            } else { alert("Não foi possível excluir."); }
-          } catch { alert("Erro ao conectar ao servidor."); }
-          finally {
-            btn.disabled  = false;
-            btn.innerHTML = `<i class="bi bi-trash me-1"></i>Excluir`;
+            } else {
+              alert("Não foi possível excluir. Tente novamente.");
+            }
+          } catch {
+            alert("Erro ao conectar ao servidor.");
+          } finally {
+            if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = `<i class="bi bi-trash"></i>`; }
           }
         });
       }
     })
     .catch(() => { loading.style.display = "none"; erro.style.display = ""; });
+
+  async function _validarTexto(texto) {
+    if (!texto || !texto.trim()) return true;
+    try {
+      var res = await authFetch(URL_API_BASE + "/validar/texto", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ texto: texto })
+      });
+      if (!res.ok) return true;
+      var data = await res.json();
+      return data.valido !== false;
+    } catch (_) { return true; }
+  }
+
+  // ── Helpers de confirmação ──
+  function _confirmarExclusaoRoteiroDetalhe() {
+    return new Promise(function(resolve) {
+      var overlay = document.createElement("div");
+      overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;";
+      overlay.innerHTML =
+        '<div style="background:#1e293b;border:1px solid #334155;border-radius:18px;padding:28px 24px;max-width:360px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.4);">'
+        + '<div style="width:52px;height:52px;border-radius:14px;background:#fef2f2;border:1px solid #fecaca;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">'
+        + '<i class="bi bi-trash3-fill" style="font-size:1.4rem;color:#dc2626;"></i>'
+        + '</div>'
+        + '<div style="font-size:1.05rem;font-weight:800;color:#f1f5f9;margin-bottom:8px;">Excluir Roteiro?</div>'
+        + '<div style="font-size:.88rem;color:#94a3b8;margin-bottom:24px;">Tem certeza que deseja excluir este roteiro? Esta ação não pode ser desfeita.</div>'
+        + '<div style="display:flex;gap:10px;">'
+        + '<button id="_excRotDetNao" style="flex:1;background:none;border:1px solid #334155;border-radius:10px;padding:10px 0;color:#94a3b8;cursor:pointer;font-size:.9rem;font-weight:600;">Cancelar</button>'
+        + '<button id="_excRotDetSim" style="flex:1;background:#dc2626;border:none;border-radius:10px;padding:10px 0;color:#fff;cursor:pointer;font-size:.9rem;font-weight:700;"><i class="bi bi-trash3 me-1"></i>Excluir</button>'
+        + '</div></div>';
+      document.body.appendChild(overlay);
+      function fechar(res) { overlay.remove(); resolve(res); }
+      overlay.querySelector("#_excRotDetSim").onclick = function() { fechar(true); };
+      overlay.querySelector("#_excRotDetNao").onclick = function() { fechar(false); };
+      overlay.addEventListener("click", function(e) { if (e.target === overlay) fechar(false); });
+    });
+  }
+
+  function _confirmarExclusaoDiaRating() {
+    return new Promise(function(resolve) {
+      var overlay = document.createElement("div");
+      overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;";
+      overlay.innerHTML =
+        '<div style="background:#1e293b;border:1px solid #334155;border-radius:18px;padding:28px 24px;max-width:360px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.4);">'
+        + '<div style="width:52px;height:52px;border-radius:14px;background:#fef2f2;border:1px solid #fecaca;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">'
+        + '<i class="bi bi-trash3-fill" style="font-size:1.4rem;color:#dc2626;"></i>'
+        + '</div>'
+        + '<div style="font-size:1.05rem;font-weight:800;color:#f1f5f9;margin-bottom:8px;">Excluir avaliação do dia?</div>'
+        + '<div style="font-size:.88rem;color:#94a3b8;margin-bottom:24px;">Sua nota e comentário deste dia serão removidos. Esta ação não pode ser desfeita.</div>'
+        + '<div style="display:flex;gap:10px;">'
+        + '<button id="_excDiaNao" style="flex:1;background:none;border:1px solid #334155;border-radius:10px;padding:10px 0;color:#94a3b8;cursor:pointer;font-size:.9rem;font-weight:600;">Cancelar</button>'
+        + '<button id="_excDiaSim" style="flex:1;background:#dc2626;border:none;border-radius:10px;padding:10px 0;color:#fff;cursor:pointer;font-size:.9rem;font-weight:700;"><i class="bi bi-trash3 me-1"></i>Excluir</button>'
+        + '</div></div>';
+      document.body.appendChild(overlay);
+      function fechar(res) { overlay.remove(); resolve(res); }
+      overlay.querySelector("#_excDiaSim").onclick = function() { fechar(true); };
+      overlay.querySelector("#_excDiaNao").onclick = function() { fechar(false); };
+      overlay.addEventListener("click", function(e) { if (e.target === overlay) fechar(false); });
+    });
+  }
+
+  function _abrirEditarDiaRating(roteiroId, dia, ratingAtual, onSalvar) {
+    var LEGENDAS_EDIT = ["", "Péssimo", "Ruim", "Regular", "Bom", "Excelente"];
+    var notaEdit = ratingAtual.nota || 0;
+
+    var overlay = document.createElement("div");
+    overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;";
+    overlay.innerHTML =
+      '<div style="background:#1e293b;border:1px solid #334155;border-radius:18px;padding:28px 24px;max-width:400px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.4);">'
+      + '<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">'
+      + '<div style="width:44px;height:44px;border-radius:12px;background:#fff7ed;border:1px solid #ffedd5;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'
+      + '<i class="bi bi-pencil-fill" style="color:#f97316;font-size:1.1rem;"></i></div>'
+      + '<div><div style="font-weight:800;color:#f1f5f9;font-size:1rem;">Editar avaliação</div>'
+      + '<div style="font-size:.82rem;color:#94a3b8;">Dia ' + escapeHtml(String(dia)) + '</div></div>'
+      + '</div>'
+      + '<div style="display:flex;gap:10px;justify-content:center;margin-bottom:8px;" id="_editDiaStars">'
+      + [1,2,3,4,5].map(function(i) {
+          return '<i class="bi ' + (i <= notaEdit ? 'bi-star-fill' : 'bi-star') + ' _edit-star-dia" data-nota="' + i + '"'
+            + ' style="font-size:1.8rem;cursor:pointer;color:' + (i <= notaEdit ? '#facc15' : '#475569') + ';transition:color .1s;"></i>';
+        }).join('')
+      + '</div>'
+      + '<div id="_editDiaLegenda" style="text-align:center;font-size:.82rem;color:#94a3b8;min-height:1.2em;margin-bottom:14px;">'
+      + escapeHtml(LEGENDAS_EDIT[notaEdit] || '') + '</div>'
+      + '<textarea id="_editDiaTexto" maxlength="500" placeholder="Conte como foi o dia (opcional)..."'
+      + ' style="width:100%;border-radius:10px;border:1px solid #334155;background:#0f172a;color:#f1f5f9;padding:10px;font-size:.88rem;resize:none;min-height:80px;box-sizing:border-box;">'
+      + escapeHtml(ratingAtual.texto || '') + '</textarea>'
+      + '<div id="_editDiaErro" style="display:none;font-size:.82rem;color:#ef4444;margin-top:8px;padding:8px 10px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.3);border-radius:8px;">'
+      + '<i class="bi bi-exclamation-circle me-1"></i>Comentário contém linguagem inapropriada. Por favor, revise o texto.'
+      + '</div>'
+      + '<div style="display:flex;gap:10px;margin-top:16px;">'
+      + '<button id="_editDiaCancelar" style="flex:1;background:none;border:1px solid #334155;border-radius:10px;padding:10px 0;color:#94a3b8;cursor:pointer;font-size:.9rem;font-weight:600;">Cancelar</button>'
+      + '<button id="_editDiaSalvar" style="flex:1;background:#f97316;border:none;border-radius:10px;padding:10px 0;color:#fff;cursor:pointer;font-size:.9rem;font-weight:700;"><i class="bi bi-check-lg me-1"></i>Salvar</button>'
+      + '</div></div>';
+    document.body.appendChild(overlay);
+
+    // Interação das estrelas
+    var starsContainer = overlay.querySelector("#_editDiaStars");
+    var legendaEl = overlay.querySelector("#_editDiaLegenda");
+    starsContainer.querySelectorAll("._edit-star-dia").forEach(function(star) {
+      star.addEventListener("mouseenter", function() {
+        var n = parseInt(star.dataset.nota);
+        starsContainer.querySelectorAll("._edit-star-dia").forEach(function(s, idx) {
+          s.className = "bi " + (idx < n ? "bi-star-fill" : "bi-star") + " _edit-star-dia";
+          s.style.color = idx < n ? "#facc15" : "#475569";
+        });
+        legendaEl.textContent = LEGENDAS_EDIT[n] || "";
+      });
+      star.addEventListener("mouseleave", function() {
+        starsContainer.querySelectorAll("._edit-star-dia").forEach(function(s, idx) {
+          s.className = "bi " + (idx < notaEdit ? "bi-star-fill" : "bi-star") + " _edit-star-dia";
+          s.style.color = idx < notaEdit ? "#facc15" : "#475569";
+        });
+        legendaEl.textContent = LEGENDAS_EDIT[notaEdit] || "";
+      });
+      star.addEventListener("click", function() {
+        notaEdit = parseInt(star.dataset.nota);
+        starsContainer.querySelectorAll("._edit-star-dia").forEach(function(s, idx) {
+          s.className = "bi " + (idx < notaEdit ? "bi-star-fill" : "bi-star") + " _edit-star-dia";
+          s.style.color = idx < notaEdit ? "#facc15" : "#475569";
+        });
+        legendaEl.textContent = LEGENDAS_EDIT[notaEdit] || "";
+      });
+    });
+
+    function fechar() { overlay.remove(); }
+
+    overlay.querySelector("#_editDiaCancelar").onclick = fechar;
+    overlay.addEventListener("click", function(e) { if (e.target === overlay) fechar(); });
+    overlay.querySelector("#_editDiaTexto").addEventListener("input", function() {
+      var erroEl = overlay.querySelector("#_editDiaErro");
+      if (erroEl) erroEl.style.display = "none";
+    });
+    overlay.querySelector("#_editDiaSalvar").onclick = async function() {
+      if (!notaEdit) return;
+      var texto = (overlay.querySelector("#_editDiaTexto").value || "").trim();
+      var erroEl = overlay.querySelector("#_editDiaErro");
+      if (erroEl) erroEl.style.display = "none";
+
+      if (texto) {
+        var btnSalvar = overlay.querySelector("#_editDiaSalvar");
+        var htmlOriginal = btnSalvar.innerHTML;
+        btnSalvar.disabled = true;
+        btnSalvar.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Verificando...';
+        var valido = await _validarTexto(texto);
+        btnSalvar.disabled = false;
+        btnSalvar.innerHTML = htmlOriginal;
+        if (!valido) {
+          if (erroEl) {
+            erroEl.textContent = "Comentário contém linguagem inapropriada. Por favor, revise o texto.";
+            erroEl.style.display = "";
+          }
+          return;
+        }
+      }
+
+      onSalvar(notaEdit, texto);
+      fechar();
+    };
+  }
+
+  // Exibe as avaliações por dia salvas no localStorage após o roteiro ser concluído
+  async function renderAvaliacoesDia(id) {
+    // Remove seção anterior para suportar re-render após edição/exclusão
+    var secaoExistente = document.getElementById("secaoAvaliacoesDia");
+    if (secaoExistente) secaoExistente.remove();
+
+    var ratings = {};
+    try { ratings = JSON.parse(localStorage.getItem("fg_dia_ratings_" + id) || "{}"); } catch (_) {}
+
+    var dias = Object.keys(ratings).map(Number).filter(function(n){ return !isNaN(n); }).sort(function(a,b){return a-b;});
+    if (!dias.length) return;
+
+    // Busca nome do usuário logado no backend
+    var nomeUsuario = "";
+    try {
+      var resUser = await authFetch(URL_API_BASE + "/users/search-completo/" + userId);
+      if (resUser.ok) {
+        var dadosUser = await resUser.json();
+        var pf = dadosUser.pessoaFisica;
+        var pj = dadosUser.pessoaJuridica;
+        if (pf) nomeUsuario = ((pf.primeiroNome || "") + " " + (pf.ultimoNome || "")).trim();
+        else if (pj) nomeUsuario = pj.nomeFantasia || pj.razaoSocial || "";
+        if (!nomeUsuario) nomeUsuario = dadosUser.usuario?.email || "";
+      }
+    } catch (_) {}
+
+    var LEGENDAS = ["", "Péssimo", "Ruim", "Regular", "Bom", "Excelente"];
+
+    var html = '<div id="secaoAvaliacoesDia" style="margin-top:28px;">'
+      + '<div class="section-title" style="margin-bottom:14px;display:flex;align-items:center;gap:8px;">'
+      + '<i class="bi bi-star-fill" style="color:#facc15;font-size:1rem;"></i>Avaliações por Dia'
+      + '</div>'
+      + dias.map(function(dia) {
+          var r = ratings[dia];
+          if (!r || !r.nota) return "";
+          var starsHtml = [1,2,3,4,5].map(function(i) {
+            return '<i class="bi ' + (i <= r.nota ? 'bi-star-fill' : 'bi-star') + '" style="color:'
+              + (i <= r.nota ? '#facc15' : '#cbd5e1') + ';font-size:.88rem;"></i>';
+          }).join('');
+          return '<div style="border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;margin-bottom:10px;background:#fafbfc;">'
+            + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:' + (r.texto || nomeUsuario ? '8px' : '0') + ';">'
+            + '<span style="font-weight:700;font-size:.9rem;color:#1e293b;">Dia ' + escapeHtml(String(dia)) + '</span>'
+            + '<div style="display:flex;gap:3px;">' + starsHtml + '</div>'
+            + '<span style="font-size:.78rem;color:#64748b;font-weight:600;">' + escapeHtml(LEGENDAS[r.nota] || '') + '</span>'
+            + '<div style="margin-left:auto;display:flex;gap:6px;">'
+            + '<button data-editar-dia="' + dia + '" title="Editar" style="background:none;border:1px solid #e2e8f0;border-radius:8px;padding:4px 9px;cursor:pointer;color:#64748b;font-size:.78rem;display:flex;align-items:center;gap:4px;"><i class="bi bi-pencil"></i> Editar</button>'
+            + '<button data-excluir-dia="' + dia + '" title="Excluir" style="background:none;border:1px solid #fecaca;border-radius:8px;padding:4px 9px;cursor:pointer;color:#dc2626;font-size:.78rem;display:flex;align-items:center;gap:4px;"><i class="bi bi-trash3"></i></button>'
+            + '</div>'
+            + '</div>'
+            + (nomeUsuario ? '<div style="font-size:.78rem;color:#f97316;font-weight:700;margin-bottom:' + (r.texto ? '6px' : '0') + ';"><i class="bi bi-person-fill me-1"></i>' + escapeHtml(nomeUsuario) + '</div>' : '')
+            + (r.texto ? '<div style="font-size:.84rem;color:#475569;line-height:1.5;border-left:3px solid #f97316;padding-left:10px;">' + escapeHtml(r.texto) + '</div>' : '')
+            + '</div>';
+        }).join('')
+      + '</div>';
+
+    // Injeta após aiDiasContainer ou secaoLocais — onde os dias estão renderizados
+    var anchor = document.getElementById("aiDiasContainer") || document.getElementById("secaoLocais");
+    if (anchor) anchor.insertAdjacentHTML("afterend", html);
+
+    // Bind botões de excluir e editar
+    var secao = document.getElementById("secaoAvaliacoesDia");
+    if (!secao) return;
+
+    secao.querySelectorAll("[data-excluir-dia]").forEach(function(btn) {
+      btn.addEventListener("click", async function() {
+        var dia = btn.getAttribute("data-excluir-dia");
+        if (!await _confirmarExclusaoDiaRating()) return;
+        var rt = {};
+        try { rt = JSON.parse(localStorage.getItem("fg_dia_ratings_" + id) || "{}"); } catch (_) {}
+        delete rt[dia];
+        localStorage.setItem("fg_dia_ratings_" + id, JSON.stringify(rt));
+        renderAvaliacoesDia(id);
+      });
+    });
+
+    secao.querySelectorAll("[data-editar-dia]").forEach(function(btn) {
+      btn.addEventListener("click", function() {
+        var dia = btn.getAttribute("data-editar-dia");
+        var rt = {};
+        try { rt = JSON.parse(localStorage.getItem("fg_dia_ratings_" + id) || "{}"); } catch (_) {}
+        var ratingAtual = rt[dia];
+        if (!ratingAtual) return;
+        _abrirEditarDiaRating(id, dia, ratingAtual, function(novaNota, novoTexto) {
+          rt[dia] = { nota: novaNota, texto: novoTexto || null, ts: Date.now(), nome: ratingAtual.nome || "" };
+          localStorage.setItem("fg_dia_ratings_" + id, JSON.stringify(rt));
+          renderAvaliacoesDia(id);
+        });
+      });
+    });
+  }
+
+  function exportarPDF(roteiro, locais) {
+    const diasStr = roteiro.diasTotais ? `${roteiro.diasTotais} dia${roteiro.diasTotais > 1 ? "s" : ""}` : "—";
+    const orcStr  = roteiro.orcamento  ? `R$ ${Number(roteiro.orcamento).toLocaleString("pt-BR")}` : null;
+    const locStr  = [roteiro.cidade, roteiro.pais].filter(Boolean).join(", ") || "—";
+
+    let gruposHtml = "";
+
+    // Prioridade 1: ler do DOM — mostra os nomes exatamente como exibidos na tela (enriquecidos pelo Maps)
+    const aiContainer = document.getElementById("aiDiasContainer");
+    if (aiContainer && aiContainer.querySelectorAll(".day-item").length > 0) {
+      const diasPDF = [];
+      aiContainer.querySelectorAll("section").forEach(sec => {
+        const hdr = sec.querySelector(".dia-header-label");
+        if (!hdr) return;
+        const label = hdr.textContent.trim() || "Sem dia definido";
+        const itens = [];
+        sec.querySelectorAll(".day-item").forEach(item => {
+          const nome = item.querySelector(".name")?.textContent?.trim() || "Local";
+          const addr = item.dataset.addr?.trim()
+                    || item.querySelector(".ai-place-addr")?.textContent?.trim()
+                    || item.querySelector(".costline span")?.textContent?.trim()
+                    || "";
+          const obs  = item.querySelector(".text-secondary")?.textContent?.trim() || "";
+          const perLabel = item.closest("[data-period-key]")?.getAttribute("data-period-label") || "";
+          itens.push({ nome, addr, obs, perLabel });
+        });
+        if (itens.length > 0) diasPDF.push({ label, itens });
+      });
+      gruposHtml = diasPDF.map(({ label, itens }) => `
+        <div class="dia-bloco">
+          <div class="dia-titulo">${label}</div>
+          ${itens.map(it => `
+            <div class="local-item">
+              <div class="local-nome">${it.nome}</div>
+              ${it.perLabel ? `<span class="local-hora">${it.perLabel}</span>` : ""}
+              ${it.addr ? `<div class="local-end">${it.addr}</div>` : ""}
+              ${it.obs  ? `<div class="local-obs">${it.obs}</div>`  : ""}
+            </div>`).join("")}
+        </div>`).join("");
+    }
+
+    // Prioridade 2: locais do banco de dados
+    if (!gruposHtml && locais.length > 0) {
+      const grupos = agruparLocaisPorDia(locais);
+      gruposHtml = grupos.map(({ dia, itens }) => `
+        <div class="dia-bloco">
+          <div class="dia-titulo">${dia ? `Dia ${dia}` : "Sem dia definido"}</div>
+          ${itens.map(l => `
+            <div class="local-item">
+              <div class="local-nome">${l.nome || "Local"}</div>
+              ${formatarHorario(l.horario) ? `<span class="local-hora">${formatarHorario(l.horario)}</span>` : ""}
+              ${l.endereco    ? `<div class="local-end">${l.endereco}</div>`    : ""}
+              ${l.observacoes ? `<div class="local-obs">${l.observacoes}</div>` : ""}
+            </div>`).join("")}
+        </div>`).join("");
+    }
+
+    // Prioridade 3: sugestões brutas da IA (fallback quando nenhuma das anteriores tem dados)
+    if (!gruposHtml && roteiro.sugestoes?.length) {
+      const diasMap = {};
+      roteiro.sugestoes.forEach(s => {
+        const dia = s.dia || 1;
+        if (!diasMap[dia]) diasMap[dia] = [];
+        diasMap[dia].push(s);
+      });
+      gruposHtml = Object.entries(diasMap)
+        .sort(([a], [b]) => parseInt(a) - parseInt(b))
+        .map(([dia, itens]) => `
+          <div class="dia-bloco">
+            <div class="dia-titulo">Dia ${dia}</div>
+            ${itens.map(it => `
+              <div class="local-item">
+                <div class="local-nome">${it.nome || "Local"}</div>
+                ${it.custo ? `<div class="local-obs">${it.custo}</div>` : ""}
+              </div>`).join("")}
+          </div>`).join("");
+    }
+
+    const html = `<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <title>${roteiro.titulo || "Roteiro"} – FlyGuide</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{font-family:'Segoe UI',Arial,sans-serif;color:#0f172a;background:#fff;padding:32px 40px;}
+    .header{display:flex;align-items:center;gap:12px;border-bottom:3px solid #f97316;padding-bottom:16px;margin-bottom:24px;}
+    .logo{width:44px;height:44px;background:#f97316;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:24px;}
+    .brand-name{font-size:1.4rem;font-weight:800;color:#0f172a;}
+    .brand-sub{font-size:.78rem;color:#64748b;}
+    .titulo{font-size:2rem;font-weight:900;color:#0f172a;margin-bottom:10px;}
+    .meta{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:8px;font-size:.9rem;color:#475569;align-items:center;}
+    .meta .tag{background:#fff7ed;color:#c2410c;border-radius:8px;padding:3px 12px;font-weight:700;font-size:.82rem;}
+    .orc{color:#15803d;font-weight:700;}
+    hr{border:none;border-top:1px solid #e2e8f0;margin:20px 0;}
+    .secao-titulo{font-size:.82rem;font-weight:800;color:#f97316;text-transform:uppercase;letter-spacing:.07em;margin-bottom:12px;}
+    .descricao{font-size:.92rem;color:#475569;line-height:1.7;white-space:pre-wrap;}
+    .dia-bloco{margin-bottom:22px;}
+    .dia-titulo{font-size:.95rem;font-weight:800;color:#1e293b;background:#f1f5f9;border-radius:8px;padding:7px 14px;margin-bottom:10px;}
+    .local-item{display:flex;flex-direction:column;gap:3px;padding:8px 0 8px 14px;border-left:3px solid #fed7aa;margin-bottom:8px;}
+    .local-nome{font-weight:700;font-size:.92rem;}
+    .local-hora{font-size:.78rem;color:#c2410c;font-weight:700;background:#fff7ed;border-radius:6px;padding:1px 8px;width:fit-content;}
+    .local-end{font-size:.8rem;color:#64748b;}
+    .local-obs{font-size:.8rem;color:#94a3b8;font-style:italic;}
+    .footer{margin-top:32px;border-top:1px solid #e2e8f0;padding-top:12px;font-size:.75rem;color:#94a3b8;text-align:center;}
+    @media print{body{padding:16px 20px;}.dia-bloco{page-break-inside:auto;}.dia-titulo{page-break-after:avoid;}.local-item{page-break-inside:avoid;}}
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">🧭</div>
+    <div><div class="brand-name">FlyGuide</div><div class="brand-sub">Suas viagens inesquecíveis</div></div>
+  </div>
+  <div class="titulo">${roteiro.titulo || "Roteiro"}</div>
+  <div class="meta">
+    <span>📍 ${locStr}</span>
+    <span>🗓 ${diasStr}</span>
+    ${roteiro.tipoRoteiro ? `<span class="tag">${roteiro.tipoRoteiro}</span>` : ""}
+    ${orcStr ? `<span class="orc">💰 ${orcStr}</span>` : ""}
+  </div>
+  ${roteiro.observacoes ? `<hr><div class="secao-titulo">Sobre a Viagem</div><div class="descricao">${roteiro.observacoes}</div>` : ""}
+  ${gruposHtml ? `<hr><div class="secao-titulo">Roteiro Dia a Dia</div>${gruposHtml}` : ""}
+  <div class="footer">Exportado via FlyGuide · ${new Date().toLocaleDateString("pt-BR")}</div>
+</body>
+</html>`;
+
+    const win = window.open("", "_blank", "width=900,height=950");
+    if (!win) { alert("Permita pop-ups para exportar o PDF."); return; }
+    win.document.write(html);
+    win.document.close();
+    win.onload = () => { win.focus(); win.print(); };
+  }
 })();
 // ── Edição inline nos detalhes ─────────────────────────────────
-function abrirModalEdicaoDetalhes(roteiro) {
-  const URL_API_BASE = "http://localhost:8080";
-  const SESSION_KEY  = "flyguide.userId";
-  const userId       = sessionStorage.getItem(SESSION_KEY);
+function abrirModalEdicaoDetalhes(roteiro, locaisIniciais) {
+  const URL_API_BASE = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app";
+  const userId       = getUserIdFromToken();
+  const PUBLICO      = "Público";
+  const PRIVADO      = "Privado";
 
   // Preenche campos
-  document.getElementById("detalheEditId").value          = roteiro.idRoteiro;
-  document.getElementById("detalheEditTitulo").value      = roteiro.titulo || "";
-  document.getElementById("detalheEditCidade").value      = roteiro.cidade || "";
-  document.getElementById("detalheEditDataInicio").value  = roteiro.dataInicio || "";
-  document.getElementById("detalheEditDataFim").value     = roteiro.dataFim || "";
-  document.getElementById("detalheEditTipo").value        = roteiro.tipoRoteiro || "Cidade";
-  document.getElementById("detalheEditOrcamento").value   = roteiro.orcamento || "";
-  document.getElementById("detalheEditVis").value         = roteiro.visibilidadeRoteiro || "PUBLIC";
-  document.getElementById("detalheEditDesc").value        = roteiro.observacoes || "";
+  document.getElementById("detalheEditId").value        = roteiro.idRoteiro;
+  document.getElementById("detalheEditTitulo").value    = roteiro.titulo || "";
+  document.getElementById("detalheEditDuracao").value   = roteiro.diasTotais || "";
+  document.getElementById("detalheEditTipo").value      = roteiro.tipoRoteiro || "Cidade";
+  document.getElementById("detalheEditOrcamento").value = roteiro.orcamento || "";
+  document.getElementById("detalheEditDesc").value      = roteiro.observacoes || "";
   document.getElementById("detalheEditErro").style.display = "none";
+
+  // País + Cidade com autocomplete (se Maps já carregou) ou plain text
+  if (window._autocompletePaisCidadeDetalhe) {
+    window._autocompletePaisCidadeDetalhe.aplicarValores(roteiro.pais || "", roteiro.cidade || "");
+  } else {
+    document.getElementById("detalheEditPais").value   = roteiro.pais   || "";
+    document.getElementById("detalheEditCidade").value = roteiro.cidade  || "";
+  }
+
+  // Toggle de visibilidade
+  const isPublico     = roteiro.visibilidadeRoteiro === PUBLICO;
+  const visCheck      = document.getElementById("detalheVisPublico");
+  const visLabel      = document.getElementById("detalheVisLabel");
+  const visDesc       = document.getElementById("detalheVisDesc");
+  const visIcon       = document.getElementById("detalheVisIcon");
+  const visIconWrap   = document.getElementById("detalheVisIconWrap");
+  const visBadge      = document.getElementById("detalheVisBadge");
+  function atualizarToggleVis(pub) {
+    if (visCheck)    visCheck.checked     = pub;
+    if (visLabel)    visLabel.textContent = pub ? "Compartilhar no Feed Público" : "Roteiro Privado";
+    if (visDesc)     visDesc.textContent  = pub ? "Outros viajantes poderão ver seu roteiro" : "Somente você pode ver este roteiro";
+    if (visIcon)     visIcon.className    = pub ? "bi bi-globe2" : "bi bi-lock-fill";
+    if (visIconWrap) visIconWrap.style.background = pub ? "#fff7ed" : "";
+    if (visBadge)    visBadge.textContent = pub ? "Público" : "Privado";
+  }
+  atualizarToggleVis(isPublico);
+  if (visCheck) {
+    visCheck.onchange = e => atualizarToggleVis(e.target.checked);
+  }
 
   // Seletor de imagens
   if (typeof renderSeletorImagens === "function") {
@@ -161,7 +1250,12 @@ function abrirModalEdicaoDetalhes(roteiro) {
 
   // Locais
   if (typeof window.abrirLocaisEditDetalhe === "function") {
-    window.abrirLocaisEditDetalhe(roteiro.idRoteiro);
+    window.abrirLocaisEditDetalhe(roteiro.idRoteiro, {
+      diasTotais: roteiro.diasTotais || 0,
+      userId:     parseInt(userId),
+      roteiro:    roteiro,
+      locais:     locaisIniciais || []
+    });
   }
 
   const modal = new bootstrap.Modal(document.getElementById("modalEditarDetalhe"));
@@ -170,23 +1264,30 @@ function abrirModalEdicaoDetalhes(roteiro) {
   // Salvar
   document.getElementById("btnSalvarDetalheEdit").onclick = async () => {
     const titulo = document.getElementById("detalheEditTitulo").value.trim();
-    const cidade = document.getElementById("detalheEditCidade").value.trim();
+    const pais   = window._autocompletePaisCidadeDetalhe
+      ? window._autocompletePaisCidadeDetalhe.obterPais()
+      : document.getElementById("detalheEditPais").value.trim();
+    const cidade = window._autocompletePaisCidadeDetalhe
+      ? window._autocompletePaisCidadeDetalhe.obterCidade()
+      : document.getElementById("detalheEditCidade").value.trim();
     const erroEl = document.getElementById("detalheEditErro");
-    if (!titulo || !cidade) { erroEl.textContent = "Preencha Título e Destino."; erroEl.style.display = ""; return; }
+    if (!titulo || !pais || !cidade) {
+      erroEl.textContent = "Preencha Título, País Principal e Cidade Base.";
+      erroEl.style.display = "";
+      return;
+    }
     erroEl.style.display = "none";
 
-    const dI    = document.getElementById("detalheEditDataInicio").value;
-    const dF    = document.getElementById("detalheEditDataFim").value;
-    const dias  = (dI && dF) ? Math.round((new Date(dF) - new Date(dI)) / 864e5) : roteiro.diasTotais;
-    const idImg = document.getElementById("detalheEditImagem").value;
+    const dias      = parseInt(document.getElementById("detalheEditDuracao").value) || null;
+    const idImg     = document.getElementById("detalheEditImagem").value;
+    const isPublico = document.getElementById("detalheVisPublico")?.checked;
 
     const payload = {
       idUsuario:           parseInt(userId),
-      titulo, cidade,
+      titulo, pais, cidade,
       tipoRoteiro:         document.getElementById("detalheEditTipo").value,
       statusRoteiro:       roteiro.statusRoteiro || "PLANEJADO",
-      visibilidadeRoteiro: document.getElementById("detalheEditVis").value,
-      dataInicio:          dI || null, dataFim: dF || null,
+      visibilidadeRoteiro: isPublico ? PUBLICO : PRIVADO,
       diasTotais:          dias > 0 ? dias : null,
       orcamento:           parseFloat(document.getElementById("detalheEditOrcamento").value) || null,
       observacoes:         document.getElementById("detalheEditDesc").value.trim() || null,
@@ -197,7 +1298,7 @@ function abrirModalEdicaoDetalhes(roteiro) {
     btn.disabled = true; btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Salvando...`;
 
     try {
-      const res = await fetch(`${URL_API_BASE}/roteiros/${roteiro.idRoteiro}`, {
+      const res = await authFetch(`${URL_API_BASE}/roteiros/${roteiro.idRoteiro}`, {
         method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
       });
       if (res.ok) {
@@ -209,487 +1310,353 @@ function abrirModalEdicaoDetalhes(roteiro) {
     finally { btn.disabled = false; btn.innerHTML = `<i class="bi bi-check-lg me-1"></i>Salvar Alterações`; }
   };
 }
-// ── Módulo de Comentários ──────────────────────────────────────────────────
-(function iniciarComentarios() {
+
+// ── Módulo de Avaliações (unificado: nota + comentário + likes) ────────────
+
+// ── Módulo de Avaliações ──────────────────────────────────────
+(function iniciarAvaliacoes() {
   if (document.body.getAttribute("data-pagina") !== "detalhes-roteiro") return;
 
-  const URL_API_BASE = "http://localhost:8080";
-  const SESSION_KEY  = "flyguide.userId";
-  const params       = new URLSearchParams(window.location.search);
-  const roteiroId    = params.get("id");
-  const userId       = sessionStorage.getItem(SESSION_KEY);
+  var URL_API_BASE = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app";
+  var params       = new URLSearchParams(window.location.search);
+  var roteiroId    = params.get("id");
+  var userId       = getUserIdFromToken();
 
   if (!roteiroId) return;
 
-  // Exibe formulário ou aviso de login
-  if (userId) {
-    document.getElementById("formComentario").style.display = "";
-  } else {
-    document.getElementById("avisoLoginComentario").style.display = "";
+  var notaSelecionada    = 0;
+  var avaliacaoDoUsuario = null;
+
+  // ── Estrelas do formulário ──
+  var estrelasForm = document.querySelectorAll("#formEstrelasAv i[data-nota]");
+
+  function renderEstrelasForm(nota) {
+    estrelasForm.forEach(function(s) {
+      var n = parseInt(s.getAttribute("data-nota"));
+      s.className = n <= nota ?"bi bi-star-fill" : "bi bi-star";
+      s.style.color = "#facc15";
+    });
   }
 
-  // Carrega comentários existentes
-  async function carregarComentarios() {
-    const loading = document.getElementById("loadingComentarios");
-    const lista   = document.getElementById("listaComentarios");
-    const vazio   = document.getElementById("semComentarios");
+  estrelasForm.forEach(function(s) {
+    s.addEventListener("mouseenter", function() {
+      if (!userId) return;
+      renderEstrelasForm(parseInt(s.getAttribute("data-nota")));
+    });
+    s.addEventListener("mouseleave", function() {
+      renderEstrelasForm(notaSelecionada);
+    });
+    s.addEventListener("click", function() {
+      if (!userId) return;
+      notaSelecionada = parseInt(s.getAttribute("data-nota"));
+      renderEstrelasForm(notaSelecionada);
+    });
+  });
 
+  // ── Estrelas do card (média) ──
+  var mediaEl      = document.getElementById("mediaAvaliacao");
+  var estrelasCard = document.querySelectorAll("#estrelasAvaliacao i[data-nota]");
+
+  function renderEstrelasCard(media) {
+    estrelasCard.forEach(function(s) {
+      var n = parseInt(s.getAttribute("data-nota"));
+      s.className = n <= Math.round(media) ?"bi bi-star-fill" : "bi bi-star";
+      s.style.color = "#facc15";
+    });
+  }
+
+  function sinalizarAtualizacaoMeusRoteiros() {
     try {
-      const res = await fetch(`${URL_API_BASE}/roteiros/${roteiroId}/comentarios`);
-      if (!res.ok) {
-        console.error(`[FlyGuide] GET comentarios falhou - status: ${res.status}`);
-        throw new Error(`HTTP ${res.status}`);
-      }
-      const comentarios = await res.json();
-
-      loading.style.display = "none";
-
-      if (!comentarios || comentarios.length === 0) {
-        vazio.style.display = "";
-        return;
-      }
-
-      lista.innerHTML = comentarios.map(c => `
-        <div class="comentario-item" id="comentario-${c.idComentario}" style="
-          display:flex; gap:12px; padding:12px 0;
-          border-bottom:1px solid #f1f5f9; align-items:flex-start;">
-          <div style="
-            width:36px; height:36px; border-radius:50%; background:#f97316;
-            display:flex; align-items:center; justify-content:center;
-            color:#fff; font-weight:700; font-size:.85rem; flex-shrink:0;">
-            ${escapeHtml((c.nomeExibicao || c.emailUsuario || "?")[0].toUpperCase())}
-          </div>
-          <div style="flex:1; min-width:0;">
-            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:4px;">
-              <span style="font-weight:600; font-size:.88rem;">${escapeHtml(c.nomeExibicao || c.emailUsuario || "Usuário")}</span>
-              <span style="font-size:.75rem; color:#94a3b8;">${formatarDataHora(c.criadoEm)}${c.editadoEm ? " · <em>editado</em>" : ""}</span>
-            </div>
-            <div id="texto-${c.idComentario}" style="font-size:.88rem; margin-top:4px; word-break:break-word;">
-              ${escapeHtml(c.texto)}
-            </div>
-          </div>
-          ${String(c.idUsuario) === String(userId) ? `
-            <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;">
-              <button
-                onclick="editarComentario(${c.idComentario})"
-                title="Editar comentário"
-                style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:.85rem;padding:2px 6px;"
-              ><i class="bi bi-pencil"></i></button>
-              <button
-                onclick="excluirComentario(${c.idComentario})"
-                title="Excluir comentário"
-                style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:.85rem;padding:2px 6px;"
-              ><i class="bi bi-trash"></i></button>
-            </div>
-          ` : ""}
-        </div>
-      `).join("");
-
-    } catch (e) {
-      console.error("[FlyGuide] Erro ao carregar comentários:", e);
-      loading.style.display = "none";
-      document.getElementById("listaComentarios").innerHTML =
-        `<div class="text-secondary text-center py-2" style="font-size:.85rem;">Não foi possível carregar os comentários.</div>`;
-    }
+      sessionStorage.setItem("flyguide:refresh-meus-roteiros", String(Date.now()));
+    } catch(e) { /* silencioso */ }
   }
 
+  // ── Utilitários ──
   function formatarDataHora(str) {
     if (!str) return "";
     try {
-      const d = new Date(str);
+      var d = new Date(str);
       return d.toLocaleDateString("pt-BR") + " às " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-    } catch { return ""; }
+    } catch(e) { return ""; }
   }
 
-  // Enviar comentário
-  document.getElementById("btnEnviarComentario")?.addEventListener("click", async () => {
-    const input  = document.getElementById("inputComentario");
-    const erroEl = document.getElementById("erroComentario");
-    const erroTx = document.getElementById("erroComentarioTexto");
-    const btn    = document.getElementById("btnEnviarComentario");
-    const texto  = input.value.trim();
-
-    erroEl.style.display = "none";
-
-    if (!texto) {
-      erroTx.textContent = "Escreva algo antes de publicar.";
-      erroEl.style.display = "";
-      return;
+  function estrelasHtml(nota) {
+    var html = "";
+    for (var i = 1; i <= 5; i++) {
+      html += '<i class="bi bi-star' + (i <= nota ?"-fill" : "") + '" style="color:#facc15;font-size:.85rem;"></i>';
     }
+    return html;
+  }
 
-    btn.disabled  = true;
-    btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span>Publicando...`;
+  function ocultarLoading() {
+    var el = document.getElementById("loadingAvaliacoes");
+    if (el) el.style.display = "none";
+  }
 
-    let novoDTO = null;
-
+  // ── Carregar média ──
+  async function carregarMedia() {
     try {
-      const res = await fetch(`${URL_API_BASE}/roteiros/${roteiroId}/comentarios`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idUsuario: parseInt(userId), texto })
-      });
-
-      if (res.ok || res.status === 201) {
-        try { novoDTO = await res.json(); } catch (_) {}
-        publicouComSucesso = true;
-        input.value = "";
-        document.getElementById("semComentarios").style.display = "none";
-      } else if (res.status === 422) {
-        erroTx.textContent = "Comentário contém linguagem inapropriada. Por favor, revise o texto.";
-        erroEl.style.display = "";
-      } else if (res.status === 400) {
-        erroTx.textContent = "O comentário não pode estar vazio.";
-        erroEl.style.display = "";
-      } else {
-        erroTx.textContent = "Erro ao publicar comentário. Tente novamente.";
-        erroEl.style.display = "";
+      var res = await authFetch(URL_API_BASE + "/roteiros/" + roteiroId + "/avaliacoes/media");
+      if (!res.ok) return;
+      var dados = await res.json();
+      var media = dados.media || 0;
+      var total = dados.total  || 0;
+      renderEstrelasCard(media);
+      if (mediaEl) {
+        mediaEl.textContent = total > 0
+          ? media.toFixed(1) + " \u2605 (" + total + " avalia\u00e7\u00e3o" + (total !== 1 ? "\u00f5es" : "") + ")"
+          : "Sem avalia\u00e7\u00f5es ainda";
       }
-    } catch (e) {
-      publicouComSucesso = true;
-      input.value = "";
-      console.warn("[FlyGuide] Erro na resposta do POST, verificando se foi salvo...", e);
-    } finally {
-      btn.disabled  = false;
-      btn.innerHTML = `<i class="bi bi-send-fill me-1"></i>Publicar`;
-    }
-
-    if (publicouComSucesso) {
-      if (novoDTO) {
-        // Adiciona direto na lista usando a resposta do backend
-        const lista = document.getElementById("listaComentarios");
-        const vazio = document.getElementById("semComentarios");
-        vazio.style.display = "none";
-
-        const novoEl = document.createElement("div");
-        novoEl.className = "comentario-item";
-        novoEl.id = `comentario-${novoDTO.idComentario}`;
-        novoEl.style.cssText = "display:flex;gap:12px;padding:12px 0;border-bottom:1px solid #f1f5f9;align-items:flex-start;";
-        novoEl.innerHTML = `
-          <div style="width:36px;height:36px;border-radius:50%;background:#f97316;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:.85rem;flex-shrink:0;">
-            ${escapeHtml((novoDTO.nomeExibicao || novoDTO.emailUsuario || "?")[0].toUpperCase())}
-          </div>
-          <div style="flex:1;min-width:0;">
-            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px;">
-              <span style="font-weight:600;font-size:.88rem;">${escapeHtml(novoDTO.nomeExibicao || novoDTO.emailUsuario || "Usuário")}</span>
-              <span style="font-size:.75rem;color:#94a3b8;">${formatarDataHora(novoDTO.criadoEm)}</span>
-            </div>
-            <div id="texto-${novoDTO.idComentario}" style="font-size:.88rem;margin-top:4px;word-break:break-word;">${escapeHtml(novoDTO.texto)}</div>
-          </div>
-          <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;">
-            <button onclick="editarComentario(${novoDTO.idComentario})" title="Editar comentário"
-              style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:.85rem;padding:2px 6px;">
-              <i class="bi bi-pencil"></i>
-            </button>
-            <button onclick="excluirComentario(${novoDTO.idComentario})" title="Excluir comentário"
-              style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:.85rem;padding:2px 6px;">
-              <i class="bi bi-trash"></i>
-            </button>
-          </div>
-        `;
-        lista.insertBefore(novoEl, lista.firstChild);
-      } else {
-        // Fallback: se não veio o DTO, recarrega tudo
-        await carregarComentarios();
-      }
-    }
-  });
-
-  // Excluir comentário (global para o onclick inline)
-  window.excluirComentario = async function(idComentario) {
-    if (!confirm("Excluir este comentário?")) return;
-    try {
-      const res = await fetch(`${URL_API_BASE}/roteiros/${roteiroId}/comentarios/${idComentario}`, { method: "DELETE" });
-      if (res.ok || res.status === 204) {
-        const el = document.getElementById(`comentario-${idComentario}`);
-        if (el) el.remove();
-        // Se não sobrou nenhum, mostra estado vazio
-        const lista = document.getElementById("listaComentarios");
-        if (!lista.querySelector(".comentario-item")) {
-          document.getElementById("semComentarios").style.display = "";
-        }
-      }
-    } catch {
-      alert("Erro ao excluir comentário.");
-    }
-  };
-
-  carregarComentarios();
-})();
-// ── Módulo de Curtidas ─────────────────────────────────────────────────────
-(function iniciarCurtidas() {
-  if (document.body.getAttribute("data-pagina") !== "detalhes-roteiro") return;
-
-  const URL_API_BASE = "http://localhost:8080";
-  const SESSION_KEY  = "flyguide.userId";
-  const params       = new URLSearchParams(window.location.search);
-  const roteiroId    = params.get("id");
-  const userId       = sessionStorage.getItem(SESSION_KEY);
-
-  if (!roteiroId) return;
-
-  const btn        = document.getElementById("btnCurtir");
-  const btnTexto   = document.getElementById("btnCurtirTexto");
-  const totalEl    = document.getElementById("totalCurtidas");
-
-  let curtido = false;
-
-  function atualizarBotao() {
-    if (curtido) {
-      btn.style.background = "#dc2626";
-      btn.innerHTML = `<i class="bi bi-heart-fill"></i> <span>Curtido</span>`;
-    } else {
-      btn.style.background = "#ef4444";
-      btn.innerHTML = `<i class="bi bi-heart"></i> <span>Curtir</span>`;
+      try {
+        sessionStorage.setItem("flyguide:roteiro-media:" + roteiroId, JSON.stringify({
+          media: media,
+          total: total,
+          atualizadoEm: Date.now()
+        }));
+      } catch(e2) { /* silencioso */ }
+    } catch(e) {
+      console.error("[FlyGuide] Erro carregarMedia:", e);
     }
   }
 
-  function atualizarTotal(count) {
-    if (count === 0) {
-      totalEl.textContent = "";
-    } else {
-      totalEl.textContent = `${count} ${count === 1 ? "pessoa curtiu" : "pessoas curtiram"}`;
-    }
-  }
-
-  async function carregarCurtidas() {
-    try {
-      // Busca total
-      const resCount = await fetch(`${URL_API_BASE}/roteiros/${roteiroId}/likes/count`);
-      if (resCount.ok) {
-        const count = await resCount.json();
-        atualizarTotal(count);
-      }
-
-      // Verifica se o usuário já curtiu
-      if (userId) {
-        const resJa = await fetch(`${URL_API_BASE}/roteiros/${roteiroId}/likes/${userId}`);
-        if (resJa.ok) {
-          curtido = await resJa.json();
-          atualizarBotao();
-        }
-      } else {
-        // Não logado — botão desabilitado
-        btn.disabled = true;
-        btn.title = "Faça login para curtir";
-        btn.style.opacity = "0.6";
-        btn.style.cursor = "not-allowed";
-      }
-    } catch (e) {
-      console.error("[FlyGuide] Erro ao carregar curtidas:", e);
-    }
-  }
-
-  btn.addEventListener("click", async () => {
+  // ── Carregar avaliação do usuário ──
+  async function carregarAvaliacaoUsuario() {
     if (!userId) return;
-
-    const eraCurtido = curtido;
-    curtido = !curtido;
-    atualizarBotao();
-
-    // Atualiza o total otimisticamente
-    const resCount = await fetch(`${URL_API_BASE}/roteiros/${roteiroId}/likes/count`).catch(() => null);
-    let countAtual = resCount?.ok ? await resCount.json() : 0;
-    atualizarTotal(eraCurtido ? countAtual - 1 : countAtual + 1);
-
     try {
-      const method = eraCurtido ? "DELETE" : "POST";
-      const res = await fetch(`${URL_API_BASE}/roteiros/${roteiroId}/likes/${userId}`, { method });
-
-      if (!res.ok && res.status !== 204) {
-        // Reverte em caso de erro
-        curtido = eraCurtido;
-        atualizarBotao();
-        atualizarTotal(countAtual);
-      }
-    } catch {
-      curtido = eraCurtido;
-      atualizarBotao();
-      atualizarTotal(countAtual);
-    }
-  });
-
-  carregarCurtidas();
-})();
-// ── Edição de Comentários ─────────────────────────────────────────────────
-(function iniciarEdicaoComentarios() {
-  if (document.body.getAttribute("data-pagina") !== "detalhes-roteiro") return;
-
-  const URL_API_BASE = "http://localhost:8080";
-  const params       = new URLSearchParams(window.location.search);
-  const roteiroId    = params.get("id");
-
-  window.editarComentario = function(idComentario) {
-    const textoEl = document.getElementById(`texto-${idComentario}`);
-    if (!textoEl) return;
-
-    const textoAtual = textoEl.textContent.trim();
-
-    textoEl.innerHTML = `
-      <textarea id="edit-input-${idComentario}"
-        style="width:100%;resize:none;border-radius:8px;padding:6px 10px;font-size:.88rem;border:1px solid #f97316;outline:none;background:inherit;color:inherit;margin-top:4px;"
-        rows="2" maxlength="500"
-      >${escapeHtml(textoAtual)}</textarea>
-      <div style="display:flex;gap:8px;margin-top:6px;justify-content:flex-end;">
-        <button onclick="cancelarEdicao(${idComentario}, \`${textoAtual.replace(/`/g, '\\`')}\`)"
-          style="background:none;border:1px solid #94a3b8;border-radius:8px;padding:4px 12px;font-size:.8rem;cursor:pointer;color:#94a3b8;">
-          Cancelar
-        </button>
-        <button onclick="salvarEdicao(${idComentario})"
-          style="background:#f97316;border:none;border-radius:8px;padding:4px 12px;font-size:.8rem;cursor:pointer;color:#fff;font-weight:600;">
-          Salvar
-        </button>
-      </div>
-      <div id="edit-erro-${idComentario}" style="display:none;color:#ef4444;font-size:.8rem;margin-top:4px;"></div>
-    `;
-    document.getElementById(`edit-input-${idComentario}`)?.focus();
-  };
-
-  window.cancelarEdicao = function(idComentario, textoOriginal) {
-    const textoEl = document.getElementById(`texto-${idComentario}`);
-    if (textoEl) textoEl.innerHTML = escapeHtml(textoOriginal);
-  };
-
-  window.salvarEdicao = async function(idComentario) {
-    const input    = document.getElementById(`edit-input-${idComentario}`);
-    const erroEl   = document.getElementById(`edit-erro-${idComentario}`);
-    const novoTexto = input?.value.trim();
-
-    if (!novoTexto) {
-      erroEl.textContent = "O comentário não pode estar vazio.";
-      erroEl.style.display = "";
-      return;
-    }
-
-    try {
-      const res = await fetch(`${URL_API_BASE}/roteiros/${roteiroId}/comentarios/${idComentario}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ texto: novoTexto })
-      });
-
-      if (res.ok) {
-        const textoEl = document.getElementById(`texto-${idComentario}`);
-        if (textoEl) textoEl.innerHTML = escapeHtml(novoTexto);
-
-        const item = document.getElementById(`comentario-${idComentario}`);
-        const dataSpan = item?.querySelector("span[style*='94a3b8']");
-        if (dataSpan && !dataSpan.innerHTML.includes("editado")) {
-          dataSpan.innerHTML += " · <em>editado</em>";
-        }
-      } else if (res.status === 422) {
-        erroEl.textContent = "Comentário contém linguagem inapropriada.";
-        erroEl.style.display = "";
-      } else {
-        erroEl.textContent = "Erro ao salvar. Tente novamente.";
-        erroEl.style.display = "";
-      }
-    } catch {
-      erroEl.textContent = "Erro ao conectar ao servidor.";
-      erroEl.style.display = "";
-    }
-  };
-})();
-// ── Módulo de Avaliação por Estrelas ──────────────────────────────────────
-(function iniciarAvaliacao() {
-  if (document.body.getAttribute("data-pagina") !== "detalhes-roteiro") return;
-
-  const URL_API_BASE = "http://localhost:8080";
-  const SESSION_KEY  = "flyguide.userId";
-  const params       = new URLSearchParams(window.location.search);
-  const roteiroId    = params.get("id");
-  const userId       = sessionStorage.getItem(SESSION_KEY);
-
-  if (!roteiroId) return;
-
-  const estrelasEl = document.getElementById("estrelasAvaliacao");
-  const mediaEl    = document.getElementById("mediaAvaliacao");
-  if (!estrelasEl) return;
-
-  const estrelas = estrelasEl.querySelectorAll("i[data-nota]");
-  let notaAtual  = 0;
-
-  function renderEstrelas(nota, hover) {
-    estrelas.forEach(s => {
-      const n = parseInt(s.getAttribute("data-nota"));
-      s.className = n <= nota ? "bi bi-star-fill" : "bi bi-star";
-      s.style.color = "#facc15";
-      if (hover) s.style.transform = n <= nota ? "scale(1.2)" : "scale(1)";
-    });
-  }
-
-  async function carregarAvaliacao() {
-    try {
-      // Carrega média
-      const resMedia = await fetch(`${URL_API_BASE}/roteiros/${roteiroId}/avaliacoes`);
-      if (resMedia.ok) {
-        const dados = await resMedia.json();
-        const media = dados.media || 0;
-        const total = dados.total || 0;
-        if (total > 0) {
-          mediaEl.textContent = `${media.toFixed(1)} ★ (${total} avaliação${total !== 1 ? "ões" : ""})`;
-        } else {
-          mediaEl.textContent = "Sem avaliações ainda";
-        }
-      }
-
-      // Carrega nota do usuário logado
-      if (userId) {
-        const resNota = await fetch(`${URL_API_BASE}/roteiros/${roteiroId}/avaliacoes/${userId}`);
-        if (resNota.ok) {
-          notaAtual = await resNota.json();
-          renderEstrelas(notaAtual, false);
-        }
-      } else {
-        // Não logado: desabilita estrelas
-        estrelas.forEach(s => s.style.cursor = "not-allowed");
-        estrelasEl.title = "Faça login para avaliar";
-      }
-    } catch (e) {
-      console.error("[FlyGuide] Erro ao carregar avaliação:", e);
+      var res = await authFetch(URL_API_BASE + "/roteiros/" + roteiroId + "/avaliacoes/" + userId);
+      if (res.status === 204) { avaliacaoDoUsuario = null; return; }
+      if (!res.ok) return;
+      avaliacaoDoUsuario = await res.json();
+      notaSelecionada    = avaliacaoDoUsuario.nota || 0;
+      renderEstrelasForm(notaSelecionada);
+      var textarea = document.getElementById("inputAvaliacao");
+      if (textarea) textarea.value = avaliacaoDoUsuario.texto || "";
+      var btn    = document.getElementById("btnEnviarAvaliacao");
+      var btnDel = document.getElementById("btnExcluirAvaliacao");
+      if (btn)    btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Atualizar';
+      if (btnDel) btnDel.style.display = "";
+    } catch(e) {
+      console.error("[FlyGuide] Erro carregarAvaliacaoUsuario:", e);
     }
   }
 
-  // Hover nas estrelas
-  estrelas.forEach(s => {
-    s.addEventListener("mouseenter", () => {
-      if (!userId) return;
-      renderEstrelas(parseInt(s.getAttribute("data-nota")), true);
-    });
-    s.addEventListener("mouseleave", () => {
-      renderEstrelas(notaAtual, false);
-    });
-  });
+  // ── Carregar lista de avaliações ──
+  async function carregarAvaliacoes() {
+    var loading = document.getElementById("loadingAvaliacoes");
+    var lista   = document.getElementById("listaAvaliacoes");
+    var vazio   = document.getElementById("semAvaliacoes");
 
-  // Clique para avaliar
-  estrelas.forEach(s => {
-    s.addEventListener("click", async () => {
-      if (!userId) { window.location.href = "login.html"; return; }
+    if (loading) loading.style.display = "";
+    if (vazio)   vazio.style.display   = "none";
+    if (lista)   lista.innerHTML       = "";
 
-      const nota = parseInt(s.getAttribute("data-nota"));
-      notaAtual  = nota;
-      renderEstrelas(nota, false);
+    try {
+      var res = await authFetch(URL_API_BASE + "/roteiros/" + roteiroId + "/avaliacoes");
+
+      if (!res.ok) {
+        throw new Error("HTTP " + res.status);
+      }
+
+      var avaliacoes = await res.json();
+
+      if (!avaliacoes || avaliacoes.length === 0) {
+        if (vazio) vazio.style.display = "";
+        return;
+      }
+
+      lista.innerHTML = avaliacoes.map(function(a) {
+        return '<div class="comentario-item" id="avaliacao-' + a.idAvaliacao + '" style="display:flex;gap:12px;padding:14px 0;border-bottom:1px solid #f1f5f9;align-items:flex-start;">'
+          + '<div style="width:36px;height:36px;border-radius:50%;background:#f97316;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:.85rem;flex-shrink:0;">'
+          + escapeHtml((a.nomeExibicao || "?")[0].toUpperCase())
+          + '</div>'
+          + '<div style="flex:1;min-width:0;">'
+          + '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:4px;">'
+          + '<div><span style="font-weight:600;font-size:.88rem;">' + escapeHtml(a.nomeExibicao || "Usuário") + '</span>'
+          + (a.isPremium ? '<span style="display:inline-flex;align-items:center;gap:3px;margin-left:6px;font-size:.68rem;font-weight:700;color:#f97316;background:#fff7ed;border:1px solid #ffedd5;padding:1px 7px;border-radius:999px;"><i class="bi bi-star-fill"></i>Premium</span>' : '')
+          + (a.concluiuRoteiro
+              ? '<span style="display:inline-flex;align-items:center;gap:3px;margin-left:6px;font-size:.72rem;font-weight:700;color:#22c55e;"><i class="bi bi-patch-check-fill"></i>Concluiu o roteiro</span>'
+              : '<span style="display:inline-flex;align-items:center;gap:3px;margin-left:6px;font-size:.72rem;font-weight:600;color:#94a3b8;"><i class="bi bi-clock-history"></i>Não realizou o roteiro</span>')
+          + '<div style="margin-top:2px;">' + estrelasHtml(a.nota) + '</div></div>'
+          + '<span style="font-size:.75rem;color:#94a3b8;">' + formatarDataHora(a.criadoEm) + '</span>'
+          + '</div>'
+          + (a.texto ?'<div style="font-size:.88rem;margin-top:6px;word-break:break-word;">' + escapeHtml(a.texto) + '</div>' : '')
+          + '<div style="margin-top:6px;display:flex;align-items:center;gap:4px;">'
+          + '<button onclick="curtirAvaliacao(' + a.idAvaliacao + ')" id="btnLike-' + a.idAvaliacao + '" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:.82rem;padding:0;display:flex;align-items:center;gap:4px;">'
+          + '<i class="bi bi-heart" id="iconLike-' + a.idAvaliacao + '"></i>'
+          + '<span id="countLike-' + a.idAvaliacao + '">' + (a.totalLikes || 0) + '</span>'
+          + '</button></div></div>'
+          + (String(a.idUsuario) === String(userId)
+              ?'<button onclick="excluirAvaliacaoPropia()" title="Excluir" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:.85rem;padding:2px 6px;flex-shrink:0;"><i class="bi bi-trash"></i></button>'
+              : '')
+          + '</div>';
+      }).join("");
+
+      if (userId) avaliacoes.forEach(function(a) { carregarLikeAvaliacao(a.idAvaliacao); });
+
+    } catch(e) {
+      console.error("[FlyGuide] Erro carregarAvaliacoes:", e);
+      if (lista) lista.innerHTML = '<div class="text-secondary text-center py-2" style="font-size:.85rem;">Não foi possível carregar as avaliações.</div>';
+    } finally {
+      ocultarLoading();
+    }
+  }
+
+  // ── Likes nas avaliações ──
+  async function carregarLikeAvaliacao(idAvaliacao) {
+    if (!userId) return;
+    try {
+      var res = await authFetch(URL_API_BASE + "/roteiros/" + roteiroId + "/avaliacoes/" + idAvaliacao + "/likes/" + userId);
+      if (!res.ok) return;
+      var jaCurtiu = await res.json();
+      var icon = document.getElementById("iconLike-" + idAvaliacao);
+      if (icon) {
+        icon.className = jaCurtiu ?"bi bi-heart-fill" : "bi bi-heart";
+        icon.style.color = jaCurtiu ?"#ef4444" : "";
+      }
+    } catch(e) { /* silencioso */ }
+  }
+
+  window.curtirAvaliacao = async function(idAvaliacao) {
+    if (!userId) { window.location.href = "login.html"; return; }
+    var icon    = document.getElementById("iconLike-" + idAvaliacao);
+    var countEl = document.getElementById("countLike-" + idAvaliacao);
+    var jaCurtiu = icon && icon.classList.contains("bi-heart-fill");
+    try {
+      var res = await authFetch(
+        URL_API_BASE + "/roteiros/" + roteiroId + "/avaliacoes/" + idAvaliacao + "/likes/" + userId,
+        { method: jaCurtiu ?"DELETE" : "POST" }
+      );
+      if (res.ok || res.status === 204) {
+        if (icon) { icon.className = jaCurtiu ?"bi bi-heart" : "bi bi-heart-fill"; icon.style.color = jaCurtiu ?"" : "#ef4444"; }
+        if (countEl) { var c = parseInt(countEl.textContent) || 0; countEl.textContent = jaCurtiu ?Math.max(0, c - 1) : c + 1; }
+      }
+    } catch(e) { /* silencioso */ }
+  };
+
+  // ── Enviar avaliação ──
+  var btnEnviar = document.getElementById("btnEnviarAvaliacao");
+  if (btnEnviar) {
+    btnEnviar.addEventListener("click", async function() {
+      var erroEl   = document.getElementById("erroAvaliacao");
+      var erroTx   = document.getElementById("erroAvaliacaoTexto");
+      var btn      = document.getElementById("btnEnviarAvaliacao");
+      var textarea = document.getElementById("inputAvaliacao");
+      if (erroEl) erroEl.style.display = "none";
+
+      if (!notaSelecionada) {
+        if (erroTx) erroTx.textContent = "Selecione uma nota (estrelas) antes de publicar.";
+        if (erroEl) erroEl.style.display = "";
+        return;
+      }
+
+      btn.disabled  = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Publicando...';
 
       try {
-        const res = await fetch(`${URL_API_BASE}/roteiros/${roteiroId}/avaliacoes/${userId}`, {
+        var texto = textarea ?textarea.value.trim() : "";
+        var res = await authFetch(URL_API_BASE + "/roteiros/" + roteiroId + "/avaliacoes/" + userId, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ nota })
+          body: JSON.stringify({ nota: notaSelecionada, texto: texto })
         });
-        if (res.ok) {
-          // Recarrega a média
-          const resMedia = await fetch(`${URL_API_BASE}/roteiros/${roteiroId}/avaliacoes`);
-          if (resMedia.ok) {
-            const dados = await resMedia.json();
-            const media = dados.media || 0;
-            const total = dados.total || 0;
-            mediaEl.textContent = `${media.toFixed(1)} ★ (${total} avaliação${total !== 1 ? "ões" : ""})`;
-          }
+
+        if (res.ok || res.status === 201) {
+          await carregarMedia();
+          await carregarAvaliacaoUsuario();
+          await carregarAvaliacoes();
+          sinalizarAtualizacaoMeusRoteiros();
+        } else {
+          var errData = null;
+          try { errData = await res.json(); } catch (_) {}
+          var msg = (errData && (errData.message || errData.error)) || "Erro ao publicar avaliação.";
+          var _m = msg.match(/^\d+\s+\S+\s+"(.+)"$/); if (_m) msg = _m[1];
+          if (erroTx) erroTx.textContent = msg;
+          if (erroEl) erroEl.style.display = "";
         }
-      } catch (e) {
-        console.error("[FlyGuide] Erro ao avaliar:", e);
+      } catch(e) {
+        if (erroTx) erroTx.textContent = "Erro ao conectar ao servidor.";
+        if (erroEl) erroEl.style.display = "";
+      } finally {
+        btn.disabled  = false;
+        btn.innerHTML = avaliacaoDoUsuario
+          ?'<i class="bi bi-check-lg me-1"></i>Atualizar'
+          : '<i class="bi bi-send-fill me-1"></i>Publicar';
       }
     });
-  });
+  }
 
-  carregarAvaliacao();
+  // ── Excluir avaliação ──
+  function _confirmarExclusaoAvaliacao() {
+    return new Promise(function(resolve) {
+      var overlay = document.createElement("div");
+      overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;";
+      overlay.innerHTML =
+        '<div style="background:#1e293b;border:1px solid #334155;border-radius:18px;padding:28px 24px;max-width:360px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.4);">'
+        + '<div style="width:52px;height:52px;border-radius:14px;background:#fef2f2;border:1px solid #fecaca;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;">'
+        + '<i class="bi bi-trash3-fill" style="font-size:1.4rem;color:#dc2626;"></i>'
+        + '</div>'
+        + '<div style="font-size:1.05rem;font-weight:800;color:#f1f5f9;margin-bottom:8px;">Excluir avaliação?</div>'
+        + '<div style="font-size:.88rem;color:#94a3b8;margin-bottom:24px;">Sua nota e comentário serão removidos permanentemente. Esta ação não pode ser desfeita.</div>'
+        + '<div style="display:flex;gap:10px;justify-content:center;">'
+        + '<button id="_excAvalNao" style="flex:1;background:none;border:1px solid #334155;border-radius:10px;padding:10px 0;color:#94a3b8;cursor:pointer;font-size:.9rem;font-weight:600;">Cancelar</button>'
+        + '<button id="_excAvalSim" style="flex:1;background:#dc2626;border:none;border-radius:10px;padding:10px 0;color:#fff;cursor:pointer;font-size:.9rem;font-weight:700;"><i class="bi bi-trash3 me-1"></i>Excluir</button>'
+        + '</div></div>';
+      document.body.appendChild(overlay);
+
+      function fechar(resultado) {
+        overlay.remove();
+        resolve(resultado);
+      }
+
+      overlay.querySelector("#_excAvalSim").onclick = function() { fechar(true); };
+      overlay.querySelector("#_excAvalNao").onclick = function() { fechar(false); };
+      overlay.addEventListener("click", function(e) { if (e.target === overlay) fechar(false); });
+    });
+  }
+
+  var btnExcluir = document.getElementById("btnExcluirAvaliacao");
+  if (btnExcluir) {
+    btnExcluir.addEventListener("click", async function() {
+      if (!await _confirmarExclusaoAvaliacao()) return;
+      try {
+        var res = await authFetch(URL_API_BASE + "/roteiros/" + roteiroId + "/avaliacoes/" + userId, { method: "DELETE" });
+        if (res.ok || res.status === 204) {
+          avaliacaoDoUsuario = null;
+          notaSelecionada    = 0;
+          renderEstrelasForm(0);
+          var textarea = document.getElementById("inputAvaliacao");
+          if (textarea) textarea.value = "";
+          var btn    = document.getElementById("btnEnviarAvaliacao");
+          var btnDel = document.getElementById("btnExcluirAvaliacao");
+          if (btn)    btn.innerHTML = '<i class="bi bi-send-fill me-1"></i>Publicar';
+          if (btnDel) btnDel.style.display = "none";
+          await carregarMedia();
+          await carregarAvaliacoes();
+          sinalizarAtualizacaoMeusRoteiros();
+        }
+      } catch(e) { alert("Erro ao excluir avaliação."); }
+    });
+  }
+
+  window.excluirAvaliacaoPropia = function() {
+    var btnDel = document.getElementById("btnExcluirAvaliacao");
+    if (btnDel) btnDel.click();
+  };
+
+  // ── Init ──
+  var formAv = document.getElementById("formAvaliacao");
+  var avisoAv = document.getElementById("avisoLoginAvaliacao");
+  if (userId) {
+    if (formAv) formAv.style.display = "";
+  } else {
+    if (avisoAv) avisoAv.style.display = "";
+  }
+
+  carregarMedia();
+  carregarAvaliacoes();
+  if (userId) carregarAvaliacaoUsuario();
 })();
+
+
+
+

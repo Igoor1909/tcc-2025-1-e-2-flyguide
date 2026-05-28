@@ -68,3 +68,10 @@
   gap: 12px;
   padding: 16px 0 26px 0;
 }
+
+/* Dropdown do Google Maps Autocomplete acima de tudo */
+.pac-container {
+  z-index: 9999 !important;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.15);
+}

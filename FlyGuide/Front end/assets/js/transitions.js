@@ -33,6 +33,9 @@
 
   // ── Intercepta cliques em links internos ──────────────────────
   document.addEventListener("click", function (e) {
+    // Respeita preventDefault já chamado por handlers anteriores (ex: navegação SPA)
+    if (e.defaultPrevented) return;
+
     // Busca o <a> mais próximo do elemento clicado
     var link = e.target.closest("a");
     if (!link) return;

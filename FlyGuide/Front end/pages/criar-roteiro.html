@@ -1,7 +1,7 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="pt-br">
 <head>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧭</text></svg>">
+    <link rel="icon" href="../assets/img/logo.png" type="image/png">
   <title>FlyGuide - Criar Novo Roteiro</title>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -15,35 +15,148 @@
   <link href="../assets/css/components.css" rel="stylesheet">
   <link href="../assets/css/pages/criar-roteiro.css" rel="stylesheet">
   <style>
-    #imgSelector { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:12px; margin-top:8px; }
+    #imgSelector2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    .gen-hero-icon {
+      width: 72px; height: 72px;
+      background: linear-gradient(135deg, #f97316, #fb923c);
+      border-radius: 20px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 2rem; color: #fff;
+      margin: 0 auto;
+      box-shadow: 0 8px 24px rgba(249,115,22,.3);
+    }
+
+    .gen-success-icon {
+      width: 64px; height: 64px;
+      background: linear-gradient(135deg, #22c55e, #16a34a);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-size: 1.7rem;
+      margin: 0 auto;
+    }
+
+    .gen-loading-wrap {
+      display: flex; flex-direction: column; align-items: center;
+      padding: 70px 20px;
+    }
+    .gen-loading-ring {
+      width: 64px; height: 64px;
+      border: 5px solid #e2e8f0;
+      border-top-color: #f97316;
+      border-radius: 50%;
+      animation: gen-spin .85s linear infinite;
+    }
+    @keyframes gen-spin { to { transform: rotate(360deg); } }
+
+    .gen-loading-dots { display: flex; gap: 8px; }
+    .gen-loading-dots span {
+      width: 9px; height: 9px;
+      background: #f97316; border-radius: 50%;
+      animation: gen-bounce .9s ease-in-out infinite;
+    }
+    .gen-loading-dots span:nth-child(2) { animation-delay: .18s; }
+    .gen-loading-dots span:nth-child(3) { animation-delay: .36s; }
+    @keyframes gen-bounce { 0%,80%,100% { transform: scale(0); } 40% { transform: scale(1); } }
+
+    .ai-tag {
+      display: inline-flex; align-items: center; gap: 3px;
+      background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+      color: #fff; font-size: .7rem; font-weight: 700;
+      padding: 2px 7px; border-radius: 999px;
+      vertical-align: middle; margin-left: 6px;
+    }
+
+    .pais-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: #f1f5f9; border: 1px solid #e2e8f0;
+      border-radius: 999px; padding: 4px 12px;
+      font-size: .84rem; font-weight: 600; color: #475569;
+    }
+
+    .orcamento-box {
+      background: #f8fafc; border: 1px solid #e2e8f0;
+      border-radius: 12px; padding: 12px 16px;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      flex-wrap: wrap;
+    }
+    .orcamento-box .valor { font-size: 1.25rem; font-weight: 800; color: #0f172a; }
+
+    .destino-resumo {
+      background: #f8fafc; border: 1px solid #e2e8f0;
+      border-radius: 12px; padding: 14px 16px;
+      display: flex; align-items: center; gap: 14px;
+      margin-bottom: 24px;
+    }
+
+    /* dark mode overrides */
+    html[data-theme="dark"] .orcamento-box { background: #1e293b; border-color: #334155; }
+    html[data-theme="dark"] .orcamento-box .valor { color: #f1f5f9; }
+    html[data-theme="dark"] .destino-resumo { background: #1e293b; border-color: #334155; }
+    html[data-theme="dark"] .pais-badge { background: #1e293b; border-color: #334155; color: #94a3b8; }
+
+    .pac-container { z-index: 9999 !important; border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.15); }
+
+    /* Seletor de período (check-in / checkout) */
+    .period-selector { display: flex; flex-wrap: wrap; gap: 8px; }
+    .period-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 7px 14px; border-radius: 999px; border: 1.5px solid #e2e8f0;
+      background: transparent; font-size: .83rem; font-weight: 600;
+      color: #64748b; cursor: pointer; transition: all .15s;
+      white-space: nowrap;
+    }
+    .period-btn:hover { border-color: #f97316; color: #f97316; }
+    .period-btn.active {
+      background: #fff7ed; border-color: #f97316; color: #f97316;
+      box-shadow: 0 0 0 3px rgba(249,115,22,.12);
+    }
+    html[data-theme="dark"] .period-btn { border-color: #334155; color: #94a3b8; }
+    html[data-theme="dark"] .period-btn:hover { border-color: #f97316; color: #f97316; }
+    html[data-theme="dark"] .period-btn.active { background: #1e293b; border-color: #f97316; color: #f97316; }
+
+    #miniMapaPasso3Box { border: 1px solid #e2e8f0; border-radius: 14px; padding: 14px; margin-bottom: 24px; background: #f8fafc; }
+    #miniMapaPasso3Box .mapa-titulo { font-weight: 700; font-size: .88rem; color: #475569; margin-bottom: 10px; }
+    #miniMapaPasso3 { width: 100%; height: 320px; border-radius: 10px; overflow: hidden; border: 1px solid #e2e8f0; background: #f1f5f9; }
+    html[data-theme="dark"] #miniMapaPasso3Box { background: #1e293b; border-color: #334155; }
+    html[data-theme="dark"] #miniMapaPasso3Box .mapa-titulo { color: #94a3b8; }
+    html[data-theme="dark"] #miniMapaPasso3 { border-color: #334155; }
+
   </style>
 </head>
 <body data-pagina="criar-roteiro">
+  <a href="#conteudo-principal" class="skip-link">Pular para o conte&uacute;do principal</a>
   <div class="app-shell">
 
-    <div class="sidebar">
+    <nav class="sidebar" aria-label="Menu principal">
       <div class="brand">
-        <div class="brand-badge"><i class="bi bi-compass"></i></div>
-        <div><div class="brand-title">Roteiros</div><div class="brand-sub">Suas viagens inesquecíveis</div></div>
+        <div class="brand-badge" style="width:42px;height:42px;min-width:42px;padding:0;background:transparent;border:none;box-shadow:none;border-radius:0;overflow:visible;"><img src="../assets/img/logo.png" alt="FlyGuide" style="width:42px;height:42px;object-fit:contain;display:block;"></div>
+        <div><div class="brand-title">Fly Guide</div><div class="brand-sub">Suas viagens inesquec&iacute;veis</div></div>
         <button class="btn btn-sm btn-outline-soft ms-auto d-lg-none" data-sidebar-close><i class="bi bi-x-lg"></i></button>
       </div>
       <div class="navlist">
         <a href="index.html"><i class="bi bi-globe"></i><span>Feed de Roteiros</span></a>
         <a href="meus-roteiros.html"><i class="bi bi-map"></i><span>Meus Roteiros</span></a>
+        <a href="roteiros-iniciados.html"><i class="bi bi-play-circle"></i><span>Roteiros Iniciados</span></a>
         <a href="planos-premium.html"><i class="bi bi-star"></i><span>Planos Premium</span></a>
         <a href="ajuda.html"><i class="bi bi-question-circle"></i><span>Ajuda</span></a>
       </div>
-      <a href="criar-roteiro.html" class="btn btn-new btn-primary w-100"><i class="bi bi-plus-lg me-2"></i>Novo Roteiro</a>
+      <a href="criar-roteiro.html" class="btn btn-new btn-primary w-100"><i class="bi bi-plus-lg me-2"></i>Gerar Novo Roteiro</a>
       <div class="profile">
         <div class="avatar">?</div>
         <div><div class="name">Carregando...</div><div class="email"></div></div>
       </div>
-    </div>
+    </nav>
 
-    <div class="main">
+    <main class="main" id="conteudo-principal">
       <div class="mobile-topbar">
-        <button class="btn btn-outline-soft" data-sidebar-open><i class="bi bi-list"></i></button>
-        <div class="fw-bold">Criar Roteiro</div>
+        <button class="btn btn-outline-soft" data-sidebar-open aria-label="Abrir menu"><i class="bi bi-list" aria-hidden="true"></i></button>
+        <div class="fw-bold">Novo Roteiro</div>
         <div style="width:44px"></div>
       </div>
       <div class="d-lg-none position-fixed top-0 start-0 w-100 h-100" data-sidebar-backdrop style="display:none;z-index:1035;"></div>
@@ -63,94 +176,398 @@
       </script>
 
       <div class="page-head">
-        <a class="back-center" href="meus-roteiros.html"><i class="bi bi-arrow-left"></i>Voltar</a>
+        <a class="back-center" id="btnVoltarTopo" href="meus-roteiros.html"><i class="bi bi-arrow-left"></i>Voltar</a>
       </div>
 
       <div class="grid-wrap pt-2">
-        <div class="text-center mb-4">
-          <h1 class="fw-bold" style="font-weight:900;font-size:clamp(2rem,3.5vw,3rem);">Criar Novo Roteiro</h1>
-          <div class="small-muted">Compartilhe sua experiência de viagem com outros viajantes</div>
-          <div class="small text-secondary mt-2">Etapa 1 de 2 — informações básicas</div>
-        </div>
 
-        <div class="alert alert-danger mx-auto" id="criarRoteiroErro" style="max-width:980px;display:none;"></div>
+        <!-- Banner de erro (compartilhado entre passos) -->
+        <div class="alert alert-danger mx-auto" id="criarRoteiroErro" role="alert" aria-live="assertive"
+             style="max-width:660px;display:none;"></div>
 
-        <div class="form-card mx-auto" style="max-width:980px;">
-          <h5 class="fw-bold mb-3">Informações Básicas</h5>
-          <div class="row g-3">
-            <div class="col-12">
-              <label class="form-label fw-bold">Título do Roteiro *</label>
-              <input class="form-control" id="itTitle" placeholder="Ex: 10 dias mágicos em Paris">
+        <!-- =========================================================
+             PASSO 1 — Destino, duração e tipo
+        ========================================================== -->
+        <div id="passo1">
+          <div class="text-center mb-5">
+            <div class="gen-hero-icon"><i class="bi bi-magic"></i></div>
+            <h1 class="fw-bold mt-3" style="font-weight:900;font-size:clamp(1.6rem,3vw,2.4rem);">
+              Para onde voc&ecirc; quer ir?
+            </h1>
+            <p class="text-muted mt-2">
+              Informe o destino e t&iacute;tulo, descri&ccedil;&atilde;o e or&ccedil;amento ser&atilde;o gerados automaticamente
+            </p>
+          </div>
+
+          <div class="form-card mx-auto" style="max-width:580px;">
+
+            <div class="mb-4">
+              <label class="form-label fw-bold" for="genCidade">
+                Destino <span style="color:#ef4444;">*</span>
+              </label>
+              <div class="input-group">
+                <span class="input-group-text" style="background:transparent;border-right:0;">
+                  <i class="bi bi-geo-alt-fill" style="color:#f97316;"></i>
+                </span>
+                <input class="form-control form-control-lg" id="genCidade"
+                       placeholder="Ex: Paris, T&oacute;quio, Rio de Janeiro..."
+                       style="border-left:0;" autocomplete="off">
+              </div>
+              <div id="genPaisContainer" class="mt-2 d-flex gap-2 flex-wrap align-items-center" style="display:none;">
+                <span class="pais-badge">
+                  <i class="bi bi-flag-fill" style="color:#f97316;font-size:.78rem;"></i>
+                  <span id="genPaisLabel"></span>
+                </span>
+                <span class="pais-badge" id="genCidadeContainer" style="display:none;">
+                  <i class="bi bi-buildings" style="color:#0ea5e9;font-size:.78rem;"></i>
+                  <span id="genCidadeLabel"></span>
+                </span>
+                <span class="pais-badge" id="genEstadoContainer" style="display:none;">
+                  <i class="bi bi-geo-fill" style="color:#64748b;font-size:.78rem;"></i>
+                  <span id="genEstadoLabel"></span>
+                </span>
+                <span class="pais-badge" id="genLocalContainer" style="display:none;background:#fff7ed;border:1px solid #fed7aa;color:#ea580c;font-weight:700;">
+                  <i class="bi bi-pin-map-fill" style="color:#ea580c;font-size:.78rem;"></i>
+                  <span id="genLocalLabel"></span>
+                </span>
+              </div>
+              <input type="hidden" id="genPais">
+              <input type="hidden" id="genEstado">
             </div>
-            <!-- campos ocultos para compatibilidade com o backend -->
-            <input type="hidden" id="itCountry" value="">
-            <input type="hidden" id="itDestination" value="">
-            <div class="col-12 col-lg-4">
-              <label class="form-label fw-bold">Data Início</label>
-              <input class="form-control" id="itStart" type="date">
+
+            <div class="mb-4">
+              <label class="form-label fw-bold" for="genDias">
+                Dura&ccedil;&atilde;o (dias) <span style="color:#ef4444;">*</span>
+              </label>
+              <input class="form-control" id="genDias" type="number" min="1" max="365" placeholder="Ex: 7">
             </div>
-            <div class="col-12 col-lg-4">
-              <label class="form-label fw-bold">Data Fim</label>
-              <input class="form-control" id="itEnd" type="date">
-            </div>
-            <div class="col-12 col-lg-6">
-              <label class="form-label fw-bold">Tipo de Viagem</label>
-              <select class="form-select" id="itType">
+
+            <div class="mb-4">
+              <label class="form-label fw-bold" for="genTipo">Tipo de Viagem</label>
+              <select class="form-select" id="genTipo">
                 <option value="Cidade">Cidade</option>
-                <option value="Aventura">Aventura</option>
-                <option value="Cultural">Cultural</option>
                 <option value="Praia">Praia</option>
                 <option value="Natureza">Natureza</option>
+                <option value="Aventura">Aventura</option>
+                <option value="Cultural">Cultural</option>
                 <option value="Gastronomia">Gastronomia</option>
-                <option value="Mochilão">Mochilão</option>
+                <option value="Mochil&atilde;o">Mochil&atilde;o</option>
                 <option value="Luxo">Luxo</option>
+                <option value="Fam&iacute;lia">Fam&iacute;lia</option>
               </select>
             </div>
-            <div class="col-12 col-lg-6">
-              <label class="form-label fw-bold">Orçamento Estimado (R$)</label>
-              <input class="form-control" id="itBudget" type="number" min="0" placeholder="Ex: 5000">
-            </div>
-            <div class="col-12">
-              <label class="form-label fw-bold">Descrição</label>
-              <textarea class="form-control" id="itDescription" rows="4" placeholder="Conte sobre sua viagem..."></textarea>
-            </div>
 
-            <!-- Seletor de imagem (carregado do backend) -->
-            <div class="col-12">
-              <label class="form-label fw-bold">Imagem de Capa</label>
-              <div class="helper mb-2">Escolha um tema visual para o seu roteiro</div>
-              <div id="imgSelector">
-                <div class="text-center py-3 text-secondary">
-                  <span class="spinner-border spinner-border-sm me-2"></span>Carregando imagens...
-                </div>
+            <!-- Check-in -->
+            <div class="mb-4">
+              <label class="form-label fw-bold">
+                Per&iacute;odo de Check-in
+                <span style="font-size:.78rem;color:#94a3b8;font-weight:400;margin-left:4px;">Quando voc&ecirc; chega no destino?</span>
+              </label>
+              <div class="period-selector" id="checkinSelector">
+                <button type="button" class="period-btn" data-value="manha"><i class="bi bi-sunrise-fill"></i>Manh&atilde;</button>
+                <button type="button" class="period-btn" data-value="tarde"><i class="bi bi-sun-fill"></i>Tarde</button>
+                <button type="button" class="period-btn" data-value="noite"><i class="bi bi-moon-stars-fill"></i>Noite</button>
+                <button type="button" class="period-btn active" data-value="sem"><i class="bi bi-dash-circle"></i>Sem check-in</button>
               </div>
-              <input type="hidden" id="itImagem" value="">
+              <input type="hidden" id="genCheckin" value="sem">
             </div>
 
-            <div class="col-12">
-              <div class="soft-strip">
-                <div>
-                  <div class="label">Compartilhar no Feed Público</div>
-                  <div class="desc">Outras pessoas poderão ver seu roteiro</div>
-                </div>
-                <div class="form-check form-switch m-0">
-                  <input class="form-check-input" id="itPublic" type="checkbox" role="switch">
-                </div>
+            <!-- Check-out -->
+            <div class="mb-4">
+              <label class="form-label fw-bold">
+                Per&iacute;odo de Check-out
+                <span style="font-size:.78rem;color:#94a3b8;font-weight:400;margin-left:4px;">Quando voc&ecirc; parte do destino?</span>
+              </label>
+              <div class="period-selector" id="checkoutSelector">
+                <button type="button" class="period-btn" data-value="manha"><i class="bi bi-sunrise-fill"></i>Manh&atilde;</button>
+                <button type="button" class="period-btn" data-value="tarde"><i class="bi bi-sun-fill"></i>Tarde</button>
+                <button type="button" class="period-btn" data-value="noite"><i class="bi bi-moon-stars-fill"></i>Noite</button>
+                <button type="button" class="period-btn active" data-value="sem"><i class="bi bi-dash-circle"></i>Sem check-out</button>
               </div>
+              <input type="hidden" id="genCheckout" value="sem">
             </div>
-          </div>
-        </div>
 
-        <div class="mx-auto" style="max-width:980px;">
-          <div class="footer-actions">
-            <a class="btn btn-outline-gray" href="meus-roteiros.html">Cancelar</a>
-            <button class="btn btn-primary-orange" id="btnAvancar" type="button">
-              Avançar <i class="bi bi-arrow-right ms-1"></i>
+            <button class="btn btn-primary-orange btn-lg w-100" id="btnGerar" type="button">
+              <i class="bi bi-magic me-2"></i>Gerar Roteiro
             </button>
+
+            <div class="text-center mt-3" style="font-size:.8rem;color:#94a3b8;">
+              <i class="bi bi-shield-check me-1"></i>
+              Seus dados s&atilde;o usados apenas para gerar o roteiro
+            </div>
           </div>
         </div>
-      </div>
-    </div>
+
+        <!-- =========================================================
+             LOADING
+        ========================================================== -->
+        <div id="passoLoading" style="display:none;">
+          <div class="gen-loading-wrap">
+            <div class="gen-loading-ring"></div>
+            <h3 class="mt-4 fw-bold">Gerando seu roteiro...</h3>
+            <p class="text-muted">Nossa IA est&aacute; criando algo especial para voc&ecirc;</p>
+            <div class="gen-loading-dots mt-3">
+              <span></span><span></span><span></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- =========================================================
+             PASSO 2 — Resultado gerado + confirmação
+        ========================================================== -->
+        <div id="passo2" style="display:none;">
+          <div class="text-center mb-4">
+            <div class="gen-success-icon"><i class="bi bi-check-lg"></i></div>
+            <h1 class="fw-bold mt-3" style="font-weight:900;font-size:clamp(1.6rem,3vw,2.4rem);">
+              Roteiro gerado!
+            </h1>
+            <p class="text-muted mt-1">Revise e personalize antes de criar</p>
+          </div>
+
+          <div class="form-card mx-auto" style="max-width:700px;">
+
+            <!-- Resumo do destino (somente leitura) -->
+            <div class="destino-resumo">
+              <i class="bi bi-geo-alt-fill" style="color:#f97316;font-size:1.4rem;flex-shrink:0;"></i>
+              <div style="flex:1;min-width:0;">
+                <div class="fw-bold" id="p2Destino"></div>
+                <div class="small text-muted" id="p2Info"></div>
+                <div id="p2LocalBadge" style="display:none;margin-top:5px;">
+                  <span style="display:inline-flex;align-items:center;gap:4px;background:#fff7ed;border:1px solid #fed7aa;color:#ea580c;border-radius:999px;padding:2px 10px;font-size:.78rem;font-weight:700;">
+                    <i class="bi bi-pin-map-fill"></i>
+                    <span id="p2LocalLabel"></span>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Título -->
+            <div class="mb-3">
+              <label class="form-label fw-bold" for="genTitulo">
+                T&iacute;tulo
+                <span class="ai-tag" id="aiTagTitulo"><i class="bi bi-magic"></i> IA</span>
+              </label>
+              <input class="form-control" id="genTitulo" maxlength="100">
+            </div>
+
+            <!-- Descrição -->
+            <div class="mb-3">
+              <label class="form-label fw-bold" for="genDescricao">
+                Descri&ccedil;&atilde;o
+                <span class="ai-tag" id="aiTagDesc"><i class="bi bi-magic"></i> IA</span>
+              </label>
+              <textarea class="form-control" id="genDescricao" rows="3"></textarea>
+            </div>
+
+            <!-- Orçamento estimado -->
+            <div class="mb-4">
+              <label class="form-label fw-bold">
+                Or&ccedil;amento Estimado
+                <span class="ai-tag" id="aiTagOrc"><i class="bi bi-magic"></i> IA</span>
+              </label>
+              <div class="orcamento-box">
+                <span class="valor">R$ <span id="genOrcamento">&mdash;</span></span>
+                <span style="font-size:.8rem;color:#64748b;">
+                  Estimativa baseada no destino e tipo de viagem
+                </span>
+              </div>
+            </div>
+
+            <!-- Imagem de capa -->
+            <div class="mb-4">
+              <label class="form-label fw-bold">
+                Imagem de Capa
+                <span class="ai-tag" id="aiTagImg"><i class="bi bi-magic"></i> Sugerida</span>
+              </label>
+              <div class="helper mb-2">
+                A IA selecionou a imagem mais adequada. Voc&ecirc; pode trocar se quiser.
+              </div>
+              <div id="imgSelector2"></div>
+              <input type="hidden" id="itImagem2" value="">
+            </div>
+
+            <!-- Visibilidade -->
+            <div class="mb-4">
+              <div class="visibility-strip" id="criarVisibilityStrip">
+                <div class="visibility-icon-wrap" id="criarVisIconWrap">
+                  <i class="bi bi-lock-fill" id="criarVisIcon"></i>
+                </div>
+                <div class="visibility-text">
+                  <div class="visibility-label" id="criarVisLabel">Roteiro Privado</div>
+                  <div class="visibility-desc" id="criarVisDesc">Somente voc&ecirc; pode ver este roteiro</div>
+                </div>
+                <div class="visibility-toggle-wrap">
+                  <div class="form-check form-switch m-0">
+                    <input class="form-check-input" id="itPublic" type="checkbox" role="switch">
+                  </div>
+                  <span class="visibility-badge" id="criarVisBadge">Privado</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Botões -->
+            <div class="d-flex gap-3">
+              <button class="btn btn-outline-gray" id="btnVoltarPasso1" type="button" style="min-width:110px;">
+                <i class="bi bi-arrow-left me-1"></i>Voltar
+              </button>
+              <button class="btn btn-primary-orange flex-fill" id="btnConfirmar" type="button">
+                <i class="bi bi-arrow-right me-2"></i>Próximo: Revisar Locais
+              </button>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- =========================================================
+             PASSO 3 — Resumo do roteiro (edição de locais)
+        ========================================================== -->
+        <div id="passo3" style="display:none;">
+          <div class="text-center mb-4">
+            <div class="gen-success-icon" style="background:linear-gradient(135deg,#f97316,#fb923c);">
+              <i class="bi bi-map-fill"></i>
+            </div>
+            <h1 class="fw-bold mt-3" style="font-weight:900;font-size:clamp(1.6rem,3vw,2.4rem);">
+              Resumo do Roteiro
+            </h1>
+            <p class="text-muted mt-1">Revise e edite os locais gerados pela IA antes de finalizar</p>
+          </div>
+
+          <div class="form-card mx-auto" style="max-width:700px;">
+
+            <!-- Destino (leitura) -->
+            <div class="destino-resumo mb-4">
+              <i class="bi bi-geo-alt-fill" style="color:#f97316;font-size:1.4rem;flex-shrink:0;"></i>
+              <div style="flex:1;min-width:0;">
+                <div class="fw-bold" id="p3Destino"></div>
+                <div class="small text-muted" id="p3Info"></div>
+              </div>
+            </div>
+
+            <!-- Mini-mapa passo3 (preenchido após lookup AI) -->
+            <div id="miniMapaPasso3Box" style="display:none;">
+              <div class="mapa-titulo">
+                <i class="bi bi-map-fill me-1" style="color:#f97316;"></i>Mapa dos Locais
+              </div>
+              <div id="miniMapaPasso3"></div>
+            </div>
+
+            <!-- Erro inline -->
+            <div class="alert" id="erroLocalEdit" style="display:none;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:10px;font-size:.9rem;"></div>
+
+            <!-- Formulário: adicionar local -->
+            <div id="formAdicionarLocalEdit">
+
+              <!-- Recomendações Inteligentes -->
+              <div class="mb-3" style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:14px;padding:16px;">
+                <div style="font-weight:800;font-size:.95rem;margin-bottom:10px;">
+                  <i class="bi bi-stars me-1" style="color:#f97316;"></i>Recomendações Inteligentes
+                  <div style="font-size:.78rem;font-weight:400;color:#64748b;margin-top:2px;">Melhores lugares no raio definido, ordenados por avaliação</div>
+                </div>
+                <div class="d-flex gap-2 mb-2">
+                  <select class="form-select form-select-sm" id="categoriaRecomendacaoEdit">
+                    <option value="tourist_attraction">Atrações Turísticas</option>
+                    <option value="restaurant">Restaurantes</option>
+                    <option value="lodging">Hospedagem</option>
+                    <option value="museum">Museus</option>
+                    <option value="park">Parques</option>
+                    <option value="shopping_mall">Shoppings</option>
+                    <option value="night_club">Vida Noturna</option>
+                    <option value="bar">Bares</option>
+                    <option value="cafe">Cafés</option>
+                    <option value="beach">Praias</option>
+                  </select>
+                  <button class="btn btn-sm btn-primary-orange flex-shrink-0" id="btnBuscarRecomendacoesEdit" type="button">
+                    <i class="bi bi-search me-1"></i>Buscar
+                  </button>
+                </div>
+                <div id="alertaRecomendacoesEdit" style="display:none;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:8px;font-size:.82rem;padding:8px 12px;margin-bottom:8px;"></div>
+                <div id="loadingRecomendacoesEdit" style="display:none;" class="text-center py-2 text-secondary" style="font-size:.82rem;">
+                  <span class="spinner-border spinner-border-sm me-1"></span>Buscando recomendações...
+                </div>
+                <div id="listaRecomendacoesEdit"></div>
+              </div>
+
+              <!-- Busca manual -->
+              <div class="mb-3">
+                <label class="form-label fw-bold">Buscar Local</label>
+                <div class="input-group">
+                  <span class="input-group-text" style="background:transparent;border-right:0;border-radius:12px 0 0 12px;">
+                    <i class="bi bi-search" style="color:#f97316;"></i>
+                  </span>
+                  <input id="buscaLocalEdit" type="text" class="form-control"
+                         style="border-left:0;border-radius:0 12px 12px 0;"
+                         placeholder="Ex: Torre Eiffel, Paris...">
+                </div>
+              </div>
+
+              <!-- Preview do local selecionado -->
+              <div id="localPreviewEdit" style="display:none;" class="mb-3">
+                <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:12px;padding:12px 14px;">
+                  <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-geo-alt-fill" style="color:#f97316;font-size:1.1rem;"></i>
+                    <div style="flex:1;">
+                      <div class="fw-bold" id="previewNomeEdit"></div>
+                      <div class="text-secondary" style="font-size:.82rem;" id="previewEnderecoEdit"></div>
+                    </div>
+                    <i class="bi bi-check-circle-fill" style="color:#22c55e;font-size:1.2rem;"></i>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Dia, Período, Observações -->
+              <div class="row g-2 mb-3">
+                <div class="col-4">
+                  <label class="form-label fw-bold">Dia <span style="color:#ef4444;">*</span></label>
+                  <input id="localDiaEdit" type="number" min="1" class="form-control" placeholder="Ex: 1">
+                </div>
+                <div class="col-4">
+                  <label class="form-label fw-bold">Período</label>
+                  <select id="localPeriodoEdit" class="form-select">
+                    <option value="" disabled selected>— selecione —</option>
+                    <option value="manha">🌅 Manhã</option>
+                    <option value="tarde">☀️ Tarde</option>
+                    <option value="noite">🌙 Noite</option>
+                  </select>
+                </div>
+                <div class="col-4">
+                  <label class="form-label fw-bold">Observações</label>
+                  <input id="localObsEdit" type="text" class="form-control" placeholder="Ex: Chegar cedo">
+                </div>
+              </div>
+
+              <button class="btn btn-primary-orange w-100 fw-bold mb-4" id="btnAdicionarLocalEdit" type="button">
+                <i class="bi bi-plus-lg me-1"></i>Adicionar Local ao Roteiro
+              </button>
+            </div>
+
+            <!-- Lista de locais adicionados -->
+            <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:14px;padding:14px;min-height:120px;margin-bottom:24px;">
+              <div class="fw-bold mb-2" style="font-size:.9rem;color:#64748b;">
+                <i class="bi bi-list-ul me-1"></i>Locais adicionados
+              </div>
+              <div id="listaLocaisEdit">
+                <div id="vazioLocaisEdit" class="text-center py-3 text-secondary" style="font-size:.88rem;">
+                  <i class="bi bi-map" style="color:#cbd5e1;font-size:1.5rem;display:block;margin-bottom:6px;"></i>
+                  Nenhum local adicionado ainda
+                </div>
+              </div>
+            </div>
+
+            <!-- Botões finais -->
+            <div class="d-flex gap-3">
+              <button class="btn btn-outline-gray" id="btnVoltarPasso2" type="button" style="min-width:110px;">
+                <i class="bi bi-arrow-left me-1"></i>Voltar
+              </button>
+              <button class="btn btn-primary-orange flex-fill" id="btnFinalizarRoteiro" type="button">
+                <i class="bi bi-check-lg me-2"></i>Finalizar Roteiro
+              </button>
+            </div>
+
+          </div>
+        </div>
+
+      </div><!-- .grid-wrap -->
+    </main>
   </div>
 
   <script src="../assets/js/transitions.js"></script>
@@ -158,6 +575,21 @@
   <script src="../assets/js/app.js"></script>
   <script src="../assets/js/imagens.js"></script>
   <script src="../assets/js/roteiros.js"></script>
+  <script src="../assets/js/maps-edit.js"></script>
+  <script>
+    window.initCombinado = function () {
+      if (typeof window.initCriarRoteiro === "function") window.initCriarRoteiro();
+      if (typeof window.initMapsEdit === "function") window.initMapsEdit();
+    };
+    function mascHorario(input) {
+      let v = input.value.replace(/\D/g, '').slice(0, 4);
+      if (v.length >= 3) v = v.slice(0, 2) + ':' + v.slice(2);
+      input.value = v;
+    }
+  </script>
+  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDJDXcLhGd99ryVpWwvkVpeFaKuzDWbvwI&libraries=places&language=pt-BR&loading=async&callback=initCombinado" async defer></script>
   <script src="../assets/js/dark-mode.js"></script>
 </body>
 </html>
+
+

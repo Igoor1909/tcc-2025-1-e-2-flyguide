@@ -1,9 +1,8 @@
-// assets/js/auth.js
+﻿// assets/js/auth.js
 (function () {
   const qs = (seletor, el = document) => el.querySelector(seletor);
 
-  const URL_API_BASE = "http://localhost:8080";
-  const SESSION_KEY  = "flyguide.userId";
+  const URL_API_BASE = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app";
 
   // ======================== UTILITÁRIOS ========================
 
@@ -63,13 +62,64 @@
     return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12)}`;
   }
 
+  function garantirBotaoMostrarSenha(inputId) {
+    const input = document.getElementById(inputId);
+    const grupo = input?.closest(".auth-input");
+    if (!input || !grupo || grupo.querySelector(`[data-target="${inputId}"]`)) return;
+
+    input.classList.add("has-password-toggle");
+
+    const botao = document.createElement("button");
+    botao.type = "button";
+    botao.className = "btn password-toggle";
+    botao.setAttribute("data-toggle-password", "");
+    botao.setAttribute("data-target", inputId);
+    botao.setAttribute("aria-label", "Mostrar senha");
+    botao.innerHTML = '<i class="bi bi-eye"></i>';
+    grupo.appendChild(botao);
+  }
+
+  function configurarTogglesSenha() {
+    [
+      "senhaLogin",
+      "novaSenha",
+      "confirmarNovaSenha",
+      "senhaCadastro",
+      "confirmarSenhaCadastro",
+    ].forEach(garantirBotaoMostrarSenha);
+
+    document.querySelectorAll("[data-toggle-password]").forEach((botao) => {
+      if (botao.dataset.toggleReady === "true") return;
+      botao.dataset.toggleReady = "true";
+
+      botao.addEventListener("click", () => {
+        const alvoId = botao.getAttribute("data-target");
+        const input = alvoId ? document.getElementById(alvoId) : null;
+        const icone = botao.querySelector("i");
+
+        if (!input) return;
+
+        const mostrando = input.type === "text";
+        input.type = mostrando ? "password" : "text";
+        botao.setAttribute("aria-label", mostrando ? "Mostrar senha" : "Ocultar senha");
+
+        if (icone) {
+          icone.classList.toggle("bi-eye", mostrando);
+          icone.classList.toggle("bi-eye-slash", !mostrando);
+        }
+      });
+    });
+  }
+
   function marcarInvalido(input, msg) {
+    if (!input) return;
     input.classList.add("is-invalid");
     const f = input.closest(".auth-field")?.querySelector(".invalid-feedback");
     if (f) f.textContent = msg;
   }
 
   function marcarValido(input) {
+    if (!input) return;
     input.classList.remove("is-invalid");
     const f = input.closest(".auth-field")?.querySelector(".invalid-feedback");
     if (f) f.textContent = "";
@@ -138,6 +188,11 @@
 
   // ======================== LOGIN ========================
 
+  // Acorda o backend assim que a página carrega (cold start do Railway)
+  if (document.body.getAttribute("data-pagina") === "login") {
+    fetch(`${URL_API_BASE}/roteiros/publicos`).catch(() => {});
+  }
+
   // Guarda o e-mail entre a etapa 1 (login) e etapa 2 (verificar OTP)
   let emailPendente = null;
 
@@ -153,28 +208,38 @@
 
     setBotaoCarregando(btn, true);
 
+    const controller = new AbortController();
+    const limpezaId = setTimeout(() => controller.abort(), 180000);
+
     try {
       const resposta = await fetch(`${URL_API_BASE}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, senha }),
+        signal: controller.signal,
       });
 
       const dados = await resposta.json().catch(() => ({}));
 
       if (!resposta.ok) {
-        mostrarAlerta("danger", dados.message || "Login ou senha inválida.");
+        if (resposta.status === 500) {
+          mostrarAlerta("danger", "Não foi possível enviar o e-mail de verificação. Tente novamente em instantes.");
+        } else {
+          mostrarAlerta("danger", dados.message || "Login ou senha inválida.");
+        }
         return;
       }
 
-      // Etapa 1 ok — guarda o e-mail e mostra o campo de código OTP
       emailPendente = email;
       mostrarAlerta("success", "Código de verificação enviado para o seu e-mail!");
       mostrarCampoOtp();
 
-    } catch {
-      mostrarAlerta("danger", "Não foi possível conectar ao servidor. Verifique se o backend está rodando.");
+    } catch (err) {
+      mostrarAlerta("danger", err.name === "AbortError"
+        ? "O servidor demorou para responder. Tente novamente."
+        : "Não foi possível conectar ao servidor. Verifique sua conexão.");
     } finally {
+      clearTimeout(limpezaId);
       setBotaoCarregando(btn, false);
     }
   }
@@ -235,11 +300,15 @@
     marcarValido(inputCodigo);
     setBotaoCarregando(btn, true);
 
+    const controller2 = new AbortController();
+    const timeoutId2  = setTimeout(() => controller2.abort(), 90000);
+
     try {
       const resposta = await fetch(`${URL_API_BASE}/auth/login/verificar`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: emailPendente, codigo }),
+        signal: controller2.signal,
       });
 
       const dados = await resposta.json().catch(() => ({}));
@@ -249,14 +318,19 @@
         return;
       }
 
-      // Etapa 2 ok — agora temos o id real do usuário
-      sessionStorage.setItem(SESSION_KEY, dados.id);
+      // Etapa 2 ok — salva apenas o token JWT
+      localStorage.setItem("flyguide.token", dados.token);
       mostrarAlerta("success", "Usuário logado com sucesso!");
       setTimeout(() => (window.location.href = "index.html"), 800);
 
-    } catch {
-      mostrarAlerta("danger", "Não foi possível verificar o código. Tente novamente.");
+    } catch (err) {
+      if (err.name === "AbortError") {
+        mostrarAlerta("danger", "O servidor demorou para responder. Tente novamente.");
+      } else {
+        mostrarAlerta("danger", "Não foi possível verificar o código. Tente novamente.");
+      }
     } finally {
+      clearTimeout(timeoutId2);
       setBotaoCarregando(btn, false);
     }
   }
@@ -392,11 +466,13 @@
   const pagina = document.body.getAttribute("data-pagina");
 
   if (pagina === "login") {
+    configurarTogglesSenha();
     qs("#formularioLogin")?.addEventListener("submit", processarLogin);
   }
 
   if (pagina === "cadastro") {
     configurarToggleTipo();
+    configurarTogglesSenha();
 
     const inputCPF  = qs("#cpfCadastro");
     const inputCNPJ = qs("#cnpjCadastro");
@@ -433,13 +509,17 @@
 (function iniciarRecuperacaoSenha() {
   if (document.body.getAttribute("data-pagina") !== "login") return;
 
-  const URL_API_BASE = "http://localhost:8080";
+  const URL_API_BASE = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app";
 
   const telaLogin       = document.getElementById("formularioLogin");
   const telaEmail       = document.getElementById("telaEsqueceuEmail");
   const telaReset       = document.getElementById("telaResetSenha");
 
   let emailRecuperacao = "";
+
+  function senhaForte(valor) {
+    return /^(?=.*[A-Z])(?=.*[^A-Za-z0-9]).{8,}$/.test(valor || "");
+  }
 
   function mostrarTela(tela) {
     telaLogin.style.display = "none";
@@ -510,6 +590,10 @@
         mostrarTela(telaReset);
       } else if (res.status === 404) {
         mostrarAlertaLocal("alertaRecuperar", "danger", "Nenhuma conta encontrada com este e-mail.");
+      } else if (res.status === 429) {
+        mostrarAlertaLocal("alertaRecuperar", "warning", dados.message || "Aguarde antes de solicitar um novo código.");
+      } else if (res.status === 500) {
+        mostrarAlertaLocal("alertaRecuperar", "danger", "Não foi possível enviar o e-mail de verificação. Tente novamente em instantes.");
       } else {
         mostrarAlertaLocal("alertaRecuperar", "danger", dados.message || "Erro ao enviar o código.");
       }
@@ -533,8 +617,11 @@
       inputCodigo.classList.add("is-invalid"); valido = false;
     } else { inputCodigo.classList.remove("is-invalid"); }
 
-    if (inputNova.value.length < 8) {
-      inputNova.classList.add("is-invalid"); valido = false;
+    if (!senhaForte(inputNova.value)) {
+      inputNova.classList.add("is-invalid");
+      const feedback = inputNova.closest(".auth-field")?.querySelector(".invalid-feedback");
+      if (feedback) feedback.textContent = "Use no mínimo 8 caracteres, 1 letra maiúscula e 1 caractere especial.";
+      valido = false;
     } else { inputNova.classList.remove("is-invalid"); }
 
     if (inputConfirmar.value !== inputNova.value) {
@@ -567,6 +654,8 @@
         }, 2000);
       } else if (res.status === 401) {
         mostrarAlertaLocal("alertaReset", "danger", "Código inválido ou expirado.");
+      } else if (res.status === 422) {
+        mostrarAlertaLocal("alertaReset", "danger", dados.message || "A nova senha não atende aos requisitos.");
       } else {
         mostrarAlertaLocal("alertaReset", "danger", dados.message || "Erro ao redefinir a senha.");
       }
@@ -577,3 +666,7 @@
     }
   });
 })();
+
+
+
+
