@@ -22,13 +22,23 @@ public class EmailService {
     @Value("${spring.mail.username:NAO_CONFIGURADO}")
     private String mailUsername;
 
+    @Value("${spring.mail.password:}")
+    private String mailPassword;
+
     @Value("${spring.mail.host:NAO_CONFIGURADO}")
     private String mailHost;
 
     @Value("${spring.mail.port:0}")
     private int mailPort;
 
+    private void validarConfiguracao() {
+        if (mailUsername == null || mailUsername.isBlank() || mailPassword == null || mailPassword.isBlank()) {
+            throw new IllegalStateException("SMTP nao configurado: defina MAIL_USERNAME e MAIL_PASSWORD no ambiente");
+        }
+    }
+
     public void enviarOtpResetSenha(String destinatario, String codigo) {
+        validarConfiguracao();
         logger.info("🔥 [EMAIL] Iniciando envio OTP reset senha | De: {} | Para: {} | Host: {}:{} | User: {}",
                 remetente, destinatario, mailHost, mailPort, mailUsername);
         try {
@@ -54,6 +64,7 @@ public class EmailService {
     }
 
     public void enviarOtpLogin(String destinatario, String codigo) {
+        validarConfiguracao();
         logger.info("🔥 [EMAIL] Iniciando envio OTP login | De: {} | Para: {} | Host: {}:{} | User: {}",
                 remetente, destinatario, mailHost, mailPort, mailUsername);
         try {
