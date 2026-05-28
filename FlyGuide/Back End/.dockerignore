@@ -2,4 +2,7 @@ target/
 *.zip
 .git/
 .claude/
+.env
+.env.*
+!.env.example
 *.md
