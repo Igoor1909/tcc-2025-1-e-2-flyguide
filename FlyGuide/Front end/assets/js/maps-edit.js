@@ -667,6 +667,27 @@ function _initAIItemAutocomplete(input) {
 }
 
 function _renderAIItemCardMR(item, idx, uid, isDark) {
+  // Renderização especial para marcadores de check-in / checkout
+  if (item._checkin || item._checkout) {
+    const isCI  = !!item._checkin;
+    const icon  = isCI ? "bi-key-fill" : "bi-box-arrow-right";
+    const bg    = isCI ? (isDark ? "rgba(20,83,45,.3)"   : "#f0fdf4") : (isDark ? "rgba(124,45,18,.25)" : "#fff7ed");
+    const clr   = isCI ? "#16a34a" : "#ea580c";
+    const brd   = isCI ? (isDark ? "#166534" : "#bbf7d0") : (isDark ? "#9a3412" : "#fed7aa");
+    const label = isCI ? "Check-in" : "Checkout";
+    return `<div data-ai-item data-ai-special style="margin-top:5px;">
+      <div style="background:${bg};border:1.5px solid ${brd};border-radius:8px;display:flex;align-items:center;gap:8px;padding:8px 12px;">
+        <div style="background:${clr}22;color:${clr};min-width:28px;height:28px;border-radius:50%;display:grid;place-items:center;flex-shrink:0;font-size:.85rem;">
+          <i class="bi ${icon}"></i>
+        </div>
+        <div style="font-weight:800;font-size:.85rem;color:${clr};">${label}</div>
+        <input type="hidden" data-ai-nome value="${escapeHtml(label)}">
+        <input type="hidden" data-ai-checkin  value="${isCI  ? '1' : ''}">
+        <input type="hidden" data-ai-checkout value="${!isCI ? '1' : ''}">
+      </div>
+    </div>`;
+  }
+
   const nome = item.nome || "";
   const endereco = item.endereco || "";
   const placeId = item.placeId || "";
@@ -978,6 +999,7 @@ async function _autoLookupAIAddresses(lista, cidade) {
     // Coleta itens pendentes: sem placeId, sem coordenadas ou resolvidos fora da cidade base.
     const pendentes = [];
     for (const item of lista.querySelectorAll("[data-ai-item]")) {
+      if (item.hasAttribute("data-ai-special")) continue; // check-in/checkout: sem busca Maps
       const pidEl    = item.querySelector("[data-ai-place-id]");
       const endEl    = item.querySelector("[data-ai-endereco]");
       const endVazio = !endEl?.textContent?.trim();
@@ -1486,8 +1508,30 @@ function renderLocaisEditAI() {
     html += `<div style="padding:10px 12px;background:${isDark ? "#0f172a" : "#fff"};">`;
 
     if (temPeriodos) {
-      _PERIODOS_AI_MR.forEach(per => {
-        const itens = diaObj.periodos[per.key] || [];
+      // Detecta posição exata de checkin/checkout para filtrar períodos
+      const PER_KEYS = _PERIODOS_AI_MR.map(p => p.key); // ["manha","tarde","noite"]
+      let ciPeriodIdx = -1,               coPeriodIdx = PER_KEYS.length;
+      let ciPosInPer  = -1,               coPosInPer  = Number.MAX_SAFE_INTEGER;
+      _PERIODOS_AI_MR.forEach((per, pidx) => {
+        (diaObj.periodos[per.key] || []).forEach((item, lidx) => {
+          if (item._checkin)  { ciPeriodIdx = pidx; ciPosInPer = lidx; }
+          if (item._checkout) { coPeriodIdx = pidx; coPosInPer = lidx; }
+        });
+      });
+      const startPer = ciPeriodIdx >= 0            ? ciPeriodIdx          : 0;
+      const endPer   = coPeriodIdx < PER_KEYS.length ? coPeriodIdx        : PER_KEYS.length - 1;
+
+      _PERIODOS_AI_MR.forEach((per, pidx) => {
+        if (pidx < startPer || pidx > endPer) return; // período fora da janela
+
+        const todosItens = diaObj.periodos[per.key] || [];
+        const itens = todosItens.filter((item, lidx) => {
+          if (item._checkin || item._checkout) return true; // marcadores sempre incluídos
+          if (pidx === startPer && lidx < ciPosInPer)  return false; // antes do checkin
+          if (pidx === endPer   && lidx > coPosInPer)  return false; // depois do checkout
+          return true;
+        });
+
         const locaisDestePer = locaisDesteDia.filter(l => {
           const hNorm = _normalizarHorarioEdit(l.horario);
           if (!hNorm) return false;
@@ -1742,7 +1786,15 @@ function _getAiSugestoesEditadasEdit() {
         const perKey = perEl.getAttribute("data-ai-per");
         const itens = [];
         perEl.querySelectorAll("[data-ai-item]").forEach(itemEl => {
-          const nome     = (itemEl.querySelector("[data-ai-nome]")  || {}).value || "";
+          const nome       = (itemEl.querySelector("[data-ai-nome]")     || {}).value || "";
+          const isCheckin  = !!((itemEl.querySelector("[data-ai-checkin]")  || {}).value);
+          const isCheckout = !!((itemEl.querySelector("[data-ai-checkout]") || {}).value);
+          if (!nome.trim()) return;
+          // Marcadores especiais: salvar apenas com flag, sem endereço/custo
+          if (isCheckin || isCheckout) {
+            itens.push({ nome: nome.trim(), ...(isCheckin && { _checkin: true }), ...(isCheckout && { _checkout: true }) });
+            return;
+          }
           const custoRaw = (itemEl.querySelector("[data-ai-custo]") || {}).value || "";
           const custo    = custoRaw !== "" ? parseFloat(custoRaw) : null;
           const endereco = ((itemEl.querySelector("[data-ai-endereco]") || {}).textContent || "").trim();
@@ -1751,7 +1803,7 @@ function _getAiSugestoesEditadasEdit() {
           const latVal   = ((itemEl.querySelector("[data-ai-lat]")  || {}).value || "").trim();
           const lngVal   = ((itemEl.querySelector("[data-ai-lng]")  || {}).value || "").trim();
           if (!_itemDentroDaBase(latVal, lngVal)) return;
-          if (nome.trim()) itens.push({
+          itens.push({
             nome: nome.trim(),
             custo: custo != null ? `R$ ${custo.toLocaleString("pt-BR", {minimumFractionDigits: 0, maximumFractionDigits: 2})}` : "",
             ...(endereco && { endereco }),

@@ -517,12 +517,40 @@ public class GeradorRoteiroService {
     private static boolean temCheckin(String p) { return p != null && !p.isBlank() && !p.equals("sem"); }
 
     private String buildPrompt(GerarRoteiroRequestDTO req) {
-        int    dias   = req.getDiasTotais();
-        String cidade = req.getCidade()      != null ? req.getCidade()      : "";
-        String estado = req.getEstado()      != null ? req.getEstado()      : "";
-        String pais   = req.getPais()        != null ? req.getPais()        : "";
-        String tipo   = req.getTipoRoteiro() != null ? req.getTipoRoteiro() : "Cidade";
-        int    seed   = (int)(System.currentTimeMillis() % 9000) + 1000;
+        int    dias     = req.getDiasTotais();
+        String cidade   = req.getCidade()      != null ? req.getCidade()      : "";
+        String estado   = req.getEstado()      != null ? req.getEstado()      : "";
+        String pais     = req.getPais()        != null ? req.getPais()        : "";
+        String tipo     = req.getTipoRoteiro() != null ? req.getTipoRoteiro() : "Cidade";
+        int    seed     = (int)(System.currentTimeMillis() % 9000) + 1000;
+        String checkinP  = req.getPeriodoCheckin();
+        String checkoutP = req.getPeriodoCheckout();
+
+        // Instruções condicionais de check-in / checkout para o Dia 1 e último dia
+        String instrucaoCheckin = "";
+        if (temCheckin(checkinP)) {
+            instrucaoCheckin = switch (checkinP) {
+                case "tarde" -> "\nATENÇÃO — CHECK-IN: O turista chegará no período da TARDE do Dia 1. "
+                        + "NÃO gere NENHUMA atividade para a MANHÃ do Dia 1. "
+                        + "O Dia 1 deve conter atividades SOMENTE na tarde e noite.\n";
+                case "noite" -> "\nATENÇÃO — CHECK-IN: O turista chegará no período da NOITE do Dia 1. "
+                        + "NÃO gere NENHUMA atividade para a MANHÃ nem para a TARDE do Dia 1. "
+                        + "O Dia 1 deve conter atividades SOMENTE na noite.\n";
+                default -> "";
+            };
+        }
+        String instrucaoCheckout = "";
+        if (temCheckin(checkoutP)) {
+            instrucaoCheckout = switch (checkoutP) {
+                case "manha" -> "\nATENÇÃO — CHECKOUT: O turista partirá de manhã no Dia " + dias + ". "
+                        + "NÃO gere NENHUMA atividade para a TARDE nem para a NOITE do Dia " + dias + ". "
+                        + "O Dia " + dias + " deve conter atividades SOMENTE na manhã.\n";
+                case "tarde" -> "\nATENÇÃO — CHECKOUT: O turista partirá à tarde no Dia " + dias + ". "
+                        + "NÃO gere NENHUMA atividade para a NOITE do Dia " + dias + ". "
+                        + "O Dia " + dias + " deve conter atividades SOMENTE na manhã e tarde.\n";
+                default -> "";
+            };
+        }
 
         boolean isPOI = req.isDestinoPontoTuristico();
         String endereco = req.getEnderecoDestino() != null && !req.getEnderecoDestino().isBlank()
@@ -728,8 +756,10 @@ public class GeradorRoteiroService {
              + "- O primeiro dia deve ter uma programação mais leve e flexível\n"
              + "- O último dia deve evitar atividades muito longas ou distantes\n"
              + "- Considere que o turista pode chegar cansado no início da viagem e precisar de maior flexibilidade no encerramento\n"
-             + "- IMPORTANTE: mesmo sendo o dia de chegada, o Dia 1 deve conter atividades reais em TODOS os períodos (manhã, tarde e noite)\n"
-             + "- Nunca deixe um período do Dia 1 sem nenhuma atividade\n"
+             + (instrucaoCheckin.isBlank()
+                 ? "- O Dia 1 deve conter atividades reais em todos os períodos disponíveis\n"
+                   + "- Nunca deixe um período do Dia 1 sem nenhuma atividade\n"
+                 : instrucaoCheckin)
              + "- Atividades de chegada devem ser leves, próximas ao centro/hotel, mas devem existir\n\n"
              + "6. DESTINOS QUE SÃO ATRAÇÕES PRINCIPAIS\n"
              + "Quando o destino informado for uma atração turística específica:\n"
@@ -837,9 +867,13 @@ public class GeradorRoteiroService {
              + "  - manha\n"
              + "  - tarde\n"
              + "  - noite\n"
-             + "- Cada período deve conter EXATAMENTE 3 atividades (NÃO contando Check-in e Checkout)\n"
-             + "- NUNCA deixe um período (manha, tarde ou noite) com menos de 3 atividades em QUALQUER dia\n"
-             + "- NUNCA deixe um período (manha, tarde ou noite) sem nenhuma atividade em QUALQUER dia\n"
+             + "- Cada período ATIVO deve conter EXATAMENTE 3 atividades\n"
+             + instrucaoCheckin
+             + instrucaoCheckout
+             + (instrucaoCheckin.isBlank() && instrucaoCheckout.isBlank()
+                 ? "- NUNCA deixe um período sem nenhuma atividade em QUALQUER dia\n"
+                 : "- Períodos indicados como ausentes acima devem ter array VAZIO []\n"
+                   + "- Todos os outros períodos devem ter EXATAMENTE 3 atividades\n")
              + "- Use apenas locais reais\n"
              + "- O destino principal informado deve aparecer obrigatoriamente em pelo menos uma atividade\n"
              + "- TODOS os locais devem estar entre 5 km e 10 km de " + cidade + " e no " + (!pais.isBlank() ? "país: " + pais : "mesmo país") + (!estado.isBlank() ? ", estado: " + estado : "") + "\n"
