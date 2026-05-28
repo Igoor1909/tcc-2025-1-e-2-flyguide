@@ -390,6 +390,25 @@
 .fly-btn-new:hover,
 .fly-btn-new:focus { background: #ea6c0a; color: #fff; }
 
+/* Botão de mostrar/ocultar senha */
+.fly-eye-btn {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: none;
+  color: #9aa5b4;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  font-size: 1.05rem;
+  z-index: 2;
+  line-height: 1;
+}
+.fly-eye-btn:hover { color: #0f172a; }
+
 .fly-back-link {
   display: inline-flex;
   align-items: center;

@@ -498,9 +498,44 @@
 
       let itemsHtml = "";
       if (d.periodos) {
-        PERIODOS_CONFIG.forEach(pc => {
+        // Localiza checkin/checkout e suas posições exatas dentro do período
+        let checkinLocal = null, checkoutLocal = null;
+        let checkinPeriodIdx = 0,                        checkoutPeriodIdx = PERIODOS_CONFIG.length - 1;
+        let checkinPosInPeriod = -1,                     checkoutPosInPeriod = Number.MAX_SAFE_INTEGER;
+        let checkinCor = "#16a34a",                      checkoutCor = "#ea580c";
+
+        PERIODOS_CONFIG.forEach((pc, pidx) => {
+          (Array.isArray(d.periodos[pc.key]) ? d.periodos[pc.key] : []).forEach((l, lidx) => {
+            const n = normalizarLocal(l);
+            if (n._checkin)  { checkinLocal  = l; checkinPeriodIdx  = pidx; checkinPosInPeriod  = lidx; checkinCor  = pc.cor; }
+            if (n._checkout) { checkoutLocal = l; checkoutPeriodIdx = pidx; checkoutPosInPeriod = lidx; checkoutCor = pc.cor; }
+          });
+        });
+
+        // Janela de períodos visíveis: apenas entre o período do checkin e o do checkout
+        const startPeriod = checkinLocal  ? checkinPeriodIdx  : 0;
+        const endPeriod   = checkoutLocal ? checkoutPeriodIdx : PERIODOS_CONFIG.length - 1;
+
+        // Checkin sempre primeiro
+        if (checkinLocal) {
+          itemsHtml += `<div style="margin-bottom:6px;">${mkItemHtml(normalizarLocal(checkinLocal), d.dia, checkinCor)}</div>`;
+        }
+
+        // Renderiza apenas os períodos dentro da janela, filtrando itens antes do checkin
+        // e depois do checkout dentro do mesmo período
+        PERIODOS_CONFIG.forEach((pc, pidx) => {
+          if (pidx < startPeriod || pidx > endPeriod) return;
+
           const pLocais = Array.isArray(d.periodos[pc.key]) ? d.periodos[pc.key] : [];
-          if (!pLocais.length) return;
+          const pFiltered = pLocais.filter((l, lidx) => {
+            const n = normalizarLocal(l);
+            if (n._checkin || n._checkout) return false;
+            if (pidx === startPeriod && lidx <= checkinPosInPeriod)  return false;
+            if (pidx === endPeriod   && lidx >= checkoutPosInPeriod) return false;
+            return true;
+          });
+
+          if (!pFiltered.length) return;
           gIdx = 0;
           const perColId = `per-det-${diaIdx}-${pc.key}`;
           itemsHtml += `<div style="margin-bottom:8px;" data-period-key="${pc.key}" data-period-cor="${pc.cor}" data-period-icon="${pc.icon}" data-period-label="${pc.label}">
@@ -510,19 +545,40 @@
               <div style="display:flex;align-items:center;gap:6px;">
                 <i class="bi ${pc.icon}" style="color:${pc.cor};font-size:.82rem;"></i>
                 <span style="font-size:.78rem;font-weight:700;color:${pc.cor};">${pc.label}</span>
-                <span class="per-count-badge" style="font-size:.68rem;font-weight:700;color:${pc.cor};opacity:.7;">${pLocais.length} ${pLocais.length === 1 ? "local" : "locais"}</span>
+                <span class="per-count-badge" style="font-size:.68rem;font-weight:700;color:${pc.cor};opacity:.7;">${pFiltered.length} ${pFiltered.length === 1 ? "local" : "locais"}</span>
               </div>
               <i class="bi bi-chevron-down" style="color:${pc.cor};font-size:.72rem;transition:transform .2s;opacity:.7;"></i>
             </button>
             <div id="${perColId}" class="collapse show" style="padding:4px 0 0 0;">
-              ${pLocais.map(l => mkItemHtml(normalizarLocal(l), d.dia, pc.cor)).join("")}
+              ${pFiltered.map(l => mkItemHtml(normalizarLocal(l), d.dia, pc.cor)).join("")}
             </div>
           </div>`;
         });
+
+        // Checkout sempre último
+        if (checkoutLocal) {
+          itemsHtml += `<div style="margin-top:6px;">${mkItemHtml(normalizarLocal(checkoutLocal), d.dia, checkoutCor)}</div>`;
+        }
       } else {
-        (Array.isArray(d.locais) ? d.locais : []).forEach(l => {
-          itemsHtml += mkItemHtml(normalizarLocal(l), d.dia, null);
+        // Locais flat (sem períodos): mesma lógica por índice
+        const todosLocais = Array.isArray(d.locais) ? d.locais : [];
+        let checkinFlat = null, checkoutFlat = null;
+        let checkinIdxFlat = -1, checkoutIdxFlat = Number.MAX_SAFE_INTEGER;
+        todosLocais.forEach((l, i) => {
+          const n = normalizarLocal(l);
+          if (n._checkin)  { checkinFlat = l;  checkinIdxFlat  = i; }
+          if (n._checkout) { checkoutFlat = l; checkoutIdxFlat = i; }
         });
+        const regularesFlat = todosLocais.filter((l, i) => {
+          const n = normalizarLocal(l);
+          if (n._checkin || n._checkout) return false;
+          if (i <= checkinIdxFlat)  return false;
+          if (i >= checkoutIdxFlat) return false;
+          return true;
+        });
+        if (checkinFlat)  itemsHtml += mkItemHtml(normalizarLocal(checkinFlat),  d.dia, null);
+        regularesFlat.forEach(l => { itemsHtml += mkItemHtml(normalizarLocal(l), d.dia, null); });
+        if (checkoutFlat) itemsHtml += mkItemHtml(normalizarLocal(checkoutFlat), d.dia, null);
       }
 
       return `<section style="margin-bottom:12px;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;">

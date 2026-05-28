@@ -55,9 +55,14 @@
             <div class="invalid-feedback"></div>
           </div>
 
-          <div class="fly-field auth-field mb-3">
+          <div class="fly-field auth-field mb-3" style="position:relative;">
             <input id="senhaLogin" type="password" class="form-control fly-input"
-              placeholder="Senha" autocomplete="current-password" required>
+              placeholder="Senha" autocomplete="current-password" required
+              style="padding-right:48px!important;">
+            <button type="button" class="fly-eye-btn"
+              data-toggle-password data-target="senhaLogin" aria-label="Mostrar senha">
+              <i class="bi bi-eye"></i>
+            </button>
             <div class="invalid-feedback"></div>
           </div>
 
@@ -108,14 +113,24 @@
               placeholder="Código (6 dígitos)" maxlength="6" inputmode="numeric">
             <div class="invalid-feedback"></div>
           </div>
-          <div class="fly-field auth-field mb-3">
+          <div class="fly-field auth-field mb-3" style="position:relative;">
             <input id="novaSenha" type="password" class="form-control fly-input"
-              placeholder="Nova senha (mín. 8 caracteres, 1 maiúscula, 1 especial)">
+              placeholder="Nova senha (mín. 8 caracteres, 1 maiúscula, 1 especial)"
+              style="padding-right:48px!important;">
+            <button type="button" class="fly-eye-btn"
+              data-toggle-password data-target="novaSenha" aria-label="Mostrar senha">
+              <i class="bi bi-eye"></i>
+            </button>
             <div class="invalid-feedback"></div>
           </div>
-          <div class="fly-field auth-field mb-3">
+          <div class="fly-field auth-field mb-3" style="position:relative;">
             <input id="confirmarNovaSenha" type="password" class="form-control fly-input"
-              placeholder="Confirmar nova senha">
+              placeholder="Confirmar nova senha"
+              style="padding-right:48px!important;">
+            <button type="button" class="fly-eye-btn"
+              data-toggle-password data-target="confirmarNovaSenha" aria-label="Mostrar senha">
+              <i class="bi bi-eye"></i>
+            </button>
             <div class="invalid-feedback"></div>
           </div>
           <button id="btnResetarSenha" class="btn fly-btn-primary w-100" type="button">
