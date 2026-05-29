@@ -239,38 +239,46 @@
               <label class="form-label fw-bold" for="genDias">
                 Dura&ccedil;&atilde;o (dias) <span style="color:#ef4444;">*</span>
               </label>
-              <select class="form-select" id="genDias">
-                <option value="1" selected>1 dia</option>
-                <option value="2">2 dias</option>
-                <option value="3">3 dias</option>
-                <option value="4">4 dias</option>
-                <option value="5">5 dias</option>
-                <option value="6">6 dias</option>
-                <option value="7">7 dias</option>
-                <option value="8">8 dias</option>
-                <option value="9">9 dias</option>
-                <option value="10">10 dias</option>
-                <option value="11">11 dias</option>
-                <option value="12">12 dias</option>
-                <option value="13">13 dias</option>
-                <option value="14">14 dias</option>
-                <option value="15">15 dias</option>
-                <option value="16">16 dias</option>
-                <option value="17">17 dias</option>
-                <option value="18">18 dias</option>
-                <option value="19">19 dias</option>
-                <option value="20">20 dias</option>
-                <option value="21">21 dias</option>
-                <option value="22">22 dias</option>
-                <option value="23">23 dias</option>
-                <option value="24">24 dias</option>
-                <option value="25">25 dias</option>
-                <option value="26">26 dias</option>
-                <option value="27">27 dias</option>
-                <option value="28">28 dias</option>
-                <option value="29">29 dias</option>
-                <option value="30">30 dias</option>
-              </select>
+              <div class="dropdown" id="genDiasWrapper">
+                <button type="button" id="genDiasBtn" data-bs-toggle="dropdown" aria-expanded="false"
+                        class="form-select text-start"
+                        style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">
+                  <span id="genDiasLabel">1 dia</span>
+                </button>
+                <ul class="dropdown-menu w-100" style="max-height:200px;overflow-y:auto;">
+                  <li><a class="dropdown-item" href="#" data-val="1">1 dia</a></li>
+                  <li><a class="dropdown-item" href="#" data-val="2">2 dias</a></li>
+                  <li><a class="dropdown-item" href="#" data-val="3">3 dias</a></li>
+                  <li><a class="dropdown-item" href="#" data-val="4">4 dias</a></li>
+                  <li><a class="dropdown-item" href="#" data-val="5">5 dias</a></li>
+                  <li><a class="dropdown-item" href="#" data-val="6">6 dias</a></li>
+                  <li><a class="dropdown-item" href="#" data-val="7">7 dias</a></li>
+                  <li><a class="dropdown-item" href="#" data-val="8">8 dias</a></li>
+                  <li><a class="dropdown-item" href="#" data-val="9">9 dias</a></li>
+                  <li><a class="dropdown-item" href="#" data-val="10">10 dias</a></li>
+                  <li><a class="dropdown-item" href="#" data-val="11">11 dias</a></li>
+                  <li><a class="dropdown-item" href="#" data-val="12">12 dias</a></li>
+                  <li><a class="dropdown-item" href="#" data-val="13">13 dias</a></li>
+                  <li><a class="dropdown-item" href="#" data-val="14">14 dias</a></li>
+                  <li><a class="dropdown-item" href="#" data-val="15">15 dias</a></li>
+                  <li><a class="dropdown-item" href="#" data-val="16">16 dias</a></li>
+                  <li><a class="dropdown-item" href="#" data-val="17">17 dias</a></li>
+                  <li><a class="dropdown-item" href="#" data-val="18">18 dias</a></li>
+                  <li><a class="dropdown-item" href="#" data-val="19">19 dias</a></li>
+                  <li><a class="dropdown-item" href="#" data-val="20">20 dias</a></li>
+                  <li><a class="dropdown-item" href="#" data-val="21">21 dias</a></li>
+                  <li><a class="dropdown-item" href="#" data-val="22">22 dias</a></li>
+                  <li><a class="dropdown-item" href="#" data-val="23">23 dias</a></li>
+                  <li><a class="dropdown-item" href="#" data-val="24">24 dias</a></li>
+                  <li><a class="dropdown-item" href="#" data-val="25">25 dias</a></li>
+                  <li><a class="dropdown-item" href="#" data-val="26">26 dias</a></li>
+                  <li><a class="dropdown-item" href="#" data-val="27">27 dias</a></li>
+                  <li><a class="dropdown-item" href="#" data-val="28">28 dias</a></li>
+                  <li><a class="dropdown-item" href="#" data-val="29">29 dias</a></li>
+                  <li><a class="dropdown-item" href="#" data-val="30">30 dias</a></li>
+                </ul>
+              </div>
+              <input type="hidden" id="genDias" value="1">
             </div>
 
             <div class="mb-4">
@@ -592,6 +600,27 @@
   <script src="../assets/js/app.js"></script>
   <script src="../assets/js/imagens.js"></script>
   <script src="../assets/js/roteiros.js"></script>
+  <script>
+    (function () {
+      window.setGenDias = function (val) {
+        var n = Math.min(Math.max(parseInt(val) || 1, 1), 30);
+        document.getElementById('genDias').value = n;
+        document.getElementById('genDiasLabel').textContent = n === 1 ? '1 dia' : n + ' dias';
+      };
+      document.addEventListener('DOMContentLoaded', function () {
+        var btn = document.getElementById('genDiasBtn');
+        if (!btn || typeof bootstrap === 'undefined') return;
+        new bootstrap.Dropdown(btn, { flip: false });
+        document.querySelectorAll('#genDiasWrapper .dropdown-item').forEach(function (item) {
+          item.addEventListener('click', function (e) {
+            e.preventDefault();
+            window.setGenDias(this.dataset.val);
+            bootstrap.Dropdown.getInstance(btn).hide();
+          });
+        });
+      });
+    })();
+  </script>
   <script src="../assets/js/maps-edit.js"></script>
   <script>
     window.initCombinado = function () {

@@ -1227,7 +1227,7 @@
         .then(r => r.json())
         .then(r => {
           document.getElementById("genCidade").value = r.cidade || "";
-          document.getElementById("genDias").value   = r.diasTotais || "";
+          if (window.setGenDias) window.setGenDias(r.diasTotais); else document.getElementById("genDias").value = r.diasTotais || "";
           document.getElementById("genTipo").value   = r.tipoRoteiro || "Cidade";
         })
         .catch(() => {});

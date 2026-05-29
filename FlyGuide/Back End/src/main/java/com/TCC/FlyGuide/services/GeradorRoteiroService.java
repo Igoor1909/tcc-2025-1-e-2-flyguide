@@ -627,9 +627,11 @@ public class GeradorRoteiroService {
         }
         if (fim == diasTotal && temCheckin(checkout)) {
             if ("manha".equals(checkout)) {
-                prompt.append("- Dia ").append(diasTotal).append(": tarde e noite devem ser [].\n");
+                prompt.append("- Dia ").append(diasTotal).append(": tarde e noite devem ser [].")
+                      .append(" Manha: incluir de 2 a 3 atividades leves antes do checkout (cafe, loja de lembranças, passeio rapido proximo ao hotel).\n");
             } else if ("tarde".equals(checkout)) {
-                prompt.append("- Dia ").append(diasTotal).append(": noite deve ser [].\n");
+                prompt.append("- Dia ").append(diasTotal).append(": noite deve ser [].")
+                      .append(" Manha e tarde: incluir atividades normais, aproveitando o destino ate a hora de partir.\n");
             }
         }
     }
