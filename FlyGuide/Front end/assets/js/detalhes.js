@@ -486,7 +486,6 @@
             <div class="topline" style="flex-wrap:wrap;gap:6px;">
               <div class="name ai-place-name">${escapeHtml(local.nome)}</div>
               <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                ${local.custo ? `<span class="ai-place-custo" style="font-size:.72rem;font-weight:700;color:#15803d;background:#dcfce7;padding:2px 8px;border-radius:999px;">${escapeHtml(local.custo.replace(/[Rr]\$\s*/g, "$ ").trim())}</span>` : ""}
                 <span class="ai-place-rating" style="display:none;align-items:center;gap:3px;font-size:.75rem;font-weight:700;color:#92400e;background:#fef3c7;padding:2px 8px;border-radius:999px;"></span>
               </div>
             </div>
@@ -607,7 +606,6 @@
       </section>`;
     }).join("");
 
-    atualizarOrcamento(roteiro, dias);
     enrichWithMaps(roteiro.cidade, roteiro.pais, roteiro.latDestino ?? null, roteiro.lngDestino ?? null);
     return true;
   }
