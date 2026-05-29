@@ -48,10 +48,10 @@ class ImagemServiceTest {
         List<ImagemDTO> result = imagemService.findAll();
 
         assertThat(result).hasSize(2);
-        assertThat(result.get(0).getChave()).isEqualTo("praia");
-        assertThat(result.get(0).getNome()).isEqualTo("Praia");
-        assertThat(result.get(0).getIdImagem()).isEqualTo(1L);
-        assertThat(result.get(1).getChave()).isEqualTo("cidade");
+        assertThat(result.get(0).getChave()).isEqualTo("cidade");
+        assertThat(result.get(0).getNome()).isEqualTo("Cidade");
+        assertThat(result.get(0).getIdImagem()).isEqualTo(2L);
+        assertThat(result.get(1).getChave()).isEqualTo("praia");
     }
 
     @Test
