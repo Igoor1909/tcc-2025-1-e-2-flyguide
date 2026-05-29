@@ -42,7 +42,13 @@ function carregarImagens() {
     .then(r => r.json())
     .then(data => {
       clearTimeout(timeout);
-      imagensCache = (Array.isArray(data) && data.length > 0) ? data : IMAGENS_DEFAULT;
+      if (Array.isArray(data) && data.length > 0) {
+        const backendChaves = new Set(data.map(img => img.chave));
+        const extras = IMAGENS_DEFAULT.filter(img => !backendChaves.has(img.chave));
+        imagensCache = [...data, ...extras];
+      } else {
+        imagensCache = IMAGENS_DEFAULT;
+      }
       return imagensCache;
     })
     .catch(() => {
