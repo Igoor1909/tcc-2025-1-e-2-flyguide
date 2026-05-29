@@ -1627,7 +1627,7 @@ function renderLocaisEditAI() {
       const locaisSemPer      = locaisSemPerTodos.filter(l => !_isCONome(l));
       const checkoutSemPer    = locaisSemPerTodos.find(l => _isCONome(l));
       if (locaisSemPer.length > 0 || checkoutSemPer) {
-        html += `<div class="mt-2 pt-2" style="border-top:1px solid ${isDark ? "#334155" : "#e2e8f0"};">
+        html += `<div class="mt-2 pt-2" data-drag-container="sem-periodo" style="border-top:1px solid ${isDark ? "#334155" : "#e2e8f0"};">
           <div style="font-size:.75rem;font-weight:700;color:#64748b;margin-bottom:5px;"><i class="bi bi-pin-map me-1"></i>Sem período</div>`;
         locaisSemPer.forEach((l, idx) => { html += _renderLocalCardMR(l, idx, isDark); });
         if (checkoutSemPer) html += _renderLocalCardMR(checkoutSemPer, locaisSemPer.length, isDark);
@@ -1641,7 +1641,7 @@ function renderLocaisEditAI() {
       });
       html += `</div>`;
       if (locaisDesteDia.length > 0) {
-        html += `<div class="mt-2 pt-2" style="border-top:1px solid ${isDark ? "#334155" : "#e2e8f0"};">
+        html += `<div class="mt-2 pt-2" data-drag-container="locais-adicionados" style="border-top:1px solid ${isDark ? "#334155" : "#e2e8f0"};">
           <div style="font-size:.75rem;font-weight:700;color:#f97316;margin-bottom:5px;"><i class="bi bi-pin-map me-1"></i>Locais adicionados</div>`;
         locaisDesteDia.forEach((l, idx) => { html += _renderLocalCardMR(l, idx, isDark); });
         html += `</div>`;
@@ -1983,7 +1983,7 @@ function _renderLocaisReaisEdit(lista) {
   const maxDiaAttr  = _diasTotaisEdit > 0 ? ` max="${_diasTotaisEdit}"` : "";
 
   const locaisHtml  = _agruparLocaisEdit(_locaisEdit).map(({ dia, itens }) => `
-    <section style="margin-top:12px;">
+    <section data-drag-container="dia-${dia || 0}" style="margin-top:12px;">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;
                   margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid ${corBorda};">
         <div style="font-size:.82rem;font-weight:800;color:${corHeader};">${dia ? `Dia ${dia}` : "Sem dia definido"}</div>
@@ -2144,7 +2144,7 @@ function _initDragDropAI(lista) {
   if (!lista) return;
   let dragSrc = null;
 
-  lista.querySelectorAll("[data-ai-per]").forEach(perContainer => {
+  lista.querySelectorAll("[data-ai-per], [data-drag-container]").forEach(perContainer => {
     function _getItems() {
       return [...perContainer.querySelectorAll(
         ":scope > [data-ai-item]:not([data-ai-special]), :scope > [id^='lwrap-']"
@@ -2299,6 +2299,7 @@ function renderLocaisEdit() {
   _renderLocaisReaisEdit(lista);
   _renderMiniMapaLocaisEdit();
   _iniciarRatingsMR();
+  _initDragDropAI(lista);
 }
 
 // ── Carregar locais ───────────────────────────────────────────────
