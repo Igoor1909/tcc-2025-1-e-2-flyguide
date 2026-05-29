@@ -2165,6 +2165,13 @@ function _initDragDropAI(lista) {
       });
     }
 
+    function _renumerar() {
+      _getItems().forEach((item, i) => {
+        const badge = item.querySelector("[data-nr-badge]");
+        if (badge) badge.textContent = String(i + 1);
+      });
+    }
+
     _getItems().forEach(item => {
       const cardInner = item.querySelector(":scope > div");
       if (cardInner && !item.querySelector("[data-drag-handle]")) {
@@ -2173,6 +2180,9 @@ function _initDragDropAI(lista) {
         handle.style.cssText = "cursor:grab;color:#94a3b8;font-size:.95rem;padding:0 2px;flex-shrink:0;display:flex;align-items:center;";
         handle.innerHTML = '<i class="bi bi-grip-vertical"></i>';
         cardInner.insertBefore(handle, cardInner.firstChild);
+        // marca o badge numérico (agora é o segundo filho após o handle)
+        const badge = cardInner.children[1];
+        if (badge) badge.setAttribute("data-nr-badge", "");
       }
       item.setAttribute("draggable", "true");
       item.addEventListener("dragstart", e => {
@@ -2210,6 +2220,7 @@ function _initDragDropAI(lista) {
       perContainer.insertBefore(dragSrc, target.before ? target.el : target.el.nextSibling);
       dragSrc.style.opacity = "";
       dragSrc = null;
+      _renumerar();
     });
   });
 }
