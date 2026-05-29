@@ -336,6 +336,7 @@
     let filtroAtivo       = "todos";
     let roteiroParaEditar = null;
     let paginaMR          = 0;
+    let _ordemMR          = "mais-novo";
     const POR_PAGINA_MR   = 12;
 
     const modalEditar  = new bootstrap.Modal(document.getElementById("modalEditarRoteiro"));
@@ -508,8 +509,13 @@
       }
       empty.style.display = "none";
       lista.style.display = "";
+      const ordenados = [...roteiros].sort((a, b) =>
+        _ordemMR === "mais-velho"
+          ? (a.idRoteiro || 0) - (b.idRoteiro || 0)
+          : (b.idRoteiro || 0) - (a.idRoteiro || 0)
+      );
       const inicio = paginaMR * POR_PAGINA_MR;
-      lista.innerHTML = roteiros.slice(inicio, inicio + POR_PAGINA_MR).map(renderCard).join("");
+      lista.innerHTML = ordenados.slice(inicio, inicio + POR_PAGINA_MR).map(renderCard).join("");
       if (roteiros.length > POR_PAGINA_MR) renderPaginacaoMR(lista, roteiros.length);
       else document.getElementById("mrPaginacao")?.remove();
 
@@ -818,6 +824,12 @@
 
     document.querySelectorAll("[data-filtro]").forEach(b =>
       b.addEventListener("click", () => aplicarFiltro(b.getAttribute("data-filtro"), true)));
+
+    document.getElementById("ordenacaoMR")?.addEventListener("change", e => {
+      _ordemMR = e.target.value;
+      paginaMR = 0;
+      aplicarFiltro(filtroAtivo);
+    });
 
     function atualizarVisibilityStrip(isPublico) {
       const strip = document.getElementById("visibilityStrip");
