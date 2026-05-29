@@ -420,36 +420,36 @@
           <div class="trip-card h-100" onclick="if(!event.target.closest('button,a')){window.location.href='detalhes-roteiro.html?id=${r.idRoteiro}'}">
             <div class="trip-cover" style="background-image:url('${imgUrl}');">
               <span class="badge-pill ${badge}">${r.tipoRoteiro || "Viagem"}</span>
-              <button class="trip-card-delete"
-                      data-excluir-roteiro="${r.idRoteiro}"
-                      data-nome="${escapeHtml(r.titulo || "este roteiro")}"
-                      title="Excluir">
-                <i class="bi bi-trash3"></i>
-              </button>
+              <div class="trip-cover-actions">
+                <a class="trip-card-edit"
+                   href="atividades-roteiro.html?id=${r.idRoteiro}&dias=${r.diasTotais || 1}"
+                   title="Editar roteiro">
+                  <i class="bi bi-pencil"></i>
+                </a>
+                <button class="trip-card-delete"
+                        data-excluir-roteiro="${r.idRoteiro}"
+                        data-nome="${escapeHtml(r.titulo || "este roteiro")}"
+                        title="Excluir">
+                  <i class="bi bi-trash3"></i>
+                </button>
+              </div>
               <div class="trip-title">
                 <h5>${escapeHtml(r.titulo || "Sem t\u00edtulo")}</h5>
                 <div class="loc"><i class="bi bi-geo-alt-fill"></i>${escapeHtml(r.cidade || EMPTY_TEXT)}</div>
               </div>
             </div>
             <div class="trip-body">
-              <div class="small text-secondary">${escapeHtml(r.observacoes || "Sem descri\u00e7\u00e3o")}</div>
-              <div class="meta-row mt-3">
-                <div class="d-flex align-items-center gap-3 flex-grow-1 flex-wrap">
-                  <div class="d-flex align-items-center gap-2">
-                    <i class="bi bi-calendar-event"></i><span>${dias}</span>
-                  </div>
-                  ${orcHtml}
-                  <div class="d-flex align-items-center gap-2" style="color:#64748b;">${visIcon}</div>
-                </div>
-                <button class="btn btn-sm fw-bold"
-                        style="color:#3b82f6;font-size:.82rem;padding:3px 10px;border:1px solid #bfdbfe;border-radius:8px;background:none;white-space:nowrap;"
-                        data-editar-roteiro="${r.idRoteiro}"
-                        title="Editar">
-                  <i class="bi bi-pencil me-1"></i>Editar
-                </button>
+              <div class="desc-grow">
+                <div class="small text-secondary">${escapeHtml(r.observacoes || "Sem descri\u00e7\u00e3o")}</div>
               </div>
-            </div>
-            <div class="trip-card-info">
+              <div class="meta-row mt-3">
+                <div class="d-flex align-items-center gap-2">
+                  <i class="bi bi-calendar-event"></i><span>${dias}</span>
+                </div>
+                ${orcHtml}
+                <div class="d-flex align-items-center gap-2" style="color:#64748b;">${visIcon}</div>
+              </div>
+              <hr style="margin:10px 0;border-color:#f1f5f9;opacity:1;">
               <div class="footer-info">
                 ${r.dataInicio ? `<span style="display:flex;align-items:center;gap:4px;"><i class="bi bi-calendar-event" style="color:#f97316;font-size:.85rem;"></i>${formatarPeriodo(r.dataInicio, r.dataFim)}</span>` : ""}
                 ${r.nomeUsuario ? `<span style="display:flex;align-items:center;gap:4px;font-size:.78rem;color:#64748b;"><i class="bi bi-person-fill" style="color:#94a3b8;"></i>${escapeHtml(r.nomeUsuario)}</span>` : ""}
@@ -571,23 +571,6 @@
       });
 
 
-      lista.querySelectorAll("[data-editar-roteiro]").forEach(btn => {
-        btn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          const id = btn.getAttribute("data-editar-roteiro");
-          roteiroParaEditar = todosRoteiros.find(r => String(r.idRoteiro) === String(id));
-          if (!roteiroParaEditar) return;
-          preencherModalEditar(roteiroParaEditar);
-          modalEditar.show();
-          if (typeof window.abrirLocaisEdit === "function") {
-            window.abrirLocaisEdit(roteiroParaEditar.idRoteiro, roteiroParaEditar.cidade, {
-              diasTotais: roteiroParaEditar.diasTotais || 0,
-              userId:     parseInt(userId),
-              roteiro:    roteiroParaEditar
-            });
-          }
-        });
-      });
 
       lista.querySelectorAll("[data-avaliar-roteiro]").forEach(btn => {
         btn.addEventListener("click", () => {

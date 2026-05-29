@@ -9,15 +9,21 @@
   coloque aqui para não afetar as outras telas.
 */
 
-/* ── Layout flex para fixar botão na base ───────────────────── */
+/* ── Layout flex para fixar rodapé na base ──────────────────── */
 #listaRoteiros .trip-card {
   display: flex;
   flex-direction: column;
 }
 #listaRoteiros .trip-body {
   flex: 1;
+  display: flex;
+  flex-direction: column;
 }
-#listaRoteiros .trip-body .small {
+#listaRoteiros .trip-body .desc-grow {
+  flex: 1;
+  overflow: hidden;
+}
+#listaRoteiros .trip-body .desc-grow .small {
   font-size: .92rem;
   display: -webkit-box;
   -webkit-line-clamp: 4;
@@ -25,26 +31,23 @@
   overflow: hidden;
 }
 
-/* ── Linha de info (autor, estrela, comentários) fixada acima do botão ── */
-.trip-card-info {
-  padding: 8px 16px 10px 16px;
-  border-top: 1px solid #f1f5f9;
-}
-html[data-theme="dark"] .trip-card-info { border-color: #1e293b; }
-
 /* ── Tag de tipo do roteiro ─────────────────────────────────── */
 #listaRoteiros .badge-pill {
   font-size: .88rem;
   padding: 7px 12px;
 }
 
-/* ── Botão de excluir sobre a imagem do card ────────────────── */
-.trip-card-delete {
+/* ── Botões do cover (lápis + lixo) ─────────────────────────── */
+.trip-cover-actions {
   position: absolute;
   top: 10px;
   right: 10px;
   z-index: 3;
-  background: #dc2626;
+  display: flex;
+  gap: 6px;
+}
+.trip-card-delete,
+.trip-card-edit {
   border: none;
   border-radius: 8px;
   color: #fff;
@@ -55,9 +58,13 @@ html[data-theme="dark"] .trip-card-info { border-color: #1e293b; }
   justify-content: center;
   cursor: pointer;
   font-size: 1.05rem;
+  text-decoration: none;
   transition: background .15s, transform .15s;
 }
+.trip-card-delete { background: #dc2626; }
+.trip-card-edit   { background: #3b82f6; }
 .trip-card-delete:hover { background: #b91c1c; transform: scale(1.1); }
+.trip-card-edit:hover   { background: #2563eb; transform: scale(1.1); color: #fff; }
 
 /* ── Barra inferior com botão de ação principal ─────────────── */
 .trip-bottom {
