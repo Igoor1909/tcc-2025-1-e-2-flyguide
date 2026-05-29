@@ -16,9 +16,15 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.TCC.FlyGuide.entities.PessoaFisica;
 import com.TCC.FlyGuide.entities.PessoaJuridica;
+import com.TCC.FlyGuide.entities.Roteiro;
+import com.TCC.FlyGuide.entities.RoteiroAvaliacao;
 import com.TCC.FlyGuide.entities.User;
+import com.TCC.FlyGuide.repositories.ComentarioLikeRepository;
 import com.TCC.FlyGuide.repositories.PessoaFisicaRepository;
 import com.TCC.FlyGuide.repositories.PessoaJuridicaRepository;
+import com.TCC.FlyGuide.repositories.RoteiroAvaliacaoRepository;
+import com.TCC.FlyGuide.repositories.RoteiroLocalRepository;
+import com.TCC.FlyGuide.repositories.RoteiroRepository;
 import com.TCC.FlyGuide.repositories.UserRepository;
 import com.TCC.FlyGuide.services.exceptions.DatabaseException;
 import com.TCC.FlyGuide.services.exceptions.ResourceNotFoundException;
@@ -37,6 +43,18 @@ public class UserService {
 
     @Autowired
     private PessoaJuridicaRepository pessoaJuridicaRepository;
+
+    @Autowired
+    private RoteiroRepository roteiroRepository;
+
+    @Autowired
+    private RoteiroLocalRepository roteiroLocalRepository;
+
+    @Autowired
+    private RoteiroAvaliacaoRepository avaliacaoRepository;
+
+    @Autowired
+    private ComentarioLikeRepository comentarioLikeRepository;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -154,14 +172,37 @@ public class UserService {
     @Transactional
     public void delete(Long id) {
         try {
-            if (pessoaFisicaRepository.existsById(id)) {
-                pessoaFisicaRepository.deleteById(id);
-            }
-            if (pessoaJuridicaRepository.existsById(id)) {
-                pessoaJuridicaRepository.deleteById(id);
-            }
-            userRepository.deleteById(id);
+            // 1. Remove likes que o usuário deu em comentários alheios
+            comentarioLikeRepository.deleteByUsuario_IdUsuario(id);
 
+            // 2. Processa roteiros do usuário
+            List<Roteiro> roteiros = roteiroRepository.findByUsuario_IdUsuario(id);
+            for (Roteiro roteiro : roteiros) {
+                Long idRoteiro = roteiro.getIdRoteiro();
+                if ("Público".equals(roteiro.getVisibilidadeRoteiro())) {
+                    // Roteiro público: mantém no sistema, apenas desvincula o dono
+                    roteiro.setUsuario(null);
+                    roteiroRepository.save(roteiro);
+                } else {
+                    // Roteiro privado: remove tudo em cascata
+                    comentarioLikeRepository.deleteByAvaliacao_Roteiro_IdRoteiro(idRoteiro);
+                    avaliacaoRepository.deleteByRoteiro_IdRoteiro(idRoteiro);
+                    roteiroLocalRepository.deleteByRoteiro_IdRoteiro(idRoteiro);
+                    roteiroRepository.deleteById(idRoteiro);
+                }
+            }
+
+            // 3. Remove comentários do usuário em roteiros de terceiros (e likes nesses comentários)
+            List<RoteiroAvaliacao> avaliacoes = avaliacaoRepository.findByUsuario_IdUsuario(id);
+            for (RoteiroAvaliacao av : avaliacoes) {
+                comentarioLikeRepository.deleteByAvaliacao_IdAvaliacao(av.getIdAvaliacao());
+            }
+            avaliacaoRepository.deleteByUsuario_IdUsuario(id);
+
+            // 4. Remove dados pessoais e conta
+            if (pessoaFisicaRepository.existsById(id))  pessoaFisicaRepository.deleteById(id);
+            if (pessoaJuridicaRepository.existsById(id)) pessoaJuridicaRepository.deleteById(id);
+            userRepository.deleteById(id);
             userRepository.flush();
 
         } catch (EmptyResultDataAccessException e) {

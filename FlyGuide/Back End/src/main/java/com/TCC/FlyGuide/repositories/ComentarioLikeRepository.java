@@ -22,4 +22,8 @@ public interface ComentarioLikeRepository extends JpaRepository<ComentarioLike, 
     @Modifying
     @Transactional
     void deleteByAvaliacao_Roteiro_IdRoteiro(Long idRoteiro);
+
+    @Modifying
+    @Transactional
+    void deleteByUsuario_IdUsuario(Long idUsuario);
 }

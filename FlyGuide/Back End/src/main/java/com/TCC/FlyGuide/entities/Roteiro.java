@@ -17,7 +17,7 @@ public class Roteiro implements Serializable {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long idRoteiro;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
     @JoinColumn(name = "id_usuario")
     private User usuario;
 
