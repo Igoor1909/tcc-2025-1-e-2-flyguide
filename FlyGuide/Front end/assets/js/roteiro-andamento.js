@@ -676,7 +676,6 @@
         + "<div class=\"day-main\">"
         + "<div class=\"topline\" style=\"flex-wrap:wrap;gap:6px;\">"
         + "<div class=\"name\">" + escapeHtml(it.nome) + "</div>"
-        + (it.custo ? "<span style=\"font-size:.72rem;font-weight:700;color:#15803d;background:#dcfce7;padding:2px 8px;border-radius:999px;\">" + escapeHtml(it.custo) + "</span>" : "")
         + "<span class=\"and-place-rating\" style=\"display:none;align-items:center;gap:3px;font-size:.75rem;font-weight:700;color:#92400e;background:#fef3c7;padding:2px 8px;border-radius:999px;\"></span>"
         + "</div>"
         + "<div class=\"and-place-addr\" style=\"" + (endAI ? "" : "display:none;") + "font-size:.78rem;color:#64748b;margin-top:3px;\">"
