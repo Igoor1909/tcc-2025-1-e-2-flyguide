@@ -589,7 +589,7 @@
                 aria-expanded="${expandido}">
           <div class="dia-header-label mb-0">Dia ${d.dia}</div>
           <div style="display:flex;align-items:center;gap:10px;">
-            <span style="font-size:.78rem;font-weight:700;color:#6366f1;">${locaisList.length} ${locaisList.length === 1 ? "local" : "locais"}</span>
+            <span style="font-size:.78rem;font-weight:700;color:#6366f1;">${(() => { const n = locaisList.filter(l => { const nm = ((l.nome||"")).trim().toLowerCase().replace(/[\s-]/g,""); return nm !== "checkin" && nm !== "checkout" && !l._checkin && !l._checkout; }).length; return n + " " + (n === 1 ? "local" : "locais"); })()}</span>
             <i class="bi bi-chevron-down" style="color:#94a3b8;transition:transform .2s;"></i>
           </div>
         </button>
