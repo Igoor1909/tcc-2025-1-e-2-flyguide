@@ -911,7 +911,7 @@
         diasTotais:  duracao,
         orcamento:   parseFloat(document.getElementById("editOrcamento").value) || null,
         observacoes: document.getElementById("editDescricao").value.trim() || null,
-        idImagem:    imagemSelecionada?.idImagem ?? (idImagem ? parseInt(idImagem) : null),
+        idImagem:    imagemSelecionada?.idImagem ?? (typeof normalizarIdImagem === "function" ? normalizarIdImagem(idImagem) : (idImagem ? parseInt(idImagem) : null)),
         imagemChave: imagemSelecionada?.imagemChave || null,
       };
 
@@ -1446,7 +1446,7 @@
               diasTotais:          diasGerados,
               orcamento:           orcamentoGerado || null,
               observacoes:         document.getElementById("genDescricao")?.value || null,
-              idImagem:            imagemSelecionadaFinal?.idImagem ?? (idImagemFinal ? parseInt(idImagemFinal) : null),
+              idImagem:            imagemSelecionadaFinal?.idImagem ?? (typeof normalizarIdImagem === "function" ? normalizarIdImagem(idImagemFinal) : (idImagemFinal ? parseInt(idImagemFinal) : null)),
               imagemChave:         imagemSelecionadaFinal?.imagemChave || null,
               sugestoes:           sugestoesRevisadas || aiSugestoes || null,
               latDestino:          latGerada,
@@ -1537,7 +1537,7 @@
         diasTotais:          diasGerados,
         orcamento:           orcamentoGerado || null,
         observacoes:         descricao || null,
-        idImagem:            imagemSelecionada?.idImagem ?? (idImagem ? parseInt(idImagem) : null),
+        idImagem:            imagemSelecionada?.idImagem ?? (typeof normalizarIdImagem === "function" ? normalizarIdImagem(idImagem) : (idImagem ? parseInt(idImagem) : null)),
         imagemChave:         imagemSelecionada?.imagemChave || null,
         sugestoes:           aiSugestoes || null,
         latDestino:          latGerada,

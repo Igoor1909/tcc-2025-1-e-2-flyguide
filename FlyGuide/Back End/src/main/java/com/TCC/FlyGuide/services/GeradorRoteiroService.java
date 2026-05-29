@@ -547,7 +547,7 @@ public class GeradorRoteiroService {
         prompt.append("\"manha\":[{\"nome\":\"\"}],\"tarde\":[{\"nome\":\"\"}],\"noite\":[{\"nome\":\"\"}]");
         prompt.append("}}]}\n");
         prompt.append("- sugestoes deve ter exatamente ").append(fim - inicio + 1).append(" dia(s).\n");
-        prompt.append("- imagemChave deve ser uma de: cidade, praia, natureza, montanha, aventura, cultural, gastronomia, luxo, neve, mochilao, familia.\n");
+        prompt.append("- imagemChave deve ser uma de: ").append(ImagemCatalogo.chavesPermitidasPrompt()).append(".\n");
         return prompt.toString();
     }
 
@@ -1074,7 +1074,7 @@ public class GeradorRoteiroService {
              + "}}]}\n\n"
              + "- titulo: criativo, turístico, máx. 70 caracteres.\n"
              + "- descricao: 2-3 frases inspiradoras sobre o destino.\n"
-             + "- imagemChave: UMA de: cidade, praia, natureza, montanha, aventura, cultural, gastronomia, luxo, neve, mochilao, familia.\n"
+             + "- imagemChave: UMA de: " + ImagemCatalogo.chavesPermitidasPrompt() + ".\n"
              + "- sugestoes: EXATAMENTE " + dias + " dia(s), numerados de 1 a " + dias + ".\n"
              + "- Cada período ATIVO: de 3 a 4 atividades. Período bloqueado: array vazio [].\n";
     }

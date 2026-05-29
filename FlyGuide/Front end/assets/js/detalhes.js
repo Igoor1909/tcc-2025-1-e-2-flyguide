@@ -1332,7 +1332,7 @@ function abrirModalEdicaoDetalhes(roteiro, locaisIniciais) {
       diasTotais:          dias > 0 ? dias : null,
       orcamento:           parseFloat(document.getElementById("detalheEditOrcamento").value) || null,
       observacoes:         document.getElementById("detalheEditDesc").value.trim() || null,
-      idImagem:            imagemSelecionada?.idImagem ?? (idImg ? parseInt(idImg) : null),
+      idImagem:            imagemSelecionada?.idImagem ?? (typeof normalizarIdImagem === "function" ? normalizarIdImagem(idImg) : (idImg ? parseInt(idImg) : null)),
       imagemChave:         imagemSelecionada?.imagemChave || null,
     };
 
@@ -1698,4 +1698,3 @@ function abrirModalEdicaoDetalhes(roteiro, locaisIniciais) {
   carregarAvaliacoes();
   if (userId) carregarAvaliacaoUsuario();
 })();
-

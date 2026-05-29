@@ -29,8 +29,12 @@ const IMAGENS_DEFAULT = [
   { idImagem: 19, chave: "europa",    nome: "Europa Clássica", emoji: "🏰", url: "https://images.unsplash.com/photo-1467269204594-9661b134dd2b?w=800&q=75" },
 ];
 
+function imagensLocais() {
+  return IMAGENS_DEFAULT.map(img => ({ ...img, idImagem: null, persistida: false }));
+}
+
 // Pré-populado para renderizar imediatamente sem esperar o backend
-let imagensCache = [...IMAGENS_DEFAULT];
+let imagensCache = imagensLocais();
 
 // Renderiza o seletor assim que o DOM estiver pronto (sem esperar fetch)
 document.addEventListener("DOMContentLoaded", () => {
@@ -47,18 +51,21 @@ function carregarImagens() {
     .then(data => {
       clearTimeout(timeout);
       if (Array.isArray(data) && data.length > 0) {
-        const backendChaves = new Set(data.map(img => img.chave));
-        const extras = IMAGENS_DEFAULT.filter(img => !backendChaves.has(img.chave));
-        imagensCache = [...data, ...extras];
+        const imagensBackend = data.map(img => ({ ...img, persistida: true }));
+        const backendChaves = new Set(imagensBackend.map(img => img.chave));
+        const extras = IMAGENS_DEFAULT
+          .filter(img => !backendChaves.has(img.chave))
+          .map(img => ({ ...img, idImagem: null, persistida: false }));
+        imagensCache = [...imagensBackend, ...extras];
       } else {
-        imagensCache = IMAGENS_DEFAULT;
+        imagensCache = imagensLocais();
       }
       return imagensCache;
     })
     .catch(() => {
       clearTimeout(timeout);
-      imagensCache = IMAGENS_DEFAULT;
-      return IMAGENS_DEFAULT;
+      imagensCache = imagensLocais();
+      return imagensCache;
     });
 }
 
@@ -68,28 +75,43 @@ function normalizarIdImagem(id) {
 }
 
 function encontrarImagemPorIdOuChave(idImagem, imagemChave) {
-  const id = normalizarIdImagem(idImagem);
-  if (id != null) {
-    const porId = imagensCache.find(img => normalizarIdImagem(img.idImagem) === id);
-    if (porId) return porId;
-  }
-
   const chave = String(imagemChave || "").trim();
   if (chave) {
     const porChave = imagensCache.find(img => String(img.chave || "") === chave);
     if (porChave) return porChave;
   }
 
+  const id = normalizarIdImagem(idImagem);
+  if (id != null) {
+    const porId = imagensCache.find(img => normalizarIdImagem(img.idImagem) === id);
+    if (porId) return porId;
+  }
+
   return null;
+}
+
+function imagemTemIdPersistido(img) {
+  return img?.persistida === true && normalizarIdImagem(img.idImagem) != null;
+}
+
+function preencherHiddenImagem(hidden, img) {
+  if (!hidden || !img) return;
+  const idPersistido = imagemTemIdPersistido(img) ? normalizarIdImagem(img.idImagem) : null;
+  hidden.value = idPersistido != null ? String(idPersistido) : String(img.chave || "");
+  hidden.dataset.idImagem = idPersistido != null ? String(idPersistido) : "";
+  hidden.dataset.imagemChave = String(img.chave || "");
+  hidden.dataset.imagemPersistida = idPersistido != null ? "1" : "0";
 }
 
 function obterImagemSelecionada(hiddenId) {
   const hidden = document.getElementById(hiddenId);
-  const id = normalizarIdImagem(hidden?.value);
-  const img = encontrarImagemPorIdOuChave(id, null);
+  const chave = hidden?.dataset?.imagemChave || (normalizarIdImagem(hidden?.value) == null ? hidden?.value : "");
+  const id = normalizarIdImagem(hidden?.dataset?.idImagem || hidden?.value);
+  const img = encontrarImagemPorIdOuChave(id, chave);
+  const idPersistido = imagemTemIdPersistido(img) ? normalizarIdImagem(img.idImagem) : null;
   return {
-    idImagem: img ? normalizarIdImagem(img.idImagem) : id,
-    imagemChave: img?.chave || null,
+    idImagem: idPersistido,
+    imagemChave: img?.chave || (chave ? String(chave) : null),
     imagemUrl: img?.url || null,
   };
 }
@@ -109,29 +131,29 @@ function renderSeletorImagens(containerId, hiddenId, idSelecionado) {
 
   const idNormalizado = normalizarIdImagem(idSelecionado);
   const chaveSelecionada = idNormalizado == null ? String(idSelecionado || "").trim() : "";
-  const imagemSelecionada = imagensCache.find(img => normalizarIdImagem(img.idImagem) === idNormalizado)
-    || imagensCache.find(img => chaveSelecionada && String(img.chave || "") === chaveSelecionada)
+  const imagemSelecionada = imagensCache.find(img => chaveSelecionada && String(img.chave || "") === chaveSelecionada)
+    || imagensCache.find(img => normalizarIdImagem(img.idImagem) === idNormalizado)
     || imagensCache[0];
   const idFinalSelecionado = normalizarIdImagem(imagemSelecionada?.idImagem);
+  const chaveFinalSelecionada = String(imagemSelecionada?.chave || "");
 
   const hiddenInicial = document.getElementById(hiddenId);
-  if (hiddenInicial && idFinalSelecionado != null) {
-    hiddenInicial.value = String(idFinalSelecionado);
-  }
+  preencherHiddenImagem(hiddenInicial, imagemSelecionada);
 
   container.innerHTML = imagensCache.map(img => `
-    <div class="img-option ${normalizarIdImagem(img.idImagem) === idFinalSelecionado ? "selected" : ""}"
-         data-id="${img.idImagem}"
+    <div class="img-option ${String(img.chave || "") === chaveFinalSelecionada || (idFinalSelecionado != null && normalizarIdImagem(img.idImagem) === idFinalSelecionado) ? "selected" : ""}"
+         data-id="${imagemTemIdPersistido(img) ? img.idImagem : ""}"
          data-chave="${img.chave}"
+         data-persistida="${imagemTemIdPersistido(img) ? "1" : "0"}"
          style="position:relative;border-radius:14px;overflow:hidden;cursor:pointer;
-                border:3px solid ${normalizarIdImagem(img.idImagem) === idFinalSelecionado ? "#f97316" : "transparent"};
+                border:3px solid ${String(img.chave || "") === chaveFinalSelecionada || (idFinalSelecionado != null && normalizarIdImagem(img.idImagem) === idFinalSelecionado) ? "#f97316" : "transparent"};
                 transition:border-color .2s,transform .15s;aspect-ratio:16/9;">
       <img src="${img.url.replace("w=800", "w=300")}" alt="${img.nome}"
            style="width:100%;height:100%;object-fit:cover;display:block;">
       <div class="chk-icon"
            style="position:absolute;top:8px;right:8px;background:#f97316;color:#fff;
                    border-radius:50%;width:22px;height:22px;
-                  display:${normalizarIdImagem(img.idImagem) === idFinalSelecionado ? "flex" : "none"};
+                  display:${String(img.chave || "") === chaveFinalSelecionada || (idFinalSelecionado != null && normalizarIdImagem(img.idImagem) === idFinalSelecionado) ? "flex" : "none"};
                    align-items:center;justify-content:center;font-size:.75rem;">
         <i class="bi bi-check"></i>
       </div>
@@ -152,8 +174,14 @@ function renderSeletorImagens(containerId, hiddenId, idSelecionado) {
       const chk = opt.querySelector(".chk-icon");
       if (chk) chk.style.display = "flex";
       const hidden = document.getElementById(hiddenId);
-      if (hidden) hidden.value = opt.getAttribute("data-id");
+      if (hidden) {
+        const img = encontrarImagemPorIdOuChave(opt.getAttribute("data-id"), opt.getAttribute("data-chave"));
+        preencherHiddenImagem(hidden, img || {
+          idImagem: normalizarIdImagem(opt.getAttribute("data-id")),
+          chave: opt.getAttribute("data-chave"),
+          persistida: opt.getAttribute("data-persistida") === "1",
+        });
+      }
     });
   });
 }
-

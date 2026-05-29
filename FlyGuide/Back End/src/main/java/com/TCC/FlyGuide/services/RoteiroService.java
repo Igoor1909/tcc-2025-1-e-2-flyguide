@@ -296,13 +296,13 @@ public class RoteiroService {
             } catch (Exception ignored) {}
         }
 
-        // Vincula a imagem de capa se enviada por ID ou pela chave sugerida pela IA
+        // Vincula a imagem de capa preferindo a chave, pois IDs locais do front podem divergir do banco.
         Imagem imagem = null;
-        if (dto.getIdImagem() != null) {
-            imagem = imagemRepository.findById(dto.getIdImagem()).orElse(null);
-        }
-        if (imagem == null && dto.getImagemChave() != null && !dto.getImagemChave().isBlank()) {
+        if (dto.getImagemChave() != null && !dto.getImagemChave().isBlank()) {
             imagem = imagemRepository.findByChave(dto.getImagemChave()).orElse(null);
+        }
+        if (imagem == null && dto.getIdImagem() != null) {
+            imagem = imagemRepository.findById(dto.getIdImagem()).orElse(null);
         }
         if (imagem != null) {
             entity.setImagem(imagem);

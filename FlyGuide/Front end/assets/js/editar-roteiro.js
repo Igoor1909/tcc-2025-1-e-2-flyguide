@@ -39,16 +39,15 @@
 
     if (tituloEl) tituloEl.value = roteiro.titulo || "";
     if (descEl)   descEl.value   = roteiro.observacoes || "";
-    if (imgEl)    imgEl.value    = roteiro.idImagem || "";
+    if (imgEl)    imgEl.value    = roteiro.idImagem || roteiro.imagemChave || "";
 
     atualizarVisibilidade(roteiro.visibilidadeRoteiro === PUBLICO);
     if (visEl) visEl.onchange = e => atualizarVisibilidade(e.target.checked);
 
     if (typeof carregarImagens === "function" && typeof renderSeletorImagens === "function") {
       carregarImagens().then(() => {
-        const idSelecionado = roteiro.idImagem ? parseInt(roteiro.idImagem) : null;
+        const idSelecionado = roteiro.idImagem || roteiro.imagemChave || null;
         renderSeletorImagens("erImgSelector", "erImagem", idSelecionado);
-        if (imgEl && idSelecionado) imgEl.value = idSelecionado;
       });
     }
   }
@@ -67,7 +66,13 @@
     if (erroEl) erroEl.style.display = "none";
 
     const idImg     = document.getElementById("erImagem")?.value || "";
-    const idImagem  = idImg ? parseInt(idImg) : (roteiro.idImagem ? parseInt(roteiro.idImagem) : null);
+    const imagemSelecionada = typeof obterImagemSelecionada === "function"
+      ? obterImagemSelecionada("erImagem")
+      : null;
+    const idImagem  = imagemSelecionada?.idImagem
+      ?? (typeof normalizarIdImagem === "function"
+        ? normalizarIdImagem(idImg || roteiro.idImagem)
+        : (idImg ? parseInt(idImg) : (roteiro.idImagem ? parseInt(roteiro.idImagem) : null)));
     const isPublico = !!document.getElementById("erVisPublico")?.checked;
     const descricao = (document.getElementById("erDescricao")?.value || "").trim();
 
@@ -85,6 +90,7 @@
       diasTotais:          roteiro.diasTotais || null,
       orcamento:           roteiro.orcamento || null,
       idImagem:            idImagem,
+      imagemChave:         imagemSelecionada?.imagemChave || roteiro.imagemChave || null,
     };
 
     const res = await authFetch(URL_API + "/roteiros/" + roteiroId, {
