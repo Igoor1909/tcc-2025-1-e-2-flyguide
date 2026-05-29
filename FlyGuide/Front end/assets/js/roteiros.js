@@ -399,7 +399,7 @@
         <div class="col-12 col-md-6 col-xl-4"
              data-roteiro-id="${r.idRoteiro}"
              data-vis="${r.visibilidadeRoteiro || PUBLICO}">
-          <div class="trip-card h-100">
+          <div class="trip-card h-100" onclick="if(!event.target.closest('button,a')){window.location.href='detalhes-roteiro.html?id=${r.idRoteiro}'}">
             <div class="trip-cover" style="background-image:url('${imgUrl}');">
               <span class="badge-pill ${badge}">${r.tipoRoteiro || "Viagem"}</span>
               <div class="trip-title">
@@ -441,9 +441,6 @@
                         data-nome="${escapeHtml(r.titulo || "este roteiro")}" title="Excluir">
                   <i class="bi bi-trash"></i>
                 </button>
-                <a href="detalhes-roteiro.html?id=${r.idRoteiro}" style="font-size:.88rem;">
-                  <i class="bi bi-eye"></i>Ver Detalhes
-                </a>
                 ${r.statusRoteiro === "CONCLUIDO"
                   ? `<button class="btn btn-link p-0 fw-bold"
                              style="color:#8b5cf6;font-size:.85rem;display:flex;align-items:center;gap:4px;"

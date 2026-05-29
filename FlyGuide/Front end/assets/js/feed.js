@@ -67,7 +67,7 @@
 
     return `
       <div class="col-12 col-md-6 col-xl-4">
-        <div class="trip-card h-100">
+        <div class="trip-card h-100" onclick="if(!event.target.closest('button,a')){window.location.href='detalhes-roteiro.html?id=${r.idRoteiro}'}">
           <div class="trip-cover" style="background-image:url('${imgUrl}');" role="img" aria-label="Imagem de capa do roteiro ${escapeHtml(r.titulo || "Sem título")}">
             <span class="badge-pill ${badge}">${r.tipoRoteiro || "Viagem"}</span>
             ${!isOwner ? `<button class="like-btn" data-save data-roteiro-id="${r.idRoteiro}" aria-label="Salvar roteiro: ${escapeHtml(r.titulo || "Sem título")}" title="Salvar roteiro" type="button"><i class="bi bi-bookmark-plus" aria-hidden="true"></i></button>` : ""}
@@ -99,9 +99,6 @@
               <span style="display:flex;align-items:center;gap:4px;font-size:.82rem;color:#94a3b8;">
                 <i class="bi bi-chat-fill" style="color:#f97316;"></i>${r.totalAvaliacoes || 0}
               </span>
-              <a href="detalhes-roteiro.html?id=${r.idRoteiro}" aria-label="Ver detalhes do roteiro: ${escapeHtml(r.titulo || "Sem título")}">
-                <i class="bi bi-eye" aria-hidden="true"></i>Ver Detalhes
-              </a>
             </div>
           </div>
         </div>

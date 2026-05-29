@@ -159,6 +159,11 @@
   overflow:hidden;
   box-shadow: var(--fg-shadow-soft);
   background:#fff;
+  cursor: pointer;
+  transition: box-shadow 0.2s ease;
+}
+.trip-card:hover{
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
 }
 .trip-cover{
   height: 155px;
