@@ -68,6 +68,8 @@ button.icon-btn.danger i{ color:#ef4444; }
 .details-meta i{ opacity:.9; }
 
 .stats-cards{ margin-top: 18px; }
+.stats-cards .col-12 { display: flex; }
+.stats-cards .stat-card { width: 100%; }
 
 .stat-card{
   background: var(--fg-card, #fff);

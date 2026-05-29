@@ -220,6 +220,12 @@
     const roteiroId = params.get("id");
     if (!roteiroId) { window.location.href = "roteiros-iniciados.html"; return; }
 
+    var localRatings = {};
+    try { localRatings = JSON.parse(localStorage.getItem("fg_local_ratings_" + roteiroId) || "{}"); } catch (_) {}
+    function saveLocalRatings() {
+      try { localStorage.setItem("fg_local_ratings_" + roteiroId, JSON.stringify(localRatings)); } catch (_) {}
+    }
+
     let locaisData  = [];
     let roteiroData = null;
     let modalConcluir    = null;
@@ -402,6 +408,27 @@
       configurarAvaliacao();
       configurarModalDia();
       configurarProximoDia();
+
+      var listaDias = document.getElementById("listaDias");
+      if (listaDias) {
+        listaDias.addEventListener("click", function (e) {
+          var star = e.target.closest("[data-local-nota]");
+          if (!star) return;
+          e.stopPropagation();
+          var row = star.closest("[data-local-rating-key]");
+          if (!row) return;
+          var key  = row.getAttribute("data-local-rating-key");
+          var nota = parseInt(star.getAttribute("data-local-nota"));
+          localRatings[key] = (localRatings[key] === nota) ? 0 : nota;
+          if (!localRatings[key]) delete localRatings[key];
+          saveLocalRatings();
+          var rated = localRatings[key] || 0;
+          row.querySelectorAll("[data-local-nota]").forEach(function (s, i) {
+            s.className = (i < rated ? "bi bi-star-fill" : "bi bi-star");
+            s.style.color = i < rated ? "#facc15" : "#cbd5e1";
+          });
+        });
+      }
     });
 
     Promise.all([
@@ -583,6 +610,20 @@
       if (srEl)  srEl.textContent  = restantes + " restante" + (restantes !== 1 ? "s" : "");
     }
 
+    // ── Estrelas opcionais por local ──
+    function _starsHtml(ratingKey) {
+      var nota = localRatings[ratingKey] || 0;
+      var html = '<div data-local-rating-key="' + ratingKey + '" style="display:flex;align-items:center;gap:5px;margin-top:8px;">';
+      for (var n = 1; n <= 5; n++) {
+        var filled = nota >= n;
+        html += '<i class="' + (filled ? "bi bi-star-fill" : "bi bi-star") + '"'
+          + ' data-local-nota="' + n + '"'
+          + ' style="cursor:pointer;color:' + (filled ? "#facc15" : "#cbd5e1") + ';font-size:.88rem;transition:color .1s;"></i>';
+      }
+      html += '</div>';
+      return html;
+    }
+
     // ── Render real checkpoint item (day-item visual) ──
     function renderCheckpoint(l, pc, numero) {
       var isVisitado = l.status === "VISITADO";
@@ -623,7 +664,9 @@
         + "<i class=\"bi bi-map\"></i> Ver no Maps</a>"
         + (!isVisitado && !isPulado ? "<button class=\"skip-btn\" data-skip-cp data-id=\"" + escapeHtml(id) + "\"><i class=\"bi bi-skip-forward me-1\"></i>Pular</button>" : "")
         + (isPulado ? "<span class=\"pulado-badge\">Pulado</span>" : "")
-        + "</div></div></div>";
+        + "</div>"
+        + _starsHtml("r_" + id)
+        + "</div></div>";
     }
 
     // ── Render AI checkpoint item (interactive, day-item visual) ──
@@ -686,7 +729,9 @@
         + "<i class=\"bi bi-map\"></i> Ver no Maps</a>"
         + (!isVisitado && !isPulado ? "<button class=\"skip-btn\" data-ai-skip=\"" + it.key + "\"><i class=\"bi bi-skip-forward me-1\"></i>Pular</button>" : "")
         + (isPulado ? "<span class=\"pulado-badge\">Pulado</span>" : "")
-        + "</div></div></div>";
+        + "</div>"
+        + _starsHtml("a_" + it.key)
+        + "</div></div>";
     }
 
     // ── Render period accordion header ──
@@ -810,6 +855,7 @@
           saveAiStatus();
           atualizarProgressoAI(todosItens);
           renderDiasAI(dias);
+          setTimeout(_abrirModalDiaSeCompleto, 300);
         });
       });
       container.querySelectorAll("[data-ai-skip]").forEach(function (btn) {
@@ -819,6 +865,7 @@
           saveAiStatus();
           atualizarProgressoAI(todosItens);
           renderDiasAI(dias);
+          setTimeout(_abrirModalDiaSeCompleto, 300);
         });
       });
       atualizarProgressoAI(todosItens);
@@ -975,6 +1022,7 @@
           aiStatus[key] = aiStatus[key] === "VISITADO" ? "PENDENTE" : "VISITADO";
           saveAiStatus();
           renderDias();
+          setTimeout(_abrirModalDiaSeCompleto, 300);
         });
       });
       container.querySelectorAll("[data-ai-skip]").forEach(function (btn) {
@@ -983,6 +1031,7 @@
           aiStatus[key] = "PULADO";
           saveAiStatus();
           renderDias();
+          setTimeout(_abrirModalDiaSeCompleto, 300);
         });
       });
 
@@ -1025,6 +1074,7 @@
           local.status = novoStatus;
           atualizarProgresso();
           renderDias();
+          setTimeout(_abrirModalDiaSeCompleto, 300);
         })
         .catch(function () {
           if (cpEl) cpEl.style.opacity = "";
@@ -1207,25 +1257,46 @@
       });
     }
 
-    // ── Atualiza visibilidade dos botões do footer baseado no dia atual ──
+    // ── Atualiza visibilidade dos botões do footer ──
     function atualizarFooter() {
       var btnConcluir = document.getElementById("btnConcluirRoteiro");
       var btnProximo  = document.getElementById("btnProximoDia");
-      if (!btnConcluir || !btnProximo) return;
-
-      // Roteiro concluído ou com apenas 1 dia: só o botão de concluir
+      if (btnProximo)  btnProximo.style.display  = "none";
       var isConcluido = roteiroData && roteiroData.statusRoteiro === "CONCLUIDO";
+      if (btnConcluir) btnConcluir.style.display = isConcluido ? "" : "none";
+    }
+
+    // ── Abre modal de avaliação automaticamente quando o dia está completo ──
+    function _abrirModalDiaSeCompleto() {
+      if (roteiroData && roteiroData.statusRoteiro === "CONCLUIDO") return;
+      if (!isDiaCompleto(diaAtual)) return;
+      if (document.querySelector(".modal.show")) return;
+
       var isUltimoDia = diasNumerados[diasNumerados.length - 1] === diaAtual;
 
-      if (isConcluido || diasNumerados.length <= 1 || isUltimoDia) {
-        btnProximo.style.display  = "none";
-        btnConcluir.style.display = "";
+      if (isUltimoDia) {
+        confirmarConclusao();
       } else {
-        btnConcluir.style.display = "none";
-        btnProximo.style.display  = "";
-        var completo = isDiaCompleto(diaAtual);
-        btnProximo.disabled      = !completo;
-        btnProximo.style.opacity = completo ? "1" : "0.5";
+        var idx        = diasNumerados.indexOf(diaAtual);
+        var proximoDia = diasNumerados[idx + 1];
+
+        var nomeDiaEl = document.getElementById("nomeDiaAvaliacao");
+        if (nomeDiaEl) nomeDiaEl.textContent = "Dia " + diaAtual;
+        var lblBtn = document.getElementById("lblBtnProximo");
+        if (lblBtn) lblBtn.textContent = "Avançar para o Dia " + proximoDia;
+
+        _notaDia = 0;
+        _pintarEstrelasDia(0);
+        var txt = document.getElementById("textoDiaInput");
+        if (txt) txt.value = "";
+        var erro = document.getElementById("erroDia");
+        if (erro) erro.style.display = "none";
+        var btnConf = document.getElementById("btnConfirmarProximoDia");
+        if (btnConf) btnConf.disabled = true;
+        var btnPularReset = document.getElementById("btnPularAvaliacaoDia");
+        if (btnPularReset) btnPularReset.textContent = "Pular avaliação e avançar";
+
+        if (modalAvaliacaoDia) modalAvaliacaoDia.show();
       }
     }
 
