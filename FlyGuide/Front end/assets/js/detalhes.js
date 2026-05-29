@@ -1405,7 +1405,7 @@ function abrirModalEdicaoDetalhes(roteiro, locaisIniciais) {
     if (!str) return "";
     try {
       var d = new Date(str);
-      return d.toLocaleDateString("pt-BR") + " às " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+      return d.toLocaleDateString("pt-BR");
     } catch(e) { return ""; }
   }
 
