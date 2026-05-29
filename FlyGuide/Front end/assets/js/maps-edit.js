@@ -105,11 +105,23 @@ function _limparLocalSelecionadoEdit(limparInput) {
   }
 }
 
+function _extrairEstadoDeComponentsEdit(components) {
+  const comp = (components || []).find(c => (c.types || []).includes("administrative_area_level_1"));
+  return comp ? (comp.short_name || comp.long_name || null) : null;
+}
+
 function _mensagemLocalForaDaBaseEdit(local) {
   const base = _obterBaseAtiva();
   if (!base) return "Adicione ou aguarde carregar a cidade base antes de escolher um local.";
   if (base.latitude == null || base.longitude == null) return "A cidade base ainda não possui coordenadas. Aguarde carregar e tente novamente.";
   if (!local || local.latitude == null || local.longitude == null) return "Selecione um local válido da lista do Google Maps.";
+
+  // Validação por estado/região — bloqueia independente do raio configurado
+  const estadoBase  = base.stateCode || _estadoBaseCode || null;
+  const estadoLocal = _extrairEstadoDeComponentsEdit(local.addressComponents);
+  if (estadoBase && estadoLocal && estadoBase.toUpperCase() !== estadoLocal.toUpperCase()) {
+    return `O local está em outra região (${estadoLocal}). Apenas locais na mesma região da cidade base (${estadoBase}) podem ser adicionados ao roteiro.`;
+  }
 
   const distancia = _distanciaBase(local, base);
   if (distancia == null) return "Selecione um local válido da lista do Google Maps.";
@@ -527,7 +539,7 @@ function garantirAutocompleteEdit() {
   }
 
   const opts = {
-    fields: ["place_id", "name", "formatted_address", "geometry", "types"],
+    fields: ["place_id", "name", "formatted_address", "geometry", "types", "address_components"],
     language: "pt-BR",
   };
 
@@ -539,12 +551,13 @@ function garantirAutocompleteEdit() {
     _ocultarErroLocalEdit();
 
     _localSelecionadoEdit = {
-      placeId:   place.place_id,
-      nome:      place.name,
-      endereco:  place.formatted_address,
-      tipo:      (place.types || [])[0] || "establishment",
-      latitude:  place.geometry && place.geometry.location ? place.geometry.location.lat() : null,
-      longitude: place.geometry && place.geometry.location ? place.geometry.location.lng() : null,
+      placeId:           place.place_id,
+      nome:              place.name,
+      endereco:          place.formatted_address,
+      tipo:              (place.types || [])[0] || "establishment",
+      latitude:          place.geometry && place.geometry.location ? place.geometry.location.lat() : null,
+      longitude:         place.geometry && place.geometry.location ? place.geometry.location.lng() : null,
+      addressComponents: place.address_components || [],
     };
 
     const preview    = document.getElementById("localPreviewEdit");

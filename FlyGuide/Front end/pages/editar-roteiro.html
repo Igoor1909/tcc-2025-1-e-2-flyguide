@@ -23,6 +23,8 @@
     html[data-theme="dark"] .destino-resumo { background: #1e293b; border-color: #334155; }
     .pac-container { z-index: 9999 !important; border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.15); }
     html[data-theme="dark"] .day-item { background: #1e293b !important; border-color: #334155 !important; }
+    #miniMapaPasso3 { height: 360px; border-radius: 12px; overflow: hidden; }
+    #miniMapaEdit   { height: 360px; border-radius: 12px; overflow: hidden; }
   </style>
 </head>
 
@@ -116,12 +118,20 @@
               </div>
             </div>
 
-            <!-- Mini-mapa -->
+            <!-- Mini-mapa IA (passo 3) -->
             <div id="miniMapaPasso3Box" style="display:none;">
               <div class="mapa-titulo">
                 <i class="bi bi-map-fill me-1" style="color:#f97316;"></i>Mapa dos Locais
               </div>
               <div id="miniMapaPasso3"></div>
+            </div>
+
+            <!-- Mini-mapa locais reais (modal edit) -->
+            <div id="miniMapaEditBox" style="display:none;margin-bottom:12px;background:#f8fafc;border:1px solid #e5e7eb;border-radius:14px;padding:12px;">
+              <div class="fw-bold mb-2" style="font-size:.9rem;color:#64748b;">
+                <i class="bi bi-map me-1" style="color:#f97316;"></i>Mapa dos Locais
+              </div>
+              <div id="miniMapaEdit"></div>
             </div>
 
             <!-- Erro inline -->
