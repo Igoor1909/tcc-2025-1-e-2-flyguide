@@ -2139,6 +2139,81 @@ function _renderLocaisReaisEdit(lista) {
   });
 }
 
+// ── Drag-and-drop para reordenar itens dentro do período ──────────
+function _initDragDropAI(lista) {
+  if (!lista) return;
+  let dragSrc = null;
+
+  lista.querySelectorAll("[data-ai-per]").forEach(perContainer => {
+    function _getItems() {
+      return [...perContainer.querySelectorAll(":scope > [data-ai-item]:not([data-ai-special])")];
+    }
+    function _getDropTarget(y) {
+      const items = _getItems().filter(i => i !== dragSrc);
+      for (const item of items) {
+        const rect = item.getBoundingClientRect();
+        if (y < rect.top + rect.height / 2) return { el: item, before: true };
+      }
+      const last = items[items.length - 1];
+      return last ? { el: last, before: false } : null;
+    }
+    function _clearIndicators() {
+      perContainer.querySelectorAll("[data-drag-over]").forEach(el => {
+        el.removeAttribute("data-drag-over");
+        el.style.borderTop = "";
+        el.style.borderBottom = "";
+      });
+    }
+
+    _getItems().forEach(item => {
+      const cardInner = item.querySelector(":scope > div");
+      if (cardInner && !item.querySelector("[data-drag-handle]")) {
+        const handle = document.createElement("div");
+        handle.setAttribute("data-drag-handle", "");
+        handle.style.cssText = "cursor:grab;color:#94a3b8;font-size:.95rem;padding:0 2px;flex-shrink:0;display:flex;align-items:center;";
+        handle.innerHTML = '<i class="bi bi-grip-vertical"></i>';
+        cardInner.insertBefore(handle, cardInner.firstChild);
+      }
+      item.setAttribute("draggable", "true");
+      item.addEventListener("dragstart", e => {
+        dragSrc = item;
+        e.dataTransfer.effectAllowed = "move";
+        setTimeout(() => { item.style.opacity = "0.4"; }, 0);
+      });
+      item.addEventListener("dragend", () => {
+        dragSrc = null;
+        item.style.opacity = "";
+        _clearIndicators();
+      });
+    });
+
+    perContainer.addEventListener("dragover", e => {
+      e.preventDefault();
+      if (!dragSrc || !perContainer.contains(dragSrc)) return;
+      e.dataTransfer.dropEffect = "move";
+      _clearIndicators();
+      const target = _getDropTarget(e.clientY);
+      if (target?.el && target.el !== dragSrc) {
+        target.el.setAttribute("data-drag-over", "");
+        target.el.style[target.before ? "borderTop" : "borderBottom"] = "2px solid #f97316";
+      }
+    });
+    perContainer.addEventListener("dragleave", e => {
+      if (!perContainer.contains(e.relatedTarget)) _clearIndicators();
+    });
+    perContainer.addEventListener("drop", e => {
+      e.preventDefault();
+      if (!dragSrc || !perContainer.contains(dragSrc)) return;
+      _clearIndicators();
+      const target = _getDropTarget(e.clientY);
+      if (!target?.el || target.el === dragSrc) return;
+      perContainer.insertBefore(dragSrc, target.before ? target.el : target.el.nextSibling);
+      dragSrc.style.opacity = "";
+      dragSrc = null;
+    });
+  });
+}
+
 // ── Ratings do Google Maps nos cards ──────────────────────────────
 const _mrRatingCache = {};
 
@@ -2204,6 +2279,7 @@ function renderLocaisEdit() {
   if (temSugestoes) {
     renderLocaisEditAI(); // locais reais por dia já incluídos dentro de cada accordion
     _iniciarRatingsMR();
+    _initDragDropAI(lista);
     return;
   }
 
