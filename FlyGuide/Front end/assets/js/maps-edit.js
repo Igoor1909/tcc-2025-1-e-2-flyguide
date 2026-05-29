@@ -170,22 +170,27 @@ async function _geocodificarBase(pais, cidade) {
   const div = document.createElement("div");
   const svc = new google.maps.places.PlacesService(div);
   return new Promise((resolve, reject) => {
-    // findPlaceFromQuery não suporta address_components — usa formatted_address
-    svc.findPlaceFromQuery({ query, fields: ["geometry", "name", "formatted_address"] }, (results, status) => {
+    svc.findPlaceFromQuery({ query, fields: ["geometry", "name", "formatted_address", "address_components"] }, (results, status) => {
       const OK = google.maps.places.PlacesServiceStatus.OK;
       if (status !== OK || !results?.[0]?.geometry) {
         reject(new Error("Nao foi possivel localizar essa cidade base."));
         return;
       }
-      // Extrai UF do Brasil a partir do formatted_address (ex: "São Paulo - SP, Brasil")
-      const addr = results[0].formatted_address || "";
-      const stateMatch = addr.match(/[-\s]([A-Z]{2})[,\s]/);
-      const stateCode  = stateMatch?.[1] || null;
+      const place = results[0];
+      // Tenta extrair estado via address_components (universal)
+      const estadoComp = (place.address_components || []).find(c => (c.types || []).includes("administrative_area_level_1"));
+      let stateCode = estadoComp?.short_name || null;
+      // Fallback Brasil: regex no formatted_address
+      if (!stateCode) {
+        const addr = place.formatted_address || "";
+        const m = addr.match(/[-\s]([A-Z]{2})[,\s]/);
+        if (m) stateCode = m[1];
+      }
       resolve({
-        latitude:  results[0].geometry.location.lat(),
-        longitude: results[0].geometry.location.lng(),
+        latitude:  place.geometry.location.lat(),
+        longitude: place.geometry.location.lng(),
         stateCode,
-        stateName: stateCode || null,
+        stateName: estadoComp?.long_name || stateCode || null,
       });
     });
   });
@@ -2236,6 +2241,10 @@ function _initDragDropAI(lista) {
       dragSrc.style.opacity = "";
       dragSrc = null;
       _renumerar();
+      // Salva nova ordem na API e atualiza o mapa automaticamente
+      _salvarSugestoesAIEdit();
+      const _listaAtual = document.getElementById("listaLocaisEdit");
+      if (_listaAtual) _renderMiniMapaPasso3(_listaAtual);
     });
   });
 }
