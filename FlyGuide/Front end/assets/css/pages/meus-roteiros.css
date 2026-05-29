@@ -19,7 +19,18 @@
 }
 #listaRoteiros .trip-body .small {
   font-size: .92rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
+
+/* ── Linha de info (autor, estrela, comentários) fixada acima do botão ── */
+.trip-card-info {
+  padding: 8px 16px 10px 16px;
+  border-top: 1px solid #f1f5f9;
+}
+html[data-theme="dark"] .trip-card-info { border-color: #1e293b; }
 
 /* ── Tag de tipo do roteiro ─────────────────────────────────── */
 #listaRoteiros .badge-pill {

@@ -448,7 +448,8 @@
                   <i class="bi bi-pencil me-1"></i>Editar
                 </button>
               </div>
-              <hr style="margin:10px 0;border-color:#f1f5f9;opacity:1;">
+            </div>
+            <div class="trip-card-info">
               <div class="footer-info">
                 ${r.dataInicio ? `<span style="display:flex;align-items:center;gap:4px;"><i class="bi bi-calendar-event" style="color:#f97316;font-size:.85rem;"></i>${formatarPeriodo(r.dataInicio, r.dataFim)}</span>` : ""}
                 ${r.nomeUsuario ? `<span style="display:flex;align-items:center;gap:4px;font-size:.78rem;color:#64748b;"><i class="bi bi-person-fill" style="color:#94a3b8;"></i>${escapeHtml(r.nomeUsuario)}</span>` : ""}
@@ -571,7 +572,8 @@
 
 
       lista.querySelectorAll("[data-editar-roteiro]").forEach(btn => {
-        btn.addEventListener("click", () => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
           const id = btn.getAttribute("data-editar-roteiro");
           roteiroParaEditar = todosRoteiros.find(r => String(r.idRoteiro) === String(id));
           if (!roteiroParaEditar) return;
