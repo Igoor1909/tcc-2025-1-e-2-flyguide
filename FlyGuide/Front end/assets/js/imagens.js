@@ -18,6 +18,11 @@ const IMAGENS_DEFAULT = [
   { idImagem: 8,  chave: "luxo",        nome: "Luxo",         emoji: "✨", url: "https://images.unsplash.com/photo-1566073771259-6a8506099945?w=800&q=75" },
   { idImagem: 9,  chave: "neve",        nome: "Neve / Frio",  emoji: "❄️", url: "https://images.unsplash.com/photo-1491002052546-bf38f186af56?w=800&q=75" },
   { idImagem: 10, chave: "mochilao",    nome: "Mochilão",     emoji: "🎒", url: "https://images.unsplash.com/photo-1527631746610-bca00a040d60?w=800&q=75" },
+  { idImagem: 11, chave: "deserto",    nome: "Deserto",      emoji: "🏜️", url: "https://images.unsplash.com/photo-1509316785289-025f5b846b35?w=800&q=75" },
+  { idImagem: 12, chave: "fazenda",    nome: "Fazenda",      emoji: "🌾", url: "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=800&q=75" },
+  { idImagem: 13, chave: "cruzeiro",   nome: "Cruzeiro",     emoji: "🚢", url: "https://images.unsplash.com/photo-1548574505-5e239809ee19?w=800&q=75" },
+  { idImagem: 14, chave: "festival",   nome: "Festival",     emoji: "🎪", url: "https://images.unsplash.com/photo-1506157786151-b8491531f063?w=800&q=75" },
+  { idImagem: 15, chave: "spa",        nome: "Spa",          emoji: "💆", url: "https://images.unsplash.com/photo-1540555700478-4be289fbecef?w=800&q=75" },
 ];
 
 // Pré-populado para renderizar imediatamente sem esperar o backend
