@@ -220,12 +220,6 @@
     const roteiroId = params.get("id");
     if (!roteiroId) { window.location.href = "roteiros-iniciados.html"; return; }
 
-    var localRatings = {};
-    try { localRatings = JSON.parse(localStorage.getItem("fg_local_ratings_" + roteiroId) || "{}"); } catch (_) {}
-    function saveLocalRatings() {
-      try { localStorage.setItem("fg_local_ratings_" + roteiroId, JSON.stringify(localRatings)); } catch (_) {}
-    }
-
     let locaisData  = [];
     let roteiroData = null;
     let modalConcluir    = null;
@@ -408,27 +402,6 @@
       configurarAvaliacao();
       configurarModalDia();
       configurarProximoDia();
-
-      var listaDias = document.getElementById("listaDias");
-      if (listaDias) {
-        listaDias.addEventListener("click", function (e) {
-          var star = e.target.closest("[data-local-nota]");
-          if (!star) return;
-          e.stopPropagation();
-          var row = star.closest("[data-local-rating-key]");
-          if (!row) return;
-          var key  = row.getAttribute("data-local-rating-key");
-          var nota = parseInt(star.getAttribute("data-local-nota"));
-          localRatings[key] = (localRatings[key] === nota) ? 0 : nota;
-          if (!localRatings[key]) delete localRatings[key];
-          saveLocalRatings();
-          var rated = localRatings[key] || 0;
-          row.querySelectorAll("[data-local-nota]").forEach(function (s, i) {
-            s.className = (i < rated ? "bi bi-star-fill" : "bi bi-star");
-            s.style.color = i < rated ? "#facc15" : "#cbd5e1";
-          });
-        });
-      }
     });
 
     Promise.all([
@@ -610,20 +583,6 @@
       if (srEl)  srEl.textContent  = restantes + " restante" + (restantes !== 1 ? "s" : "");
     }
 
-    // ── Estrelas opcionais por local ──
-    function _starsHtml(ratingKey) {
-      var nota = localRatings[ratingKey] || 0;
-      var html = '<div data-local-rating-key="' + ratingKey + '" style="display:flex;align-items:center;gap:5px;margin-top:8px;">';
-      for (var n = 1; n <= 5; n++) {
-        var filled = nota >= n;
-        html += '<i class="' + (filled ? "bi bi-star-fill" : "bi bi-star") + '"'
-          + ' data-local-nota="' + n + '"'
-          + ' style="cursor:pointer;color:' + (filled ? "#facc15" : "#cbd5e1") + ';font-size:.88rem;transition:color .1s;"></i>';
-      }
-      html += '</div>';
-      return html;
-    }
-
     // ── Render real checkpoint item (day-item visual) ──
     function renderCheckpoint(l, pc, numero) {
       var isVisitado = l.status === "VISITADO";
@@ -664,9 +623,7 @@
         + "<i class=\"bi bi-map\"></i> Ver no Maps</a>"
         + (!isVisitado && !isPulado ? "<button class=\"skip-btn\" data-skip-cp data-id=\"" + escapeHtml(id) + "\"><i class=\"bi bi-skip-forward me-1\"></i>Pular</button>" : "")
         + (isPulado ? "<span class=\"pulado-badge\">Pulado</span>" : "")
-        + "</div>"
-        + _starsHtml("r_" + id)
-        + "</div></div>";
+        + "</div></div></div>";
     }
 
     // ── Render AI checkpoint item (interactive, day-item visual) ──
@@ -729,9 +686,7 @@
         + "<i class=\"bi bi-map\"></i> Ver no Maps</a>"
         + (!isVisitado && !isPulado ? "<button class=\"skip-btn\" data-ai-skip=\"" + it.key + "\"><i class=\"bi bi-skip-forward me-1\"></i>Pular</button>" : "")
         + (isPulado ? "<span class=\"pulado-badge\">Pulado</span>" : "")
-        + "</div>"
-        + _starsHtml("a_" + it.key)
-        + "</div></div>";
+        + "</div></div></div>";
     }
 
     // ── Render period accordion header ──

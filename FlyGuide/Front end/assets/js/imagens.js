@@ -23,6 +23,10 @@ const IMAGENS_DEFAULT = [
   { idImagem: 13, chave: "cruzeiro",   nome: "Cruzeiro",     emoji: "🚢", url: "https://images.unsplash.com/photo-1548574505-5e239809ee19?w=800&q=75" },
   { idImagem: 14, chave: "festival",   nome: "Festival",     emoji: "🎪", url: "https://images.unsplash.com/photo-1506157786151-b8491531f063?w=800&q=75" },
   { idImagem: 15, chave: "spa",        nome: "Spa",          emoji: "💆", url: "https://images.unsplash.com/photo-1540555700478-4be289fbecef?w=800&q=75" },
+  { idImagem: 16, chave: "parque",    nome: "Parque de Diversão", emoji: "🎢", url: "https://images.unsplash.com/photo-1563911302283-d2bc129e7570?w=800&q=75" },
+  { idImagem: 17, chave: "estadio",   nome: "Estádio",      emoji: "⚽", url: "https://images.unsplash.com/photo-1540747913346-19212a4b32a5?w=800&q=75" },
+  { idImagem: 18, chave: "oriental",  nome: "Oriental",     emoji: "🏯", url: "https://images.unsplash.com/photo-1480796927426-f609979314bd?w=800&q=75" },
+  { idImagem: 19, chave: "europa",    nome: "Europa Clássica", emoji: "🏰", url: "https://images.unsplash.com/photo-1467269204594-9661b134dd2b?w=800&q=75" },
 ];
 
 // Pré-populado para renderizar imediatamente sem esperar o backend

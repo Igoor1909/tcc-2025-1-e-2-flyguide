@@ -341,6 +341,20 @@
 
     const modalEditar  = new bootstrap.Modal(document.getElementById("modalEditarRoteiro"));
 
+    window._abrirModalEditarRoteiro = function(id) {
+      roteiroParaEditar = todosRoteiros.find(r => String(r.idRoteiro) === String(id));
+      if (!roteiroParaEditar) return;
+      preencherModalEditar(roteiroParaEditar);
+      modalEditar.show();
+      if (typeof window.abrirLocaisEdit === "function") {
+        window.abrirLocaisEdit(roteiroParaEditar.idRoteiro, roteiroParaEditar.cidade, {
+          diasTotais: roteiroParaEditar.diasTotais || 0,
+          userId:     parseInt(userId),
+          roteiro:    roteiroParaEditar
+        });
+      }
+    };
+
     function _confirmarExclusaoRoteiro(nome) {
       return new Promise(function(resolve) {
         var overlay = document.createElement("div");
@@ -401,21 +415,11 @@
         : "";
 
       const bottomHtml = r.statusRoteiro === "CONCLUIDO"
-        ? `<div style="display:flex;gap:8px;">
-             <button class="btn fw-bold" style="flex:1;background:#8b5cf6;color:#fff;border-radius:10px;padding:9px 0;font-size:.88rem;"
-                     data-iniciar-roteiro="${r.idRoteiro}" data-status="CONCLUIDO">
-               <i class="bi bi-arrow-counterclockwise me-1"></i>Reiniciar
-             </button>
-             ${r._jaAvaliou
-               ? `<span style="display:flex;align-items:center;gap:3px;font-size:.78rem;font-weight:700;color:#22c55e;padding:0 10px;">
-                    <i class="bi bi-patch-check-fill"></i>Avaliado
-                  </span>`
-               : `<button class="btn fw-bold" style="flex:1;background:#fef9c3;color:#854d0e;border-radius:10px;padding:9px 0;font-size:.88rem;"
-                          data-avaliar-roteiro="${r.idRoteiro}">
-                    <i class="bi bi-star-fill me-1"></i>Avaliar
-                  </button>`
-             }
-           </div>`
+        ? `<button class="btn fw-bold w-100"
+                   style="background:#8b5cf6;color:#fff;border-radius:10px;padding:10px 0;font-size:.9rem;"
+                   data-iniciar-roteiro="${r.idRoteiro}" data-status="CONCLUIDO">
+             <i class="bi bi-arrow-counterclockwise me-1"></i>Reiniciar
+           </button>`
         : `<button class="btn fw-bold w-100"
                    style="background:${r.statusRoteiro === "EM_ANDAMENTO" ? "#22c55e" : "#f97316"};color:#fff;border-radius:10px;padding:10px 0;font-size:.9rem;"
                    data-iniciar-roteiro="${r.idRoteiro}"
@@ -453,7 +457,7 @@
                 </div>
                 <button class="btn btn-sm fw-bold"
                         style="color:#3b82f6;font-size:.82rem;padding:3px 10px;border:1px solid #bfdbfe;border-radius:8px;background:none;white-space:nowrap;"
-                        data-editar-roteiro="${r.idRoteiro}"
+                        onclick="event.stopPropagation(); window._abrirModalEditarRoteiro('${r.idRoteiro}');"
                         title="Editar">
                   <i class="bi bi-pencil me-1"></i>Editar
                 </button>
@@ -469,6 +473,17 @@
                 <span style="display:flex;align-items:center;gap:4px;">
                   <i class="bi bi-chat-fill" style="color:#f97316;"></i>${r.totalAvaliacoes || 0}
                 </span>
+                ${r.statusRoteiro === "CONCLUIDO"
+                  ? r._jaAvaliou
+                    ? `<span style="display:flex;align-items:center;gap:3px;font-size:.78rem;font-weight:700;color:#22c55e;">
+                         <i class="bi bi-patch-check-fill"></i>Avaliado
+                       </span>`
+                    : `<button class="btn p-0 fw-bold"
+                               style="color:#facc15;font-size:.78rem;display:flex;align-items:center;gap:3px;"
+                               data-avaliar-roteiro="${r.idRoteiro}">
+                         <i class="bi bi-star-fill"></i>Avaliar
+                       </button>`
+                  : ""}
               </div>
             </div>
             <div class="trip-bottom">
@@ -568,23 +583,6 @@
         });
       });
 
-      lista.querySelectorAll("[data-editar-roteiro]").forEach(btn => {
-        btn.addEventListener("click", () => {
-          const id = btn.getAttribute("data-editar-roteiro");
-          roteiroParaEditar = todosRoteiros.find(r => String(r.idRoteiro) === String(id));
-          if (!roteiroParaEditar) return;
-          preencherModalEditar(roteiroParaEditar);
-          modalEditar.show();
-          // Carrega locais do roteiro no modal
-          if (typeof window.abrirLocaisEdit === "function") {
-            window.abrirLocaisEdit(roteiroParaEditar.idRoteiro, roteiroParaEditar.cidade, {
-              diasTotais: roteiroParaEditar.diasTotais || 0,
-              userId:     parseInt(userId),
-              roteiro:    roteiroParaEditar
-            });
-          }
-        });
-      });
 
       lista.querySelectorAll("[data-avaliar-roteiro]").forEach(btn => {
         btn.addEventListener("click", () => {

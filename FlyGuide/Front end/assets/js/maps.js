@@ -89,6 +89,11 @@ const URL_API_BASE  = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app
     ) || null;
   }
 
+  function extrairEstadoDeComponents(components) {
+    const comp = (components || []).find(c => (c.types || []).includes("administrative_area_level_1"));
+    return comp ? (comp.short_name || comp.long_name || null) : null;
+  }
+
   function extrairPaisDoPlace(place) {
     const componente = extrairComponentePlace(place, ["country"]);
     if (!componente) return null;
@@ -150,6 +155,13 @@ const URL_API_BASE  = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app
     if (!base) return "Adicione ou aguarde carregar a cidade base antes de escolher um local.";
     if (base.latitude == null || base.longitude == null) return "A cidade base ainda não possui coordenadas. Aguarde carregar e tente novamente.";
     if (!local || local.latitude == null || local.longitude == null) return "Selecione um local válido da lista do Google Maps.";
+
+    // Validação por estado/região — bloqueia independente do raio configurado
+    const estadoBase  = base.stateCode || base.stateName || null;
+    const estadoLocal = extrairEstadoDeComponents(local.addressComponents);
+    if (estadoBase && estadoLocal && estadoBase.toUpperCase() !== estadoLocal.toUpperCase()) {
+      return `O local está em outra região (${estadoLocal}). Apenas locais na mesma região da cidade base (${estadoBase}) podem ser adicionados ao roteiro.`;
+    }
 
     const distancia = calcularDistanciaDaBase(local, base);
     if (distancia == null) return "Selecione um local válido da lista do Google Maps.";
@@ -660,7 +672,7 @@ const URL_API_BASE  = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app
     return new Promise((resolve, reject) => {
       service.findPlaceFromQuery({
         query,
-        fields: ["geometry", "name"],
+        fields: ["geometry", "name", "address_components"],
       }, (results, status) => {
         const OK = google.maps.places.PlacesServiceStatus.OK;
         if (status !== OK || !results || !results[0] || !results[0].geometry) {
@@ -669,10 +681,15 @@ const URL_API_BASE  = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app
         }
 
         const place = results[0];
+        const estadoComp  = (place.address_components || []).find(c => (c.types || []).includes("administrative_area_level_1"));
+        const countryComp = (place.address_components || []).find(c => (c.types || []).includes("country"));
         resolve({
-          latitude:  place.geometry.location.lat(),
-          longitude: place.geometry.location.lng(),
-          label:     [cidade, pais].filter(Boolean).join(", "),
+          latitude:    place.geometry.location.lat(),
+          longitude:   place.geometry.location.lng(),
+          label:       [cidade, pais].filter(Boolean).join(", "),
+          stateCode:   estadoComp?.short_name  || null,
+          stateName:   estadoComp?.long_name   || null,
+          countryCode: countryComp?.short_name || null,
         });
       });
     });
@@ -689,8 +706,11 @@ const URL_API_BASE  = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app
 
       try {
         const geocoded = await geocodificarBase(base.country || "", base.city);
-        base.latitude = geocoded.latitude;
+        base.latitude  = geocoded.latitude;
         base.longitude = geocoded.longitude;
+        if (!base.stateCode   && geocoded.stateCode)   base.stateCode   = geocoded.stateCode;
+        if (!base.stateName   && geocoded.stateName)   base.stateName   = geocoded.stateName;
+        if (!base.countryCode && geocoded.countryCode) base.countryCode = geocoded.countryCode;
         atualizou = true;
       } catch (_) {}
     }
@@ -717,13 +737,16 @@ const URL_API_BASE  = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app
           const totalDias = window.flyguide_diasTotais
             || parseInt(localStorage.getItem(`flyguide:roteiro-dias:${roteiroId}`)) || 0;
           basesViagem.push({
-            id: `base-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
-            country: pais,
-            city:    cidade,
-            label:   pais ? `${cidade}, ${pais}` : cidade,
-            latitude:  geocoded.latitude,
-            longitude: geocoded.longitude,
-            dias: totalDias,
+            id:          `base-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+            country:     pais,
+            city:        cidade,
+            label:       pais ? `${cidade}, ${pais}` : cidade,
+            latitude:    geocoded.latitude,
+            longitude:   geocoded.longitude,
+            stateCode:   geocoded.stateCode   || null,
+            stateName:   geocoded.stateName   || null,
+            countryCode: geocoded.countryCode || null,
+            dias:        totalDias,
           });
           baseAtivaId = basesViagem[0].id;
           salvarBasesViagem();
@@ -1371,13 +1394,13 @@ const URL_API_BASE  = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app
     }
 
     autocomplete = new google.maps.places.Autocomplete(input, {
-      fields: ["place_id", "name", "formatted_address", "geometry", "types", "opening_hours"],
+      fields: ["place_id", "name", "formatted_address", "geometry", "types", "opening_hours", "address_components"],
       language: "pt-BR",
     });
 
     configurarAutocompleteBasesViagem();
     atualizarAutocompletePorBase();
-    prefillFormBaseDoRoteiro();
+    prefillFormBaseDoRoteiro().then(() => atualizarAutocompletePorBase()).catch(() => {});
 
     // Caso locais já tenham carregado antes do Maps estar pronto
     if (locaisSalvos.length > 0) atualizarMapaAtividades();
@@ -1388,13 +1411,14 @@ const URL_API_BASE  = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app
       ocultarErroLocal();
 
       localSelecionado = {
-        placeId:  place.place_id,
-        nome:     place.name,
-        endereco: place.formatted_address,
-        tipo:     (place.types || [])[0] || "establishment",
-        latitude: place.geometry?.location?.lat(),
-        longitude: place.geometry?.location?.lng(),
-        openingHours: place.opening_hours ? {
+        placeId:           place.place_id,
+        nome:              place.name,
+        endereco:          place.formatted_address,
+        tipo:              (place.types || [])[0] || "establishment",
+        latitude:          place.geometry?.location?.lat(),
+        longitude:         place.geometry?.location?.lng(),
+        addressComponents: place.address_components || [],
+        openingHours:      place.opening_hours ? {
           periods:     place.opening_hours.periods     || [],
           weekdayText: place.opening_hours.weekday_text || [],
         } : null,
