@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -52,8 +53,9 @@ public class GeradorRoteiroService {
     private static final String ANTHROPIC_MODEL = "claude-sonnet-4-6";
     private static final Duration AI_REQUEST_TIMEOUT = Duration.ofMinutes(5);
     private static final int LONG_ROUTE_MIN_DAYS = 6;
-    private static final int LONG_ROUTE_CHUNK_DAYS = 3;
+    private static final int LONG_ROUTE_CHUNK_DAYS = 5;
     private static final int MAX_AI_TOKENS = 8192;
+    private static final int MAX_DIAS_ROTEIRO = 30;
 
     public GerarRoteiroResponseDTO gerar(GerarRoteiroRequestDTO req) {
         if (anthropicApiKey == null || anthropicApiKey.isBlank()) {
@@ -212,7 +214,7 @@ public class GeradorRoteiroService {
         logger.info("Gerando roteiro longo em blocos: {} dias para {}", dias, req.getCidade());
 
         List<Map<String, Object>> sugestoes = new ArrayList<>();
-        Set<String> usedNomes = new HashSet<>();
+        Set<String> usedNomes = new LinkedHashSet<>();
 
         String titulo = null;
         String descricao = null;
@@ -518,24 +520,37 @@ public class GeradorRoteiroService {
                 + (!estado.isBlank() ? ", " + estado : "")
                 + (!pais.isBlank() ? ", " + pais : "");
 
+        String faseViagem = calcularFaseViagem(inicio, diasTotal);
+        String zonaBloco = calcularZonaBloco(inicio, diasTotal, tipo);
+
         StringBuilder prompt = new StringBuilder();
         prompt.append("Gere um bloco de roteiro turistico em JSON. Responda SOMENTE JSON valido, sem markdown.\n\n");
         prompt.append("DESTINO: ").append(localizacao).append("\n");
         prompt.append("TIPO: ").append(tipo).append("\n");
         prompt.append("ROTEIRO TOTAL: ").append(diasTotal).append(" dias\n");
-        prompt.append("BLOCO SOLICITADO: dias ").append(inicio).append(" a ").append(fim).append("\n\n");
-        prompt.append("REGRAS DO BLOCO:\n");
+        prompt.append("BLOCO SOLICITADO: dias ").append(inicio).append(" a ").append(fim).append("\n");
+
+        if (diasTotal >= 6) {
+            prompt.append("FASE DA VIAGEM: ").append(faseViagem).append("\n");
+            prompt.append("FOCO GEOGRAFICO DESTE BLOCO: ").append(zonaBloco).append("\n");
+        }
+
+        prompt.append("\nREGRAS DO BLOCO:\n");
         prompt.append("- Gere APENAS os dias ").append(inicio).append(" a ").append(fim).append(".\n");
         prompt.append("- Use numeracao absoluta dos dias, nao reinicie em 1 quando o bloco comecar depois do dia 1.\n");
-        prompt.append("- Cada periodo ativo deve ter 3 atividades reais pesquisaveis no Google Maps.\n");
+        prompt.append("- Cada periodo ativo deve ter 3 a 4 atividades reais pesquisaveis no Google Maps.\n");
         prompt.append("- Use somente nomes reais de locais, restaurantes, museus, parques, bairros ou atracoes.\n");
         prompt.append("- Nao use nomes genericos como 'Restaurante tipico', 'Passeio pelo centro' ou 'Museu local'.\n");
         prompt.append("- Nao inclua hospedagem, check-in ou checkout como atividade.\n");
-        prompt.append("- Evite repetir locais em qualquer dia.\n");
+        prompt.append("- Evite repetir locais em qualquer dia deste bloco.\n");
+        if (diasTotal >= 6) {
+            prompt.append("- Concentre as atividades na zona indicada no FOCO GEOGRAFICO para garantir variedade com blocos anteriores.\n");
+            prompt.append("- Os dias deste bloco devem ter tema coeso com a FASE DA VIAGEM indicada acima.\n");
+        }
 
-        String usados = nomesUsadosParaPrompt(usedNomes, 80);
+        String usados = nomesUsadosParaPrompt(usedNomes, 200);
         if (!usados.isBlank()) {
-            prompt.append("- Locais ja usados em blocos anteriores, nao repita: ").append(usados).append(".\n");
+            prompt.append("- Locais ja usados em blocos anteriores — NAO repita nenhum: ").append(usados).append(".\n");
         }
 
         appendCheckinCheckoutBloco(prompt, req, inicio, fim, diasTotal);
@@ -549,6 +564,54 @@ public class GeradorRoteiroService {
         prompt.append("- sugestoes deve ter exatamente ").append(fim - inicio + 1).append(" dia(s).\n");
         prompt.append("- imagemChave deve ser uma de: ").append(ImagemCatalogo.chavesPermitidasPrompt()).append(".\n");
         return prompt.toString();
+    }
+
+    private String calcularFaseViagem(int inicio, int diasTotal) {
+        if (diasTotal <= 5) return "unica fase";
+        double progresso = (double) inicio / diasTotal;
+        if (progresso < 0.35) {
+            return "FASE INICIAL — ambientacao, bairros centrais e principais atracoes iconicas do destino";
+        } else if (progresso < 0.70) {
+            return "FASE INTERMEDIARIA — aprofundamento em bairros tematicos, museus, gastronomia local e experiencias autenticas";
+        } else {
+            return "FASE FINAL — excursoes para arredores, experiencias especiais de despedida, compras e restaurantes premiados";
+        }
+    }
+
+    private String calcularZonaBloco(int inicio, int diasTotal, String tipo) {
+        int numBloco = (int) Math.ceil((double) inicio / LONG_ROUTE_CHUNK_DAYS);
+        boolean isNatureza = "Natureza".equals(tipo) || "Praia".equals(tipo) || "Aventura".equals(tipo);
+        boolean isGastro   = "Gastronomia".equals(tipo) || "Luxo".equals(tipo);
+        String[] zonas;
+        if (isNatureza) {
+            zonas = new String[]{
+                "praias, parques e atracoes naturais proximas ao centro",
+                "trilhas, reservas ecologicas e pontos panoramicos",
+                "ilhas, lagoas ou cachoeiras mais afastadas (passeio de dia)",
+                "esportes e atividades ao ar livre em areas especificas",
+                "mercados, feiras e bairros com culinaria regional",
+                "experiencias de natureza exclusivas e pontos menos conhecidos"
+            };
+        } else if (isGastro) {
+            zonas = new String[]{
+                "restaurantes historicos, cafes tradicionais e mercados centrais",
+                "bairros gastronomicos e adegas renomadas",
+                "chefs estrelados, menus degustacao e experiencias premium",
+                "feiras livres, street food e culinaria de rua autentica",
+                "bares classicos, life noturna e coqueteis artesanais",
+                "gastronomia de regioes vizinhas — excursao culinaria de dia"
+            };
+        } else {
+            zonas = new String[]{
+                "centro historico, pracas principais e atracoes iconicas",
+                "museus, galerias de arte e centros culturais",
+                "bairros tematicos, feiras e vida local autentica",
+                "parques, jardins e espacos ao ar livre da cidade",
+                "bairros alternativos, arte de rua e vida noturna",
+                "arredores e cidades vizinhas — excursao de dia completo"
+            };
+        }
+        return zonas[Math.min(numBloco - 1, zonas.length - 1)];
     }
 
     private void appendCheckinCheckoutBloco(StringBuilder prompt, GerarRoteiroRequestDTO req,
@@ -604,16 +667,24 @@ public class GeradorRoteiroService {
     }
 
     private String buildSystemMsg(GerarRoteiroRequestDTO req) {
-        return "Voce e um guia turistico profissional especializado em roteiros personalizados. "
+        int dias = diasTotais(req);
+        String base = "Voce e um guia turistico profissional especializado em roteiros personalizados. "
                 + "Sua unica saida deve ser JSON valido, sem markdown, sem texto adicional e sem comentarios. "
                 + "Use somente nomes reais de locais pesquisaveis no Google Maps. "
                 + "Nunca use descricoes genericas como 'Passeio pelo centro', 'Restaurante tipico' ou 'Galeria local'. "
                 + "Se nao souber o nome real de um local, omita-o. "
                 + "Use o destino principal da viagem, \"" + req.getCidade() + "\", como contexto geografico do roteiro.";
+        if (dias >= 10) {
+            base += " Voce e especialista em roteiros de longa duracao: distribua as experiencias de forma progressiva, "
+                    + "variando os bairros e zonas geograficas a cada bloco de dias, garantindo que o viajante "
+                    + "explore facetas diferentes do destino sem repeticoes. Priorize coesao tematica e fluxo narrativo.";
+        }
+        return base;
     }
 
     private int diasTotais(GerarRoteiroRequestDTO req) {
-        return req.getDiasTotais() != null && req.getDiasTotais() > 0 ? req.getDiasTotais() : 1;
+        int d = req.getDiasTotais() != null && req.getDiasTotais() > 0 ? req.getDiasTotais() : 1;
+        return Math.min(d, MAX_DIAS_ROTEIRO);
     }
 
     private int calcularMaxTokens(int dias) {
