@@ -707,6 +707,7 @@ function _renderAIItemCardMR(item, idx, uid, isDark) {
         <div data-ai-title style="font-weight:700;font-size:.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(nome || "Local")}</div>
         <div data-ai-address style="font-size:.72rem;color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:${endereco ? "" : "none"};">${endereco ? `<i class="bi bi-geo-alt me-1"></i>${escapeHtml(endereco)}` : ""}</div>
         ${window.placeCategoryBadgeHtml ? window.placeCategoryBadgeHtml([window.inferPlaceType ? window.inferPlaceType(nome) : "tourist_attraction"]) : ""}
+        <span id="mr-rating-ai-${uid}" data-mr-rating-id="mr-rating-ai-${uid}" data-mr-rating-nome="${escapeHtml(nome)}" data-mr-rating-pid="${escapeHtml(placeId)}" style="display:none;font-size:.7rem;font-weight:700;color:#92400e;background:#fef3c7;padding:1px 6px;border-radius:999px;align-items:center;gap:3px;"></span>
       </div>
       <div data-ai-cost-display style="min-width:48px;text-align:right;font-size:.8rem;font-weight:700;color:#f97316;background:#fff7ed;border:1px solid #ffffff;border-radius:4px;padding:2px 6px;flex-shrink:0;">${escapeHtml(custoLabel)}</div>
       <div style="display:flex;gap:4px;flex-shrink:0;">
@@ -830,6 +831,7 @@ function _renderLocalCardMR(l, idx, isDark) {
         ${l.endereco ? `<div style="font-size:.72rem;color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><i class="bi bi-geo-alt me-1"></i>${escapeHtml(l.endereco)}</div>` : ""}
         ${window.placeCategoryBadgeHtml && (l.tipo || l.nome) ? window.placeCategoryBadgeHtml([l.tipo || (window.inferPlaceType ? window.inferPlaceType(l.nome) : "tourist_attraction")]) : ""}
         ${l.observacoes ? `<div style="font-size:.72rem;color:${corLabel};">${escapeHtml(l.observacoes)}</div>` : ""}
+        <span id="mr-rating-lr-${vid}" data-mr-rating-id="mr-rating-lr-${vid}" data-mr-rating-nome="${escapeHtml(l.nome || '')}" data-mr-rating-pid="${escapeHtml(l.placeId || '')}" style="display:none;font-size:.7rem;font-weight:700;color:#92400e;background:#fef3c7;padding:1px 6px;border-radius:999px;align-items:center;gap:3px;"></span>
       </div>
       <div id="lcusto-display-${vid}" style="min-width:48px;text-align:right;font-size:.8rem;font-weight:700;color:#f97316;background:#fff7ed;border:1px solid #ffffff;border-radius:4px;padding:2px 6px;flex-shrink:0;">${escapeHtml(custoLabel)}</div>
       <div style="display:flex;gap:4px;flex-shrink:0;">
@@ -2107,6 +2109,50 @@ function _renderLocaisReaisEdit(lista) {
   });
 }
 
+// ── Ratings do Google Maps nos cards ──────────────────────────────
+const _mrRatingCache = {};
+
+function _fetchRatingMR(nome, placeId, spanId) {
+  const cacheKey = placeId || nome;
+  if (!cacheKey) return;
+
+  const apply = rating => {
+    const el = document.getElementById(spanId);
+    if (!el || !rating) return;
+    el.innerHTML = `<i class="bi bi-star-fill" style="color:#facc15;font-size:.65rem;"></i> ${rating.toFixed(1)}`;
+    el.style.display = "inline-flex";
+  };
+
+  if (_mrRatingCache[cacheKey] !== undefined) { apply(_mrRatingCache[cacheKey]); return; }
+  if (!window.google || !google.maps?.places?.PlacesService) return;
+
+  const svc = new google.maps.places.PlacesService(document.createElement("div"));
+  if (placeId) {
+    svc.getDetails({ placeId, fields: ["rating"] }, (place, status) => {
+      const r = status === google.maps.places.PlacesServiceStatus.OK ? (place?.rating || null) : null;
+      _mrRatingCache[cacheKey] = r;
+      apply(r);
+    });
+  } else if (nome) {
+    svc.textSearch({ query: nome }, (results, status) => {
+      const r = status === google.maps.places.PlacesServiceStatus.OK && results?.[0]?.rating
+        ? results[0].rating : null;
+      _mrRatingCache[cacheKey] = r;
+      apply(r);
+    });
+  }
+}
+
+function _iniciarRatingsMR() {
+  document.querySelectorAll("[data-mr-rating-id]").forEach(el => {
+    _fetchRatingMR(
+      el.getAttribute("data-mr-rating-nome") || "",
+      el.getAttribute("data-mr-rating-pid")  || "",
+      el.getAttribute("data-mr-rating-id")
+    );
+  });
+}
+
 // ── Render locais ─────────────────────────────────────────────────
 function renderLocaisEdit() {
   const lista = document.getElementById("listaLocaisEdit");
@@ -2127,11 +2173,13 @@ function renderLocaisEdit() {
 
   if (temSugestoes) {
     renderLocaisEditAI(); // locais reais por dia já incluídos dentro de cada accordion
+    _iniciarRatingsMR();
     return;
   }
 
   _renderLocaisReaisEdit(lista);
   _renderMiniMapaLocaisEdit();
+  _iniciarRatingsMR();
 }
 
 // ── Carregar locais ───────────────────────────────────────────────
