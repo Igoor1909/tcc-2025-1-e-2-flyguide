@@ -116,6 +116,14 @@ function _mensagemLocalForaDaBaseEdit(local) {
   if (base.latitude == null || base.longitude == null) return "A cidade base ainda não possui coordenadas. Aguarde carregar e tente novamente.";
   if (!local || local.latitude == null || local.longitude == null) return "Selecione um local válido da lista do Google Maps.";
 
+  // Validação de país — bloqueia qualquer local fora do país do roteiro
+  if (_codigoPaisEdit && local.addressComponents) {
+    const paisLocal = (local.addressComponents || []).find(c => (c.types || []).includes("country"));
+    if (paisLocal && paisLocal.short_name?.toLowerCase() !== _codigoPaisEdit.toLowerCase()) {
+      return `O local está em outro país (${paisLocal.long_name}). Apenas locais no mesmo país do roteiro podem ser adicionados.`;
+    }
+  }
+
   // Validação por estado/região — bloqueia independente do raio configurado
   const estadoBase  = base.stateCode || _estadoBaseCode || null;
   const estadoLocal = _extrairEstadoDeComponentsEdit(local.addressComponents);
@@ -547,6 +555,9 @@ function garantirAutocompleteEdit() {
     fields: ["place_id", "name", "formatted_address", "geometry", "types", "address_components"],
     language: "pt-BR",
   };
+  if (_codigoPaisEdit) {
+    opts.componentRestrictions = { country: _codigoPaisEdit };
+  }
 
   _autocompleteEdit = new google.maps.places.Autocomplete(input, opts);
 
@@ -1442,8 +1453,8 @@ function _renderMiniMapaPasso3(lista) {
   if (!box.querySelector("#p3Legenda")) {
     const lEl = document.createElement("div");
     lEl.id = "p3Legenda";
-    lEl.style.cssText = "display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;";
-    mapEl.after(lEl);
+    lEl.style.cssText = "display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;";
+    mapEl.before(lEl);
   }
   const filtrosEl = box.querySelector("#p3Filtros");
   const legendaEl = box.querySelector("#p3Legenda");
@@ -1941,6 +1952,35 @@ window.getSugestoesEditadasLocais = function () {
   return _getAiSugestoesEditadasEdit();
 };
 
+// Versão silenciosa para uso após drag-and-drop: salva sem reload nem fechar modal
+async function _salvarOrdemSilencioso() {
+  try {
+    const sugestoesEditadas = _getAiSugestoesEditadasEdit();
+    if (!sugestoesEditadas || !_roteiroObjEdit) return;
+    const r = _roteiroObjEdit;
+    await authFetch(`${_URL_API}/roteiros/${_roteiroIdEdit}`, {
+      method:  "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        idUsuario:           r.idUsuario,
+        titulo:              r.titulo,
+        pais:                r.pais,
+        cidade:              r.cidade,
+        tipoRoteiro:         r.tipoRoteiro,
+        statusRoteiro:       r.statusRoteiro,
+        visibilidadeRoteiro: r.visibilidadeRoteiro,
+        dataInicio:          r.dataInicio,
+        dataFim:             r.dataFim,
+        observacoes:         r.observacoes,
+        diasTotais:          r.diasTotais,
+        orcamento:           r.orcamento,
+        sugestoes:           sugestoesEditadas,
+      }),
+    });
+    _roteiroObjEdit = Object.assign({}, _roteiroObjEdit, { sugestoes: sugestoesEditadas });
+  } catch (_) { /* silencioso */ }
+}
+
 async function _salvarSugestoesAIEdit() {
   const btnSalvar = document.getElementById("btnSalvarSugestoesAIMR");
   if (btnSalvar) { btnSalvar.disabled = true; btnSalvar.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Salvando...`; }
@@ -2241,8 +2281,8 @@ function _initDragDropAI(lista) {
       dragSrc.style.opacity = "";
       dragSrc = null;
       _renumerar();
-      // Salva nova ordem na API e atualiza o mapa automaticamente
-      _salvarSugestoesAIEdit();
+      // Salva nova ordem na API silenciosamente (sem reload) e atualiza o mapa
+      _salvarOrdemSilencioso();
       const _listaAtual = document.getElementById("listaLocaisEdit");
       if (_listaAtual) _renderMiniMapaPasso3(_listaAtual);
     });
@@ -2607,6 +2647,8 @@ document.getElementById("btnAdicionarLocalEdit")?.addEventListener("click", asyn
     document.getElementById("localPeriodoEdit")?.focus();
     return;
   }
+
+  if (!_validarLocalNaBaseEdit(_localSelecionadoEdit)) return;
 
   erroEl.style.display = "none";
 
