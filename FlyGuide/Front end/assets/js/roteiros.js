@@ -341,20 +341,6 @@
 
     const modalEditar  = new bootstrap.Modal(document.getElementById("modalEditarRoteiro"));
 
-    window._abrirModalEditarRoteiro = function(id) {
-      roteiroParaEditar = todosRoteiros.find(r => String(r.idRoteiro) === String(id));
-      if (!roteiroParaEditar) return;
-      preencherModalEditar(roteiroParaEditar);
-      modalEditar.show();
-      if (typeof window.abrirLocaisEdit === "function") {
-        window.abrirLocaisEdit(roteiroParaEditar.idRoteiro, roteiroParaEditar.cidade, {
-          diasTotais: roteiroParaEditar.diasTotais || 0,
-          userId:     parseInt(userId),
-          roteiro:    roteiroParaEditar
-        });
-      }
-    };
-
     function _confirmarExclusaoRoteiro(nome) {
       return new Promise(function(resolve) {
         var overlay = document.createElement("div");
@@ -457,7 +443,7 @@
                 </div>
                 <button class="btn btn-sm fw-bold"
                         style="color:#3b82f6;font-size:.82rem;padding:3px 10px;border:1px solid #bfdbfe;border-radius:8px;background:none;white-space:nowrap;"
-                        onclick="event.stopPropagation(); window._abrirModalEditarRoteiro('${r.idRoteiro}');"
+                        data-editar-roteiro="${r.idRoteiro}"
                         title="Editar">
                   <i class="bi bi-pencil me-1"></i>Editar
                 </button>
@@ -583,6 +569,23 @@
         });
       });
 
+
+      lista.querySelectorAll("[data-editar-roteiro]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const id = btn.getAttribute("data-editar-roteiro");
+          roteiroParaEditar = todosRoteiros.find(r => String(r.idRoteiro) === String(id));
+          if (!roteiroParaEditar) return;
+          preencherModalEditar(roteiroParaEditar);
+          modalEditar.show();
+          if (typeof window.abrirLocaisEdit === "function") {
+            window.abrirLocaisEdit(roteiroParaEditar.idRoteiro, roteiroParaEditar.cidade, {
+              diasTotais: roteiroParaEditar.diasTotais || 0,
+              userId:     parseInt(userId),
+              roteiro:    roteiroParaEditar
+            });
+          }
+        });
+      });
 
       lista.querySelectorAll("[data-avaliar-roteiro]").forEach(btn => {
         btn.addEventListener("click", () => {
