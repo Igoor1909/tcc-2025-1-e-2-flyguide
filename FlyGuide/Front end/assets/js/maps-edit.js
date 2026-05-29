@@ -2146,7 +2146,9 @@ function _initDragDropAI(lista) {
 
   lista.querySelectorAll("[data-ai-per]").forEach(perContainer => {
     function _getItems() {
-      return [...perContainer.querySelectorAll(":scope > [data-ai-item]:not([data-ai-special])")];
+      return [...perContainer.querySelectorAll(
+        ":scope > [data-ai-item]:not([data-ai-special]), :scope > [id^='lwrap-']"
+      )];
     }
     function _getDropTarget(y) {
       const items = _getItems().filter(i => i !== dragSrc);
