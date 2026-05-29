@@ -1391,8 +1391,14 @@ async function _autoLookupAIAddresses(lista, cidade) {
       const perKey = perEl.getAttribute("data-ai-per");
       if (!["manha", "tarde", "noite"].includes(perKey)) continue;
       if (!cidadePP) continue; // sem cidade não há como buscar
+      // Não preencher períodos que já contenham marker de checkout
+      const hasCheckout = [...perEl.querySelectorAll("[data-ai-special]")]
+        .some(el => el.querySelector("input[data-ai-checkout]")?.value === "1");
+      if (hasCheckout) continue;
+
       const alvo = Math.max(1, parseInt(perEl.getAttribute("data-ai-target-count") || "1") || 1);
-      const faltantes = Math.max(0, alvo - perEl.querySelectorAll("[data-ai-item]").length);
+      // Exclui special items (checkin/checkout) da contagem — evita injetar após o marker
+      const faltantes = Math.max(0, alvo - perEl.querySelectorAll("[data-ai-item]:not([data-ai-special])").length);
       if (faltantes <= 0) continue;
 
       const diaEl = perEl.closest("[data-ai-dia-idx]");
