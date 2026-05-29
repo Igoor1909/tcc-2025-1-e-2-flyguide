@@ -27,7 +27,7 @@ public class PessoaFisica implements Serializable {
     private String primeiroNome;
     private String ultimoNome;
 
-    @Column(length = 11, nullable = false, unique = true)
+    @Column(length = 64, nullable = false, unique = true)
     private String cpf;
 
     @Column(length = 9, unique = true)

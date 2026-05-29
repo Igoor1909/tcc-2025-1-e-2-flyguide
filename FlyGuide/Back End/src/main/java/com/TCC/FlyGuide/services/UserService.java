@@ -1,5 +1,6 @@
 package com.TCC.FlyGuide.services;
 
+import java.security.MessageDigest;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
@@ -53,7 +54,7 @@ public class UserService {
             throw new DatabaseException("E-mail já cadastrado.");
         }
 
-        if (cpf != null && pessoaFisicaRepository.existsByCpf(cpf)) {
+        if (cpf != null && pessoaFisicaRepository.existsByCpf(hashCpf(cpf))) {
             throw new DatabaseException("CPF já cadastrado.");
         }
 
@@ -82,7 +83,7 @@ public class UserService {
         pf.setUsuario(user); // @MapsId usa o id do user
         pf.setPrimeiroNome(dto.getPrimeiroNome());
         pf.setUltimoNome(dto.getUltimoNome());
-        pf.setCpf(cpf);
+        pf.setCpf(hashCpf(cpf));
         pf.setRg(rg);
 
         pessoaFisicaRepository.save(pf);
@@ -380,6 +381,19 @@ public class UserService {
             throw new DatabaseException(
                     "Senha inválida. Deve ter no mínimo 8 caracteres, 1 letra maiúscula e 1 caractere especial."
             );
+        }
+    }
+
+    private String hashCpf(String cpf) {
+        if (cpf == null) return null;
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(cpf.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder();
+            for (byte b : hash) hex.append(String.format("%02x", b));
+            return hex.toString();
+        } catch (Exception e) {
+            throw new RuntimeException("Erro ao processar CPF.", e);
         }
     }
 }
