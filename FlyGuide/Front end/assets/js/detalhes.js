@@ -793,7 +793,7 @@
       conteudo.style.display = "";
 
       // Hero com imagem
-      const imgUrl = r.imagemUrl || IMG_FALLBACK;
+      const imgUrl = typeof obterImagemUrlRoteiro === "function" ? obterImagemUrlRoteiro(r) : (r.imagemUrl || IMG_FALLBACK);
       const hero   = document.getElementById("detalhesHero");
       if (hero) {
         hero.style.backgroundImage = `
@@ -1283,7 +1283,7 @@ function abrirModalEdicaoDetalhes(roteiro, locaisIniciais) {
 
   // Seletor de imagens
   if (typeof renderSeletorImagens === "function") {
-    carregarImagens().then(() => renderSeletorImagens("detalheImgSelector", "detalheEditImagem", roteiro.idImagem));
+    carregarImagens().then(() => renderSeletorImagens("detalheImgSelector", "detalheEditImagem", roteiro.idImagem || roteiro.imagemChave));
   }
 
   // Locais
@@ -1318,6 +1318,9 @@ function abrirModalEdicaoDetalhes(roteiro, locaisIniciais) {
 
     const dias      = parseInt(document.getElementById("detalheEditDuracao").value) || null;
     const idImg     = document.getElementById("detalheEditImagem").value;
+    const imagemSelecionada = typeof obterImagemSelecionada === "function"
+      ? obterImagemSelecionada("detalheEditImagem")
+      : null;
     const isPublico = document.getElementById("detalheVisPublico")?.checked;
 
     const payload = {
@@ -1329,7 +1332,8 @@ function abrirModalEdicaoDetalhes(roteiro, locaisIniciais) {
       diasTotais:          dias > 0 ? dias : null,
       orcamento:           parseFloat(document.getElementById("detalheEditOrcamento").value) || null,
       observacoes:         document.getElementById("detalheEditDesc").value.trim() || null,
-      idImagem:            idImg ? parseInt(idImg) : null,
+      idImagem:            imagemSelecionada?.idImagem ?? (idImg ? parseInt(idImg) : null),
+      imagemChave:         imagemSelecionada?.imagemChave || null,
     };
 
     const btn = document.getElementById("btnSalvarDetalheEdit");
@@ -1694,6 +1698,4 @@ function abrirModalEdicaoDetalhes(roteiro, locaisIniciais) {
   carregarAvaliacoes();
   if (userId) carregarAvaliacaoUsuario();
 })();
-
-
 

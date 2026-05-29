@@ -388,7 +388,7 @@
     }
 
     function renderCard(r) {
-      const imgUrl  = r.imagemUrl || IMG_FALLBACK;
+      const imgUrl  = typeof obterImagemUrlRoteiro === "function" ? obterImagemUrlRoteiro(r) : (r.imagemUrl || IMG_FALLBACK);
       const badge   = badgeClasse[r.tipoRoteiro] || "";
       const dias    = r.diasTotais ? `${r.diasTotais} dia${r.diasTotais > 1 ? "s" : ""}` : EMPTY_TEXT;
       const orc     = estimarOrcamento(r);
@@ -727,7 +727,7 @@
       document.getElementById("editPublico").checked    = isPublico;
       atualizarVisibilityStrip(isPublico);
       document.getElementById("editRoteiroErro").style.display = "none";
-      renderSeletorImagens("imgSelectorEdit", "editImagem", r.idImagem);
+      renderSeletorImagens("imgSelectorEdit", "editImagem", r.idImagem || r.imagemChave);
 
       if (!window._autocompletePaisCidadeMR && typeof criarAutocompletePaisCidadeGlobal === "function") {
         window._autocompletePaisCidadeMR = criarAutocompletePaisCidadeGlobal("editPais", "editCidade");
@@ -897,6 +897,9 @@
 
       const duracao  = parseInt(document.getElementById("editDuracao").value) || null;
       const idImagem = document.getElementById("editImagem").value;
+      const imagemSelecionada = typeof obterImagemSelecionada === "function"
+        ? obterImagemSelecionada("editImagem")
+        : null;
       const isPublico = document.getElementById("editPublico").checked;
 
       const payload = {
@@ -908,7 +911,8 @@
         diasTotais:  duracao,
         orcamento:   parseFloat(document.getElementById("editOrcamento").value) || null,
         observacoes: document.getElementById("editDescricao").value.trim() || null,
-        idImagem:    idImagem ? parseInt(idImagem) : null,
+        idImagem:    imagemSelecionada?.idImagem ?? (idImagem ? parseInt(idImagem) : null),
+        imagemChave: imagemSelecionada?.imagemChave || null,
       };
 
       const btn = document.getElementById("btnSalvarEdicaoRoteiro");
@@ -1380,7 +1384,7 @@
       document.getElementById("genDescricao").value = data.descricao || "";
 
       const imgs = await carregarImagens();
-      renderSeletorImagens("imgSelector2", "itImagem2", data.idImagem || (imgs[0]?.idImagem ?? null));
+      renderSeletorImagens("imgSelector2", "itImagem2", data.idImagem || data.imagemChave || (imgs[0]?.idImagem ?? null));
       const itPublicEl = document.getElementById("itPublic");
       if (itPublicEl) itPublicEl.checked = true;
       atualizarCriarVisibilityStrip(true);
@@ -1424,6 +1428,10 @@
           const sugestoesRevisadas = typeof window.getSugestoesEditadasLocais === "function"
             ? window.getSugestoesEditadasLocais()
             : null;
+          const imagemSelecionadaFinal = typeof obterImagemSelecionada === "function"
+            ? obterImagemSelecionada("itImagem2")
+            : null;
+          const idImagemFinal = document.getElementById("itImagem2")?.value;
           await authFetch(`${URL_API_BASE}/roteiros/${roteiroIdCriado}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
@@ -1438,9 +1446,8 @@
               diasTotais:          diasGerados,
               orcamento:           orcamentoGerado || null,
               observacoes:         document.getElementById("genDescricao")?.value || null,
-              idImagem:            document.getElementById("itImagem2")?.value
-                                     ? parseInt(document.getElementById("itImagem2").value)
-                                     : null,
+              idImagem:            imagemSelecionadaFinal?.idImagem ?? (idImagemFinal ? parseInt(idImagemFinal) : null),
+              imagemChave:         imagemSelecionadaFinal?.imagemChave || null,
               sugestoes:           sugestoesRevisadas || aiSugestoes || null,
               latDestino:          latGerada,
               lngDestino:          lngGerada,
@@ -1482,6 +1489,9 @@
       const descricao = document.getElementById("genDescricao")?.value?.trim();
       const isPublic  = document.getElementById("itPublic")?.checked;
       const idImagem  = document.getElementById("itImagem2")?.value;
+      const imagemSelecionada = typeof obterImagemSelecionada === "function"
+        ? obterImagemSelecionada("itImagem2")
+        : null;
       const btn       = document.getElementById("btnConfirmar");
 
       if (!titulo) {
@@ -1527,7 +1537,8 @@
         diasTotais:          diasGerados,
         orcamento:           orcamentoGerado || null,
         observacoes:         descricao || null,
-        idImagem:            idImagem ? parseInt(idImagem) : null,
+        idImagem:            imagemSelecionada?.idImagem ?? (idImagem ? parseInt(idImagem) : null),
+        imagemChave:         imagemSelecionada?.imagemChave || null,
         sugestoes:           aiSugestoes || null,
         latDestino:          latGerada,
         lngDestino:          lngGerada,

@@ -10,9 +10,10 @@
   const pagina = document.body.getAttribute("data-pagina");
 
   function resolverImagemRoteiro(r) {
+    if (typeof obterImagemUrlRoteiro === "function") return obterImagemUrlRoteiro(r);
     if (r.imagemUrl) return r.imagemUrl;
     if (r.idImagem && typeof imagensCache !== "undefined") {
-      var img = imagensCache.find(function (i) { return i.idImagem === r.idImagem; });
+      var img = imagensCache.find(function (i) { return Number(i.idImagem) === Number(r.idImagem); });
       if (img) return img.url;
     }
     if (r.imagemChave && typeof imagensCache !== "undefined") {
@@ -1454,6 +1455,5 @@
     }
   }
 })();
-
 
 

@@ -57,7 +57,7 @@
   }
 
   function renderCardFeed(r) {
-    const imgUrl  = r.imagemUrl || IMG_FALLBACK;
+    const imgUrl  = typeof obterImagemUrlRoteiro === "function" ? obterImagemUrlRoteiro(r) : (r.imagemUrl || IMG_FALLBACK);
     const badge   = badgeClasse[r.tipoRoteiro] || "";
     const dias    = r.diasTotais ? `${r.diasTotais} dia${r.diasTotais > 1 ? "s" : ""}` : "—";
     const orc     = estimarOrcamento(r);
@@ -413,9 +413,12 @@
   document.getElementById("feedBusca")?.addEventListener("input",  filtrarEAplicar);
   document.getElementById("feedTipo")?.addEventListener("change",   filtrarEAplicar);
 
-  fetch(`${URL_API_BASE}/roteiros/publicos`)
-    .then(r => { if (!r.ok) throw new Error(); return r.json(); })
-    .then(data => {
+  Promise.all([
+    typeof carregarImagens === "function" ? carregarImagens() : Promise.resolve(),
+    fetch(`${URL_API_BASE}/roteiros/publicos`)
+      .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+  ])
+    .then(([, data]) => {
       const lista = Array.isArray(data) ? data : (data.content || []);
       // Nunca exibe RASCUNHO no feed público — roteiro só aparece após Finalizar
       todosRoteiros = lista.filter(r => r.statusRoteiro !== "RASCUNHO");
@@ -426,6 +429,4 @@
       document.getElementById("feedVazio").style.display   = "";
     });
 })();
-
-
 

@@ -20,6 +20,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -47,11 +48,27 @@ public class GeradorRoteiroService {
             .build();
 
     private static final String[] PERIODOS = {"manha", "tarde", "noite"};
+    private static final String ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
+    private static final String ANTHROPIC_MODEL = "claude-sonnet-4-6";
+    private static final Duration AI_REQUEST_TIMEOUT = Duration.ofMinutes(5);
+    private static final int LONG_ROUTE_MIN_DAYS = 6;
+    private static final int LONG_ROUTE_CHUNK_DAYS = 3;
+    private static final int MAX_AI_TOKENS = 8192;
 
     public GerarRoteiroResponseDTO gerar(GerarRoteiroRequestDTO req) {
         if (anthropicApiKey == null || anthropicApiKey.isBlank()) {
             logger.warn("FALLBACK ativado para: {} — anthropic.api.key está vazio ou não configurado", req.getCidade());
             return fallback(req);
+        }
+
+        int dias = diasTotais(req);
+        if (dias >= LONG_ROUTE_MIN_DAYS) {
+            try {
+                return gerarEmBlocos(req, dias);
+            } catch (Exception e) {
+                logger.error("Erro ao gerar roteiro longo em blocos para {}: {} | Stack trace:", req.getCidade(), e.getMessage(), e);
+                return fallback(req);
+            }
         }
 
         try {
@@ -65,22 +82,22 @@ public class GeradorRoteiroService {
                     + "O destino principal da viagem é \"" + req.getCidade() + "\" — ele deve aparecer em pelo menos uma atividade do roteiro.";
 
             Map<String, Object> reqMap = new HashMap<>();
-            reqMap.put("model",       "claude-sonnet-4-6");
-            reqMap.put("max_tokens",  4096);
+            reqMap.put("model",       ANTHROPIC_MODEL);
+            reqMap.put("max_tokens",  calcularMaxTokens(dias));
             reqMap.put("temperature", 0.7);
             reqMap.put("system",      systemMsg);
             reqMap.put("messages",    List.of(Map.of("role", "user", "content", prompt)));
             String requestBody = objectMapper.writeValueAsString(reqMap);
 
-            logger.info("Chamando IA para: {}, modelo: claude-sonnet-4-6", req.getCidade());
+            logger.info("Chamando IA para: {}, modelo: {}", req.getCidade(), ANTHROPIC_MODEL);
 
             HttpRequest httpReq = HttpRequest.newBuilder()
-                    .uri(URI.create("https://api.anthropic.com/v1/messages"))
+                    .uri(URI.create(ANTHROPIC_URL))
                     .header("Content-Type", "application/json")
                     .header("x-api-key", anthropicApiKey)
                     .header("anthropic-version", "2023-06-01")
                     .POST(HttpRequest.BodyPublishers.ofString(requestBody))
-                    .timeout(Duration.ofSeconds(120))
+                    .timeout(AI_REQUEST_TIMEOUT)
                     .build();
 
             HttpResponse<String> response = httpClient.send(httpReq, HttpResponse.BodyHandlers.ofString());
@@ -189,6 +206,444 @@ public class GeradorRoteiroService {
             logger.error("Erro ao chamar IA para {}: {} | Stack trace:", req.getCidade(), e.getMessage(), e);
             return fallback(req);
         }
+    }
+
+    private GerarRoteiroResponseDTO gerarEmBlocos(GerarRoteiroRequestDTO req, int dias) throws Exception {
+        logger.info("Gerando roteiro longo em blocos: {} dias para {}", dias, req.getCidade());
+
+        List<Map<String, Object>> sugestoes = new ArrayList<>();
+        Set<String> usedNomes = new HashSet<>();
+
+        String titulo = null;
+        String descricao = null;
+        String imagemChave = tipoParaChave(req.getTipoRoteiro());
+        BigDecimal orcamento = BigDecimal.ZERO;
+
+        for (int inicio = 1; inicio <= dias; inicio += LONG_ROUTE_CHUNK_DAYS) {
+            int fim = Math.min(dias, inicio + LONG_ROUTE_CHUNK_DAYS - 1);
+            try {
+                AiRouteData bloco = gerarBlocoComIa(req, inicio, fim, dias, usedNomes);
+                if (isBlank(titulo) && !isBlank(bloco.titulo)) titulo = bloco.titulo;
+                if (isBlank(descricao) && !isBlank(bloco.descricao)) descricao = bloco.descricao;
+                if (!isBlank(bloco.imagemChave)) imagemChave = bloco.imagemChave;
+                if (bloco.orcamento != null) orcamento = orcamento.add(bloco.orcamento);
+                sugestoes.addAll(bloco.sugestoes);
+            } catch (Exception blocoEx) {
+                logger.warn("Falha no bloco {}-{} de {}. Usando fallback parcial. Motivo: {}",
+                        inicio, fim, req.getCidade(), blocoEx.getMessage());
+                sugestoes.addAll(gerarFallbackBloco(req, inicio, fim, usedNomes));
+            }
+        }
+
+        if (sugestoes.isEmpty()) {
+            throw new IllegalStateException("Nenhum bloco retornou sugestoes");
+        }
+
+        sugestoes.sort(Comparator.comparingInt(d -> asInt(d.get("dia"), 0)));
+        addCheckinCheckoutMarkers(sugestoes, req);
+
+        if (isBlank(titulo)) titulo = "Roteiro em " + req.getCidade();
+        if (isBlank(descricao)) {
+            descricao = "Uma viagem inesquecivel para " + req.getCidade()
+                    + (req.getPais() != null && !req.getPais().isBlank() ? ", " + req.getPais() : "") + ".";
+        }
+
+        GerarRoteiroResponseDTO resp = montarResposta(titulo, descricao, orcamento, imagemChave);
+        resp.setSugestoes(sugestoes);
+        return resp;
+    }
+
+    private AiRouteData gerarBlocoComIa(GerarRoteiroRequestDTO req, int inicio, int fim, int diasTotal,
+                                        Set<String> usedNomes) throws Exception {
+        String prompt = buildPromptBloco(req, inicio, fim, diasTotal, usedNomes);
+        JsonNode aiJson = chamarAnthropicJson(req, prompt, calcularMaxTokens(fim - inicio + 1));
+        AiRouteData data = parseAiJson(aiJson, req, usedNomes, inicio, fim);
+        if (data.sugestoes.isEmpty()) {
+            throw new IllegalStateException("Bloco sem sugestoes validas");
+        }
+        return data;
+    }
+
+    private JsonNode chamarAnthropicJson(GerarRoteiroRequestDTO req, String prompt, int maxTokens) throws Exception {
+        Map<String, Object> reqMap = new HashMap<>();
+        reqMap.put("model",       ANTHROPIC_MODEL);
+        reqMap.put("max_tokens",  maxTokens);
+        reqMap.put("temperature", 0.7);
+        reqMap.put("system",      buildSystemMsg(req));
+        reqMap.put("messages",    List.of(Map.of("role", "user", "content", prompt)));
+
+        HttpRequest httpReq = HttpRequest.newBuilder()
+                .uri(URI.create(ANTHROPIC_URL))
+                .header("Content-Type", "application/json")
+                .header("x-api-key", anthropicApiKey)
+                .header("anthropic-version", "2023-06-01")
+                .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(reqMap)))
+                .timeout(AI_REQUEST_TIMEOUT)
+                .build();
+
+        HttpResponse<String> response = httpClient.send(httpReq, HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() != 200) {
+            throw new IllegalStateException("Anthropic retornou status " + response.statusCode()
+                    + ": " + limitar(response.body(), 300));
+        }
+
+        JsonNode root = objectMapper.readTree(response.body());
+        JsonNode content = root.path("content");
+        if (!content.isArray() || content.isEmpty()) {
+            throw new IllegalStateException("Resposta da Anthropic sem content");
+        }
+
+        String text = stripMarkdown(content.get(0).path("text").asText(""));
+        if (text.isBlank()) {
+            throw new IllegalStateException("Resposta da Anthropic vazia");
+        }
+
+        try {
+            return objectMapper.readTree(text);
+        } catch (Exception parseEx) {
+            throw new IllegalStateException("JSON invalido da IA: " + limitar(text, 300), parseEx);
+        }
+    }
+
+    private AiRouteData parseAiJson(JsonNode aiJson, GerarRoteiroRequestDTO req, Set<String> usedNomes,
+                                    Integer diaInicio, Integer diaFim) {
+        AiRouteData data = new AiRouteData();
+        data.titulo = aiJson.path("titulo").asText("").trim();
+        data.descricao = aiJson.path("descricao").asText("").trim();
+        data.imagemChave = aiJson.path("imagemChave").asText("cidade").trim();
+        data.orcamento = BigDecimal.valueOf(aiJson.path("orcamentoEstimado").asDouble(0));
+        data.sugestoes = parseSugestoesIa(aiJson.path("sugestoes"), req, usedNomes, diaInicio, diaFim);
+        return data;
+    }
+
+    private List<Map<String, Object>> parseSugestoesIa(JsonNode sugestoesNode, GerarRoteiroRequestDTO req,
+                                                       Set<String> usedNomesAI,
+                                                       Integer diaInicio, Integer diaFim) {
+        List<Map<String, Object>> sugestoes = new ArrayList<>();
+        if (!sugestoesNode.isArray()) return sugestoes;
+
+        Set<String> used = usedNomesAI != null ? usedNomesAI : new HashSet<>();
+        boolean isPOIAI = req.isDestinoPontoTuristico();
+        int diasTotal = diasTotais(req);
+        String cidadeNorm = req.getCidade() != null ? req.getCidade().toLowerCase().trim() : "";
+
+        int offset = 0;
+        for (JsonNode diaNode : sugestoesNode) {
+            int defaultDia = diaInicio != null ? diaInicio + offset : diaNode.path("dia").asInt();
+            int diaNum = diaNode.path("dia").asInt(defaultDia);
+            if (diaInicio != null && diaFim != null && (diaNum < diaInicio || diaNum > diaFim)) {
+                diaNum = defaultDia;
+            }
+            offset++;
+
+            if (diaInicio != null && diaFim != null && (diaNum < diaInicio || diaNum > diaFim)) {
+                continue;
+            }
+
+            Map<String, Object> diaMap = new HashMap<>();
+            diaMap.put("dia", diaNum);
+
+            JsonNode periodosNode = diaNode.path("periodos");
+            if (periodosNode.isObject()) {
+                Map<String, Object> periodosMap = new HashMap<>();
+                for (String periodo : PERIODOS) {
+                    JsonNode periodoNode = periodosNode.path(periodo);
+                    List<Map<String, Object>> locaisPeriodo = new ArrayList<>();
+                    if (periodoNode.isArray()) {
+                        for (JsonNode localNode : periodoNode) {
+                            Map<String, Object> local = parseLocalIa(localNode, used, isPOIAI, diasTotal, diaNum, cidadeNorm);
+                            if (local != null) locaisPeriodo.add(local);
+                        }
+                    }
+                    periodosMap.put(periodo, locaisPeriodo);
+                }
+                diaMap.put("periodos", periodosMap);
+            } else {
+                List<Map<String, Object>> locais = new ArrayList<>();
+                for (JsonNode localNode : diaNode.path("locais")) {
+                    Map<String, Object> local = parseLocalIa(localNode, used, isPOIAI, diasTotal, diaNum, cidadeNorm);
+                    if (local != null) locais.add(local);
+                }
+                diaMap.put("locais", locais);
+            }
+
+            sugestoes.add(diaMap);
+        }
+
+        return sugestoes;
+    }
+
+    private Map<String, Object> parseLocalIa(JsonNode localNode, Set<String> used, boolean isPOI,
+                                             int diasTotal, int diaNum, String cidadeNorm) {
+        String nome = localNode.isTextual()
+                ? localNode.asText("").trim()
+                : localNode.path("nome").asText("").trim();
+        if (nome.isEmpty()) return null;
+
+        String nomeLow = nome.toLowerCase();
+        if (used.contains(nomeLow)) return null;
+        if (isPOI && diasTotal > 1 && diaNum == 1
+                && !cidadeNorm.isEmpty()
+                && (nomeLow.startsWith(cidadeNorm) || cidadeNorm.startsWith(nomeLow))) {
+            return null;
+        }
+
+        used.add(nomeLow);
+        Map<String, Object> localMap = new HashMap<>();
+        localMap.put("nome", nome);
+        if (!localNode.isTextual()) {
+            String custo = localNode.path("custo").asText("").trim();
+            if (!custo.isEmpty()) localMap.put("custo", custo);
+        }
+        return localMap;
+    }
+
+    private List<Map<String, Object>> gerarFallbackBloco(GerarRoteiroRequestDTO req, int inicio, int fim,
+                                                         Set<String> usedNomes) {
+        GerarRoteiroRequestDTO parcial = copiarRequest(req);
+        parcial.setDiasTotais(fim - inicio + 1);
+        parcial.setPeriodoCheckin(null);
+        parcial.setPeriodoCheckout(null);
+        parcial.setDestinoPontoTuristico(false);
+
+        List<Map<String, Object>> diasFallback = gerarSugestoesFallback(parcial);
+        for (Map<String, Object> dia : diasFallback) {
+            int diaRelativo = asInt(dia.get("dia"), 1);
+            dia.put("dia", inicio + diaRelativo - 1);
+        }
+        incluirPoiNoFallbackBloco(req, diasFallback, inicio, fim, usedNomes);
+        return filtrarSugestoesComNomesUsados(diasFallback, usedNomes);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void incluirPoiNoFallbackBloco(GerarRoteiroRequestDTO req, List<Map<String, Object>> diasFallback,
+                                           int inicio, int fim, Set<String> usedNomes) {
+        if (!req.isDestinoPontoTuristico() || isBlank(req.getCidade())) return;
+
+        int diaPoi = diasTotais(req) == 1 ? 1 : 2;
+        if (diaPoi < inicio || diaPoi > fim) return;
+
+        String nomeLow = req.getCidade().toLowerCase();
+        if (usedNomes != null && usedNomes.contains(nomeLow)) return;
+
+        for (Map<String, Object> dia : diasFallback) {
+            if (asInt(dia.get("dia"), 0) != diaPoi) continue;
+            Map<String, Object> periodos = (Map<String, Object>) dia.computeIfAbsent("periodos", k -> new HashMap<>());
+            List<Map<String, Object>> tarde = (List<Map<String, Object>>) periodos.computeIfAbsent("tarde", k -> new ArrayList<>());
+            Map<String, Object> poiItem = new HashMap<>();
+            poiItem.put("nome", req.getCidade());
+            poiItem.put("custo", "Preco varia");
+            tarde.add(0, poiItem);
+            return;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> filtrarSugestoesComNomesUsados(List<Map<String, Object>> dias,
+                                                                     Set<String> usedNomes) {
+        Set<String> used = usedNomes != null ? usedNomes : new HashSet<>();
+        for (Map<String, Object> dia : dias) {
+            Object periodosObj = dia.get("periodos");
+            if (periodosObj instanceof Map<?, ?> periodos) {
+                Map<String, Object> novosPeriodos = new HashMap<>();
+                for (String periodo : PERIODOS) {
+                    novosPeriodos.put(periodo, filtrarListaLocais(periodos.get(periodo), used));
+                }
+                dia.put("periodos", novosPeriodos);
+            } else {
+                dia.put("locais", filtrarListaLocais(dia.get("locais"), used));
+            }
+        }
+        return dias;
+    }
+
+    private List<Map<String, Object>> filtrarListaLocais(Object listaObj, Set<String> used) {
+        List<Map<String, Object>> filtrados = new ArrayList<>();
+        if (!(listaObj instanceof List<?> lista)) return filtrados;
+
+        for (Object item : lista) {
+            String nome = extrairNomeLocal(item);
+            if (isBlank(nome)) continue;
+            String nomeLow = nome.toLowerCase();
+            if (used.contains(nomeLow)) continue;
+            used.add(nomeLow);
+            filtrados.add(copiarLocal(item, nome));
+        }
+        return filtrados;
+    }
+
+    private String extrairNomeLocal(Object item) {
+        if (item instanceof Map<?, ?> map) {
+            Object nome = map.get("nome");
+            return nome != null ? String.valueOf(nome).trim() : "";
+        }
+        return item != null ? String.valueOf(item).trim() : "";
+    }
+
+    private Map<String, Object> copiarLocal(Object item, String nome) {
+        Map<String, Object> copy = new HashMap<>();
+        if (item instanceof Map<?, ?> map) {
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                copy.put(String.valueOf(entry.getKey()), entry.getValue());
+            }
+        }
+        copy.put("nome", nome);
+        return copy;
+    }
+
+    private GerarRoteiroRequestDTO copiarRequest(GerarRoteiroRequestDTO req) {
+        GerarRoteiroRequestDTO copy = new GerarRoteiroRequestDTO();
+        copy.setCidade(req.getCidade());
+        copy.setEstado(req.getEstado());
+        copy.setPais(req.getPais());
+        copy.setDiasTotais(req.getDiasTotais());
+        copy.setTipoRoteiro(req.getTipoRoteiro());
+        copy.setPeriodoCheckin(req.getPeriodoCheckin());
+        copy.setPeriodoCheckout(req.getPeriodoCheckout());
+        copy.setDestinoPontoTuristico(req.isDestinoPontoTuristico());
+        copy.setLatitude(req.getLatitude());
+        copy.setLongitude(req.getLongitude());
+        copy.setStateCode(req.getStateCode());
+        copy.setEnderecoDestino(req.getEnderecoDestino());
+        return copy;
+    }
+
+    private String buildPromptBloco(GerarRoteiroRequestDTO req, int inicio, int fim, int diasTotal,
+                                    Set<String> usedNomes) {
+        String cidade = req.getCidade() != null ? req.getCidade() : "";
+        String estado = req.getEstado() != null ? req.getEstado() : "";
+        String pais = req.getPais() != null ? req.getPais() : "";
+        String tipo = req.getTipoRoteiro() != null ? req.getTipoRoteiro() : "Cidade";
+        String localizacao = cidade
+                + (!estado.isBlank() ? ", " + estado : "")
+                + (!pais.isBlank() ? ", " + pais : "");
+
+        StringBuilder prompt = new StringBuilder();
+        prompt.append("Gere um bloco de roteiro turistico em JSON. Responda SOMENTE JSON valido, sem markdown.\n\n");
+        prompt.append("DESTINO: ").append(localizacao).append("\n");
+        prompt.append("TIPO: ").append(tipo).append("\n");
+        prompt.append("ROTEIRO TOTAL: ").append(diasTotal).append(" dias\n");
+        prompt.append("BLOCO SOLICITADO: dias ").append(inicio).append(" a ").append(fim).append("\n\n");
+        prompt.append("REGRAS DO BLOCO:\n");
+        prompt.append("- Gere APENAS os dias ").append(inicio).append(" a ").append(fim).append(".\n");
+        prompt.append("- Use numeracao absoluta dos dias, nao reinicie em 1 quando o bloco comecar depois do dia 1.\n");
+        prompt.append("- Cada periodo ativo deve ter 3 atividades reais pesquisaveis no Google Maps.\n");
+        prompt.append("- Use somente nomes reais de locais, restaurantes, museus, parques, bairros ou atracoes.\n");
+        prompt.append("- Nao use nomes genericos como 'Restaurante tipico', 'Passeio pelo centro' ou 'Museu local'.\n");
+        prompt.append("- Nao inclua hospedagem, check-in ou checkout como atividade.\n");
+        prompt.append("- Evite repetir locais em qualquer dia.\n");
+
+        String usados = nomesUsadosParaPrompt(usedNomes, 80);
+        if (!usados.isBlank()) {
+            prompt.append("- Locais ja usados em blocos anteriores, nao repita: ").append(usados).append(".\n");
+        }
+
+        appendCheckinCheckoutBloco(prompt, req, inicio, fim, diasTotal);
+        appendPoiBloco(prompt, req, inicio, fim, diasTotal);
+
+        prompt.append("\nFORMATO JSON OBRIGATORIO:\n");
+        prompt.append("{\"titulo\":\"\",\"descricao\":\"\",\"imagemChave\":\"cidade\",\"orcamentoEstimado\":0,");
+        prompt.append("\"sugestoes\":[{\"dia\":").append(inicio).append(",\"periodos\":{");
+        prompt.append("\"manha\":[{\"nome\":\"\"}],\"tarde\":[{\"nome\":\"\"}],\"noite\":[{\"nome\":\"\"}]");
+        prompt.append("}}]}\n");
+        prompt.append("- sugestoes deve ter exatamente ").append(fim - inicio + 1).append(" dia(s).\n");
+        prompt.append("- imagemChave deve ser uma de: cidade, praia, natureza, montanha, aventura, cultural, gastronomia, luxo, neve, mochilao, familia.\n");
+        return prompt.toString();
+    }
+
+    private void appendCheckinCheckoutBloco(StringBuilder prompt, GerarRoteiroRequestDTO req,
+                                            int inicio, int fim, int diasTotal) {
+        String checkin = req.getPeriodoCheckin();
+        String checkout = req.getPeriodoCheckout();
+        if (inicio == 1 && temCheckin(checkin)) {
+            if ("tarde".equals(checkin)) {
+                prompt.append("- Dia 1: manha deve ser [], tarde e noite ativos.\n");
+            } else if ("noite".equals(checkin)) {
+                prompt.append("- Dia 1: manha e tarde devem ser [], noite ativo.\n");
+            }
+        }
+        if (fim == diasTotal && temCheckin(checkout)) {
+            if ("manha".equals(checkout)) {
+                prompt.append("- Dia ").append(diasTotal).append(": tarde e noite devem ser [].\n");
+            } else if ("tarde".equals(checkout)) {
+                prompt.append("- Dia ").append(diasTotal).append(": noite deve ser [].\n");
+            }
+        }
+    }
+
+    private void appendPoiBloco(StringBuilder prompt, GerarRoteiroRequestDTO req,
+                                int inicio, int fim, int diasTotal) {
+        if (!req.isDestinoPontoTuristico() || isBlank(req.getCidade())) return;
+
+        int diaPoi = diasTotal == 1 ? 1 : 2;
+        if (inicio <= diaPoi && fim >= diaPoi) {
+            prompt.append("- O destino principal e uma atracao especifica: inclua \"")
+                    .append(req.getCidade())
+                    .append("\" no dia ")
+                    .append(diaPoi)
+                    .append(" no periodo tarde, usando exatamente esse nome.\n");
+        } else {
+            prompt.append("- O destino principal \"")
+                    .append(req.getCidade())
+                    .append("\" fica reservado para outro bloco; nao inclua neste bloco.\n");
+        }
+    }
+
+    private String nomesUsadosParaPrompt(Set<String> usedNomes, int limite) {
+        if (usedNomes == null || usedNomes.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder();
+        int count = 0;
+        for (String nome : usedNomes) {
+            if (isBlank(nome)) continue;
+            if (count > 0) sb.append(", ");
+            sb.append(nome);
+            count++;
+            if (count >= limite) break;
+        }
+        return sb.toString();
+    }
+
+    private String buildSystemMsg(GerarRoteiroRequestDTO req) {
+        return "Voce e um guia turistico profissional especializado em roteiros personalizados. "
+                + "Sua unica saida deve ser JSON valido, sem markdown, sem texto adicional e sem comentarios. "
+                + "Use somente nomes reais de locais pesquisaveis no Google Maps. "
+                + "Nunca use descricoes genericas como 'Passeio pelo centro', 'Restaurante tipico' ou 'Galeria local'. "
+                + "Se nao souber o nome real de um local, omita-o. "
+                + "Use o destino principal da viagem, \"" + req.getCidade() + "\", como contexto geografico do roteiro.";
+    }
+
+    private int diasTotais(GerarRoteiroRequestDTO req) {
+        return req.getDiasTotais() != null && req.getDiasTotais() > 0 ? req.getDiasTotais() : 1;
+    }
+
+    private int calcularMaxTokens(int dias) {
+        return Math.min(MAX_AI_TOKENS, Math.max(4096, 3200 + dias * 1000));
+    }
+
+    private int asInt(Object value, int fallback) {
+        if (value instanceof Number n) return n.intValue();
+        try {
+            return value != null ? Integer.parseInt(String.valueOf(value)) : fallback;
+        } catch (Exception e) {
+            return fallback;
+        }
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+
+    private String limitar(String value, int max) {
+        if (value == null) return "";
+        return value.length() <= max ? value : value.substring(0, max) + "...";
+    }
+
+    private static class AiRouteData {
+        String titulo;
+        String descricao;
+        String imagemChave;
+        BigDecimal orcamento;
+        List<Map<String, Object>> sugestoes = new ArrayList<>();
     }
 
     private GerarRoteiroResponseDTO montarResposta(String titulo, String descricao,
@@ -512,7 +967,7 @@ public class GeradorRoteiroService {
     private static boolean temCheckin(String p) { return p != null && !p.isBlank() && !p.equals("sem"); }
 
     private String buildPrompt(GerarRoteiroRequestDTO req) {
-        int    dias     = req.getDiasTotais();
+        int    dias     = diasTotais(req);
         String cidade   = req.getCidade()      != null ? req.getCidade()      : "";
         String estado   = req.getEstado()      != null ? req.getEstado()      : "";
         String pais     = req.getPais()        != null ? req.getPais()        : "";

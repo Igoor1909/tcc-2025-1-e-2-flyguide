@@ -62,24 +62,77 @@ function carregarImagens() {
     });
 }
 
+function normalizarIdImagem(id) {
+  const n = Number(id);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function encontrarImagemPorIdOuChave(idImagem, imagemChave) {
+  const id = normalizarIdImagem(idImagem);
+  if (id != null) {
+    const porId = imagensCache.find(img => normalizarIdImagem(img.idImagem) === id);
+    if (porId) return porId;
+  }
+
+  const chave = String(imagemChave || "").trim();
+  if (chave) {
+    const porChave = imagensCache.find(img => String(img.chave || "") === chave);
+    if (porChave) return porChave;
+  }
+
+  return null;
+}
+
+function obterImagemSelecionada(hiddenId) {
+  const hidden = document.getElementById(hiddenId);
+  const id = normalizarIdImagem(hidden?.value);
+  const img = encontrarImagemPorIdOuChave(id, null);
+  return {
+    idImagem: img ? normalizarIdImagem(img.idImagem) : id,
+    imagemChave: img?.chave || null,
+    imagemUrl: img?.url || null,
+  };
+}
+
+function obterImagemUrlRoteiro(roteiro) {
+  if (roteiro?.imagemUrl) return roteiro.imagemUrl;
+
+  const img = encontrarImagemPorIdOuChave(roteiro?.idImagem, roteiro?.imagemChave);
+  if (img?.url) return img.url;
+
+  return IMG_FALLBACK;
+}
+
 function renderSeletorImagens(containerId, hiddenId, idSelecionado) {
   const container = document.getElementById(containerId);
   if (!container || imagensCache.length === 0) return;
 
+  const idNormalizado = normalizarIdImagem(idSelecionado);
+  const chaveSelecionada = idNormalizado == null ? String(idSelecionado || "").trim() : "";
+  const imagemSelecionada = imagensCache.find(img => normalizarIdImagem(img.idImagem) === idNormalizado)
+    || imagensCache.find(img => chaveSelecionada && String(img.chave || "") === chaveSelecionada)
+    || imagensCache[0];
+  const idFinalSelecionado = normalizarIdImagem(imagemSelecionada?.idImagem);
+
+  const hiddenInicial = document.getElementById(hiddenId);
+  if (hiddenInicial && idFinalSelecionado != null) {
+    hiddenInicial.value = String(idFinalSelecionado);
+  }
+
   container.innerHTML = imagensCache.map(img => `
-    <div class="img-option ${img.idImagem === idSelecionado ? "selected" : ""}"
+    <div class="img-option ${normalizarIdImagem(img.idImagem) === idFinalSelecionado ? "selected" : ""}"
          data-id="${img.idImagem}"
          data-chave="${img.chave}"
          style="position:relative;border-radius:14px;overflow:hidden;cursor:pointer;
-                border:3px solid ${img.idImagem === idSelecionado ? "#f97316" : "transparent"};
+                border:3px solid ${normalizarIdImagem(img.idImagem) === idFinalSelecionado ? "#f97316" : "transparent"};
                 transition:border-color .2s,transform .15s;aspect-ratio:16/9;">
       <img src="${img.url.replace("w=800", "w=300")}" alt="${img.nome}"
            style="width:100%;height:100%;object-fit:cover;display:block;">
       <div class="chk-icon"
            style="position:absolute;top:8px;right:8px;background:#f97316;color:#fff;
-                  border-radius:50%;width:22px;height:22px;
-                  display:${img.idImagem === idSelecionado ? "flex" : "none"};
-                  align-items:center;justify-content:center;font-size:.75rem;">
+                   border-radius:50%;width:22px;height:22px;
+                  display:${normalizarIdImagem(img.idImagem) === idFinalSelecionado ? "flex" : "none"};
+                   align-items:center;justify-content:center;font-size:.75rem;">
         <i class="bi bi-check"></i>
       </div>
     </div>`).join("");
@@ -103,6 +156,4 @@ function renderSeletorImagens(containerId, hiddenId, idSelecionado) {
     });
   });
 }
-
-
 
