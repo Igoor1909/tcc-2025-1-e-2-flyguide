@@ -1317,6 +1317,7 @@ async function _autoLookupAIAddresses(lista, cidade) {
         const f = document.getElementById(`aiedit-mr-${uid}`);
         if (f) f.style.display = "none";
       });
+      if (lista._setupDragItem) lista._setupDragItem(ins);
     };
 
     // Busca candidate para um período vazio usando textSearch (não depende de coordenadas)
@@ -2197,91 +2198,117 @@ function _renderLocaisReaisEdit(lista) {
   });
 }
 
-// ── Drag-and-drop para reordenar itens dentro do período ──────────
+// ── Drag-and-drop para reordenar itens dentro do dia ─────────────
 function _initDragDropAI(lista) {
   if (!lista) return;
   let dragSrc = null;
 
-  lista.querySelectorAll("[data-ai-per], [data-drag-container]").forEach(perContainer => {
-    function _getItems() {
-      return [...perContainer.querySelectorAll(
-        ":scope > [data-ai-item]:not([data-ai-special]), :scope > [id^='lwrap-']"
-      )];
-    }
-    function _getDropTarget(y) {
-      const items = _getItems().filter(i => i !== dragSrc);
-      for (const item of items) {
-        const rect = item.getBoundingClientRect();
-        if (y < rect.top + rect.height / 2) return { el: item, before: true };
-      }
-      const last = items[items.length - 1];
-      return last ? { el: last, before: false } : null;
-    }
-    function _clearIndicators() {
-      perContainer.querySelectorAll("[data-drag-over]").forEach(el => {
-        el.removeAttribute("data-drag-over");
-        el.style.borderTop = "";
-        el.style.borderBottom = "";
-      });
-    }
+  const _sel = () => ":scope > [data-ai-item]:not([data-ai-special]), :scope > [id^='lwrap-']";
 
-    function _renumerar() {
-      _getItems().forEach((item, i) => {
+  function _clearAllIndicators() {
+    lista.querySelectorAll("[data-drag-over]").forEach(el => {
+      el.removeAttribute("data-drag-over");
+      el.style.borderTop = "";
+      el.style.borderBottom = "";
+    });
+  }
+
+  function _renumerarTudo() {
+    lista.querySelectorAll("[data-ai-per], [data-drag-container]").forEach(c => {
+      [...c.querySelectorAll(_sel())].forEach((item, i) => {
         const badge = item.querySelector("[data-nr-badge]");
         if (badge) badge.textContent = String(i + 1);
       });
-    }
-
-    _getItems().forEach(item => {
-      const cardInner = item.querySelector(":scope > div");
-      if (cardInner && !item.querySelector("[data-drag-handle]")) {
-        const handle = document.createElement("div");
-        handle.setAttribute("data-drag-handle", "");
-        handle.style.cssText = "cursor:grab;color:#94a3b8;font-size:.95rem;padding:0 2px;flex-shrink:0;display:flex;align-items:center;";
-        handle.innerHTML = '<i class="bi bi-grip-vertical"></i>';
-        cardInner.insertBefore(handle, cardInner.firstChild);
-        // marca o badge numérico (agora é o segundo filho após o handle)
-        const badge = cardInner.children[1];
-        if (badge) badge.setAttribute("data-nr-badge", "");
-      }
-      item.setAttribute("draggable", "true");
-      item.addEventListener("dragstart", e => {
-        dragSrc = item;
-        e.dataTransfer.effectAllowed = "move";
-        setTimeout(() => { item.style.opacity = "0.4"; }, 0);
-      });
-      item.addEventListener("dragend", () => {
-        dragSrc = null;
-        item.style.opacity = "";
-        _clearIndicators();
-      });
     });
+  }
 
+  function _getDropTarget(container, y) {
+    const items = [...container.querySelectorAll(_sel())].filter(i => i !== dragSrc);
+    for (const item of items) {
+      const rect = item.getBoundingClientRect();
+      if (y < rect.top + rect.height / 2) return { el: item, before: true };
+    }
+    const last = items[items.length - 1];
+    return last ? { el: last, before: false } : null;
+  }
+
+  function _setupItem(item) {
+    const cardInner = item.querySelector(":scope > div");
+    if (cardInner && !item.querySelector("[data-drag-handle]")) {
+      const handle = document.createElement("div");
+      handle.setAttribute("data-drag-handle", "");
+      handle.style.cssText = "cursor:grab;color:#94a3b8;font-size:.95rem;padding:0 2px;flex-shrink:0;display:flex;align-items:center;";
+      handle.innerHTML = '<i class="bi bi-grip-vertical"></i>';
+      cardInner.insertBefore(handle, cardInner.firstChild);
+      const badge = cardInner.children[1];
+      if (badge && !badge.hasAttribute("data-nr-badge")) badge.setAttribute("data-nr-badge", "");
+    }
+    if (item.dataset.dragReady) return;
+    item.dataset.dragReady = "1";
+    item.setAttribute("draggable", "true");
+    item.addEventListener("dragstart", e => {
+      dragSrc = item;
+      e.dataTransfer.effectAllowed = "move";
+      setTimeout(() => { item.style.opacity = "0.4"; }, 0);
+    });
+    item.addEventListener("dragend", () => {
+      dragSrc = null;
+      item.style.opacity = "";
+      _clearAllIndicators();
+    });
+  }
+
+  // Configura itens já presentes
+  lista.querySelectorAll("[data-ai-per], [data-drag-container]").forEach(c => {
+    [...c.querySelectorAll(_sel())].forEach(_setupItem);
+  });
+
+  // Expõe para _injetarCardPP adicionar handle em itens injetados dinamicamente
+  lista._setupDragItem = _setupItem;
+
+  lista.querySelectorAll("[data-ai-per], [data-drag-container]").forEach(perContainer => {
     perContainer.addEventListener("dragover", e => {
       e.preventDefault();
-      if (!dragSrc || !perContainer.contains(dragSrc)) return;
+      if (!dragSrc) return;
+      const srcDia = dragSrc.closest("[data-ai-dia-idx]");
+      const tgtDia = perContainer.closest("[data-ai-dia-idx]");
+      // Permite mover entre períodos do mesmo dia; fora do contexto AI mantém restrição ao mesmo container
+      const ok = (srcDia && tgtDia && srcDia === tgtDia) || (!srcDia && perContainer.contains(dragSrc));
+      if (!ok) return;
       e.dataTransfer.dropEffect = "move";
-      _clearIndicators();
-      const target = _getDropTarget(e.clientY);
+      _clearAllIndicators();
+      const target = _getDropTarget(perContainer, e.clientY);
       if (target?.el && target.el !== dragSrc) {
         target.el.setAttribute("data-drag-over", "");
         target.el.style[target.before ? "borderTop" : "borderBottom"] = "2px solid #f97316";
       }
     });
     perContainer.addEventListener("dragleave", e => {
-      if (!perContainer.contains(e.relatedTarget)) _clearIndicators();
+      if (!perContainer.contains(e.relatedTarget)) {
+        perContainer.querySelectorAll("[data-drag-over]").forEach(el => {
+          el.removeAttribute("data-drag-over");
+          el.style.borderTop = "";
+          el.style.borderBottom = "";
+        });
+      }
     });
     perContainer.addEventListener("drop", e => {
       e.preventDefault();
-      if (!dragSrc || !perContainer.contains(dragSrc)) return;
-      _clearIndicators();
-      const target = _getDropTarget(e.clientY);
-      if (!target?.el || target.el === dragSrc) return;
-      perContainer.insertBefore(dragSrc, target.before ? target.el : target.el.nextSibling);
+      if (!dragSrc) return;
+      const srcDia = dragSrc.closest("[data-ai-dia-idx]");
+      const tgtDia = perContainer.closest("[data-ai-dia-idx]");
+      const ok = (srcDia && tgtDia && srcDia === tgtDia) || (!srcDia && perContainer.contains(dragSrc));
+      if (!ok) return;
+      _clearAllIndicators();
+      const target = _getDropTarget(perContainer, e.clientY);
+      if (target?.el) {
+        perContainer.insertBefore(dragSrc, target.before ? target.el : target.el.nextSibling);
+      } else {
+        perContainer.appendChild(dragSrc);
+      }
       dragSrc.style.opacity = "";
       dragSrc = null;
-      _renumerar();
-      // Salva nova ordem na API silenciosamente (sem reload) e atualiza o mapa
+      _renumerarTudo();
       _salvarOrdemSilencioso();
       const _listaAtual = document.getElementById("listaLocaisEdit");
       if (_listaAtual) _renderMiniMapaPasso3(_listaAtual);
