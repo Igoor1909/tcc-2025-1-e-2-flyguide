@@ -396,6 +396,33 @@
         ? `<i class="bi bi-globe" title="${PUBLICO}"></i>`
         : `<i class="bi bi-lock-fill" title="${PRIVADO}"></i>`;
 
+      const orcHtml = orc !== EMPTY_TEXT
+        ? `<div class="d-flex align-items-center gap-1 money"><i class="bi bi-currency-dollar"></i><span>${orc}</span></div>`
+        : "";
+
+      const bottomHtml = r.statusRoteiro === "CONCLUIDO"
+        ? `<div style="display:flex;gap:8px;">
+             <button class="btn fw-bold" style="flex:1;background:#8b5cf6;color:#fff;border-radius:10px;padding:9px 0;font-size:.88rem;"
+                     data-iniciar-roteiro="${r.idRoteiro}" data-status="CONCLUIDO">
+               <i class="bi bi-arrow-counterclockwise me-1"></i>Reiniciar
+             </button>
+             ${r._jaAvaliou
+               ? `<span style="display:flex;align-items:center;gap:3px;font-size:.78rem;font-weight:700;color:#22c55e;padding:0 10px;">
+                    <i class="bi bi-patch-check-fill"></i>Avaliado
+                  </span>`
+               : `<button class="btn fw-bold" style="flex:1;background:#fef9c3;color:#854d0e;border-radius:10px;padding:9px 0;font-size:.88rem;"
+                          data-avaliar-roteiro="${r.idRoteiro}">
+                    <i class="bi bi-star-fill me-1"></i>Avaliar
+                  </button>`
+             }
+           </div>`
+        : `<button class="btn fw-bold w-100"
+                   style="background:${r.statusRoteiro === "EM_ANDAMENTO" ? "#22c55e" : "#f97316"};color:#fff;border-radius:10px;padding:10px 0;font-size:.9rem;"
+                   data-iniciar-roteiro="${r.idRoteiro}"
+                   data-status="${r.statusRoteiro || "PLANEJADO"}">
+             <i class="bi bi-play-circle-fill me-1"></i>${r.statusRoteiro === "EM_ANDAMENTO" ? "Iniciar / Continuar" : "Iniciar"}
+           </button>`;
+
       return `
         <div class="col-12 col-md-6 col-xl-4"
              data-roteiro-id="${r.idRoteiro}"
@@ -403,6 +430,12 @@
           <div class="trip-card h-100" onclick="if(!event.target.closest('button,a')){window.location.href='detalhes-roteiro.html?id=${r.idRoteiro}'}">
             <div class="trip-cover" style="background-image:url('${imgUrl}');">
               <span class="badge-pill ${badge}">${r.tipoRoteiro || "Viagem"}</span>
+              <button class="trip-card-delete"
+                      data-excluir-roteiro="${r.idRoteiro}"
+                      data-nome="${escapeHtml(r.titulo || "este roteiro")}"
+                      title="Excluir">
+                <i class="bi bi-trash3"></i>
+              </button>
               <div class="trip-title">
                 <h5>${escapeHtml(r.titulo || "Sem t\u00edtulo")}</h5>
                 <div class="loc"><i class="bi bi-geo-alt-fill"></i>${escapeHtml(r.cidade || EMPTY_TEXT)}</div>
@@ -411,13 +444,21 @@
             <div class="trip-body">
               <div class="small text-secondary">${escapeHtml(r.observacoes || "Sem descri\u00e7\u00e3o")}</div>
               <div class="meta-row mt-3">
-                <div class="d-flex align-items-center gap-2">
-                  <i class="bi bi-calendar-event"></i><span>${dias}</span>
+                <div class="d-flex align-items-center gap-3 flex-grow-1 flex-wrap">
+                  <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-calendar-event"></i><span>${dias}</span>
+                  </div>
+                  ${orcHtml}
+                  <div class="d-flex align-items-center gap-2" style="color:#64748b;">${visIcon}</div>
                 </div>
-                <div class="d-flex align-items-center gap-2" style="color:#64748b;">${visIcon}</div>
+                <button class="btn btn-sm fw-bold"
+                        style="color:#3b82f6;font-size:.82rem;padding:3px 10px;border:1px solid #bfdbfe;border-radius:8px;background:none;white-space:nowrap;"
+                        data-editar-roteiro="${r.idRoteiro}"
+                        title="Editar">
+                  <i class="bi bi-pencil me-1"></i>Editar
+                </button>
               </div>
-            </div>
-            <div class="trip-footer">
+              <hr style="margin:10px 0;border-color:#f1f5f9;opacity:1;">
               <div class="footer-info">
                 ${r.dataInicio ? `<span style="display:flex;align-items:center;gap:4px;"><i class="bi bi-calendar-event" style="color:#f97316;font-size:.85rem;"></i>${formatarPeriodo(r.dataInicio, r.dataFim)}</span>` : ""}
                 ${r.nomeUsuario ? `<span style="display:flex;align-items:center;gap:4px;font-size:.78rem;color:#64748b;"><i class="bi bi-person-fill" style="color:#94a3b8;"></i>${escapeHtml(r.nomeUsuario)}</span>` : ""}
@@ -429,40 +470,9 @@
                   <i class="bi bi-chat-fill" style="color:#f97316;"></i>${r.totalAvaliacoes || 0}
                 </span>
               </div>
-              <div class="footer-actions">
-                <button class="btn btn-link p-0 fw-bold" style="color:#3b82f6;font-size:.85rem;"
-                        data-editar-roteiro="${r.idRoteiro}" title="Editar">
-                  <i class="bi bi-pencil"></i>
-                </button>
-                <button class="btn btn-link p-0 fw-bold" style="color:#ef4444;font-size:.85rem;"
-                        data-excluir-roteiro="${r.idRoteiro}"
-                        data-nome="${escapeHtml(r.titulo || "este roteiro")}" title="Excluir">
-                  <i class="bi bi-trash"></i>
-                </button>
-                ${r.statusRoteiro === "CONCLUIDO"
-                  ? `<button class="btn btn-link p-0 fw-bold"
-                             style="color:#8b5cf6;font-size:.85rem;display:flex;align-items:center;gap:4px;"
-                             data-iniciar-roteiro="${r.idRoteiro}"
-                             data-status="CONCLUIDO">
-                       <i class="bi bi-arrow-counterclockwise"></i>Reiniciar
-                     </button>
-                     ${r._jaAvaliou
-                       ? `<span style="display:flex;align-items:center;gap:3px;font-size:.78rem;font-weight:700;color:#22c55e;">
-                            <i class="bi bi-patch-check-fill"></i>Avaliado
-                          </span>`
-                       : `<button class="btn btn-link p-0 fw-bold"
-                                  style="color:#facc15;font-size:.85rem;display:flex;align-items:center;gap:4px;"
-                                  data-avaliar-roteiro="${r.idRoteiro}">
-                            <i class="bi bi-star-fill"></i>Avaliar
-                          </button>`}`
-                  : `<button class="btn btn-link p-0 fw-bold"
-                             style="color:${r.statusRoteiro === "EM_ANDAMENTO" ? "#22c55e" : "#f97316"};font-size:.85rem;display:flex;align-items:center;gap:4px;"
-                             data-iniciar-roteiro="${r.idRoteiro}"
-                             data-status="${r.statusRoteiro || "PLANEJADO"}">
-                       <i class="bi bi-play-circle-fill"></i>${r.statusRoteiro === "EM_ANDAMENTO" ? "Continuar" : "Iniciar"}
-                     </button>`
-                }
-              </div>
+            </div>
+            <div class="trip-bottom">
+              ${bottomHtml}
             </div>
           </div>
         </div>`;
