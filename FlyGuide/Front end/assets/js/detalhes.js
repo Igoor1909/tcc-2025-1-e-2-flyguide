@@ -840,33 +840,6 @@
         exportarPDF(r, locais);
       });
 
-      // Botões editar/excluir — só para o dono
-      if (userId && String(r.idUsuario) === String(userId)) {
-        document.getElementById("btnEditarDetalhes").style.display = "";
-        document.getElementById("btnExcluirDetalhes").style.display = "";
-
-        document.getElementById("btnEditarDetalhes")?.addEventListener("click", () => {
-          abrirModalEdicaoDetalhes(r, locais);
-        });
-
-        document.getElementById("btnExcluirDetalhes")?.addEventListener("click", async () => {
-          if (!await _confirmarExclusaoRoteiroDetalhe()) return;
-          const btnEl = document.getElementById("btnExcluirDetalhes");
-          if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`; }
-          try {
-            const res = await authFetch(`${URL_API_BASE}/roteiros/${roteiroId}?idUsuario=${userId}`, { method: "DELETE" });
-            if (res.ok || res.status === 204) {
-              window.location.href = "meus-roteiros.html";
-            } else {
-              alert("Não foi possível excluir. Tente novamente.");
-            }
-          } catch {
-            alert("Erro ao conectar ao servidor.");
-          } finally {
-            if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = `<i class="bi bi-trash"></i>`; }
-          }
-        });
-      }
     })
     .catch(() => { loading.style.display = "none"; erro.style.display = ""; });
 
