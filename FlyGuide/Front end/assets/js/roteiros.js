@@ -422,7 +422,7 @@
               <span class="badge-pill ${badge}">${r.tipoRoteiro || "Viagem"}</span>
               <div class="trip-cover-actions">
                 <a class="trip-card-edit"
-                   href="atividades-roteiro.html?id=${r.idRoteiro}&dias=${r.diasTotais || 1}"
+                   href="editar-roteiro.html?id=${r.idRoteiro}"
                    title="Editar roteiro">
                   <i class="bi bi-pencil"></i>
                 </a>
