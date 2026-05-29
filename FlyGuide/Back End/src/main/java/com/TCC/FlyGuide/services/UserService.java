@@ -36,6 +36,8 @@ import jakarta.persistence.EntityNotFoundException;
 @Service
 public class UserService {
 
+    private static final String USUARIO_CONTA_REMOVIDA_EMAIL = "conta-removida@flyguide.local";
+
     @Autowired
     private UserRepository userRepository;
 
@@ -173,21 +175,39 @@ public class UserService {
         return userRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException(id));
     }
 
+    private User usuarioContaRemovida() {
+        return userRepository.findByEmail(USUARIO_CONTA_REMOVIDA_EMAIL).orElseGet(() -> {
+            User user = new User();
+            user.setEmail(USUARIO_CONTA_REMOVIDA_EMAIL);
+            user.setTipoPessoa("SYSTEM");
+            user.setTipoConta("FREE");
+            user.setDataCadastro(LocalDate.now());
+            return userRepository.save(user);
+        });
+    }
+
     @Transactional
     public void delete(Long id) {
         try {
             // 1. Remove likes que o usuário deu em comentários alheios
             comentarioLikeRepository.deleteByUsuario_IdUsuario(id);
 
-            // 2. Remove todos os roteiros do usuario e seus dependentes.
-            // A coluna id_usuario nao aceita NULL no banco.
+            // 2. Roteiros publicos continuam publicados, mas sem dados pessoais do usuario excluido.
+            // Privados sao removidos junto com seus dependentes.
             List<Roteiro> roteiros = roteiroRepository.findByUsuario_IdUsuario(id);
+            User contaRemovida = null;
             for (Roteiro roteiro : roteiros) {
                 Long idRoteiro = roteiro.getIdRoteiro();
-                comentarioLikeRepository.deleteByAvaliacao_Roteiro_IdRoteiro(idRoteiro);
-                avaliacaoRepository.deleteByRoteiro_IdRoteiro(idRoteiro);
-                roteiroLocalRepository.deleteByRoteiro_IdRoteiro(idRoteiro);
-                roteiroRepository.deleteById(idRoteiro);
+                if ("Público".equals(roteiro.getVisibilidadeRoteiro())) {
+                    if (contaRemovida == null) contaRemovida = usuarioContaRemovida();
+                    roteiro.setUsuario(contaRemovida);
+                    roteiroRepository.save(roteiro);
+                } else {
+                    comentarioLikeRepository.deleteByAvaliacao_Roteiro_IdRoteiro(idRoteiro);
+                    avaliacaoRepository.deleteByRoteiro_IdRoteiro(idRoteiro);
+                    roteiroLocalRepository.deleteByRoteiro_IdRoteiro(idRoteiro);
+                    roteiroRepository.deleteById(idRoteiro);
+                }
             }
 
             // 3. Remove comentários do usuário em roteiros de terceiros (e likes nesses comentários)

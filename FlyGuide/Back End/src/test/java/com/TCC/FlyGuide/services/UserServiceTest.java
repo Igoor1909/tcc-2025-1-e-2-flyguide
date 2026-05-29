@@ -377,21 +377,24 @@ class UserServiceTest {
     }
 
     @Test
-    void delete_usuarioComRoteiroPublico_removeRoteiroSemDesvincularUsuario() {
+    void delete_usuarioComRoteiroPublico_transfereParaContaRemovida() {
         Roteiro roteiro = new Roteiro();
         roteiro.setIdRoteiro(10L);
         roteiro.setVisibilidadeRoteiro("Público");
         roteiro.setUsuario(userSalvo(1L, "user@email.com"));
+        User contaRemovida = userSalvo(99L, "conta-removida@flyguide.local");
 
         when(roteiroRepository.findByUsuario_IdUsuario(1L)).thenReturn(List.of(roteiro));
+        when(userRepository.findByEmail("conta-removida@flyguide.local")).thenReturn(Optional.of(contaRemovida));
 
         userService.delete(1L);
 
-        verify(comentarioLikeRepository).deleteByAvaliacao_Roteiro_IdRoteiro(10L);
-        verify(avaliacaoRepository).deleteByRoteiro_IdRoteiro(10L);
-        verify(roteiroLocalRepository).deleteByRoteiro_IdRoteiro(10L);
-        verify(roteiroRepository).deleteById(10L);
-        assertThat(roteiro.getUsuario()).isNotNull();
+        verify(comentarioLikeRepository, never()).deleteByAvaliacao_Roteiro_IdRoteiro(10L);
+        verify(avaliacaoRepository, never()).deleteByRoteiro_IdRoteiro(10L);
+        verify(roteiroLocalRepository, never()).deleteByRoteiro_IdRoteiro(10L);
+        verify(roteiroRepository, never()).deleteById(10L);
+        verify(roteiroRepository).save(roteiro);
+        assertThat(roteiro.getUsuario()).isEqualTo(contaRemovida);
     }
 
     // ─── expirarTrialsVencidos ─────────────────────────────────────────────
