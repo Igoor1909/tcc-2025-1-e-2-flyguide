@@ -60,6 +60,13 @@
       || String(a.nome || "").localeCompare(String(b.nome || ""), "pt-BR");
   }
 
+  function mapsUrlDetalhes(placeId, query) {
+    const place = String(placeId || "").trim();
+    const q = String(query || place || "").trim();
+    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
+    return place ? `${url}&query_place_id=${encodeURIComponent(place)}` : url;
+  }
+
   function calcularAberturaAgora(periods) {
     if (!periods || !periods.length) return null;
     if (periods.length === 1 && periods[0].open?.time === "0000" && !periods[0].close) return true;
@@ -330,9 +337,7 @@
 
       const mapsLink = el.querySelector(".ai-maps-link");
       if (mapsLink) {
-        mapsLink.href = place.place_id
-          ? `https://www.google.com/maps/place/?q=place_id:${place.place_id}`
-          : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+        mapsLink.href = mapsUrlDetalhes(place.place_id, place.formatted_address || place.name || query);
       }
       if (place.geometry?.location) {
         const nomeFinal = replace && place.name
@@ -1689,7 +1694,6 @@ function abrirModalEdicaoDetalhes(roteiro, locaisIniciais) {
   carregarAvaliacoes();
   if (userId) carregarAvaliacaoUsuario();
 })();
-
 
 
 

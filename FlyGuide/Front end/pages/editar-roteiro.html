@@ -15,16 +15,100 @@
   <link href="../assets/css/components.css" rel="stylesheet">
   <link href="../assets/css/pages/atividades-roteiro.css" rel="stylesheet">
   <style>
+    .edit-route-wrap { max-width: 760px; margin: 0 auto; }
+    .edit-route-card {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 26px 12px 30px 14px;
+      box-shadow: 0 20px 50px rgba(15, 23, 42, .08);
+      padding: 20px;
+      position: relative;
+      overflow: hidden;
+    }
+    .edit-route-card::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 auto 0;
+      height: 5px;
+      background: linear-gradient(90deg, #f97316, #fb923c 54%, #38bdf8);
+    }
+    .edit-section {
+      border: 1px solid #e2e8f0;
+      background: linear-gradient(180deg, #ffffff, #f8fafc);
+      border-radius: 22px 10px 24px 12px;
+      padding: 16px;
+      margin-bottom: 18px;
+    }
+    .edit-section-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 900;
+      color: #0f172a;
+      margin-bottom: 14px;
+    }
+    .edit-section-title i { color: #f97316; }
+    .edit-route-card .form-control,
+    .edit-route-card .form-select {
+      border-radius: 14px 8px 14px 8px;
+      border-color: #cbd5e1;
+      min-height: 44px;
+    }
+    .edit-route-card textarea.form-control {
+      min-height: 112px;
+      resize: vertical;
+    }
+    .edit-img-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+      gap: 10px;
+      margin-top: 8px;
+    }
+    .edit-locais-box {
+      background: #f8fafc;
+      border: 1px solid #e5e7eb;
+      border-radius: 20px 10px 24px 12px;
+      padding: 14px;
+      min-height: 120px;
+      margin-bottom: 24px;
+    }
+    .edit-actions {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      position: sticky;
+      bottom: 12px;
+      z-index: 5;
+      background: rgba(255, 255, 255, .86);
+      border: 1px solid rgba(226, 232, 240, .9);
+      border-radius: 18px 10px 22px 12px;
+      padding: 10px;
+      backdrop-filter: blur(10px);
+    }
     .destino-resumo {
       background: #f8fafc; border: 1px solid #e2e8f0;
-      border-radius: 12px; padding: 14px 16px;
+      border-radius: 18px 8px 20px 10px; padding: 14px 16px;
       display: flex; align-items: center; gap: 14px;
     }
+    .helper { color: var(--fg-muted); font-size: .85rem; }
+    html[data-theme="dark"] .edit-route-card { background: #0f172a; border-color: #334155; box-shadow: none; }
+    html[data-theme="dark"] .edit-section { background: linear-gradient(180deg, #1e293b, #162033); border-color: #334155; }
+    html[data-theme="dark"] .edit-section-title { color: #f1f5f9; }
+    html[data-theme="dark"] .edit-actions { background: rgba(15, 23, 42, .88); border-color: #334155; }
+    html[data-theme="dark"] .edit-locais-box,
     html[data-theme="dark"] .destino-resumo { background: #1e293b; border-color: #334155; }
     .pac-container { z-index: 9999 !important; border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.15); }
     html[data-theme="dark"] .day-item { background: #1e293b !important; border-color: #334155 !important; }
     #miniMapaPasso3 { height: 360px; border-radius: 12px; overflow: hidden; }
     #miniMapaEdit   { height: 360px; border-radius: 12px; overflow: hidden; }
+    @media (max-width: 576px) {
+      .edit-route-card { padding: 14px; border-radius: 20px 10px 22px 10px; }
+      .edit-section { padding: 13px; }
+      .edit-actions { position: static; flex-direction: column; }
+      .edit-actions .btn { width: 100%; justify-content: center; }
+      #formAdicionarLocalEdit .row > .col-4:nth-child(-n+2) { flex: 0 0 50%; max-width: 50%; }
+      #formAdicionarLocalEdit .row > .col-4:last-child { flex: 0 0 100%; max-width: 100%; }
+    }
   </style>
 </head>
 
@@ -107,7 +191,54 @@
             <p class="text-muted mt-1">Edite os locais do seu roteiro antes de salvar</p>
           </div>
 
-          <div class="form-card mx-auto" style="max-width:700px;">
+          <div class="edit-route-wrap">
+          <div class="edit-route-card">
+
+            <div class="edit-section">
+              <div class="edit-section-title">
+                <i class="bi bi-pencil-square"></i>
+                <span>Informações do roteiro</span>
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label fw-bold" for="erTitulo">Nomeie sua Viagem</label>
+                <input class="form-control" id="erTitulo" maxlength="100" placeholder="Ex: Fim de semana em Buenos Aires">
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label fw-bold" for="erDescricao">Descritivo da Viagem</label>
+                <textarea class="form-control" id="erDescricao" rows="4" placeholder="Conte o clima, objetivo e principais experiências deste roteiro"></textarea>
+              </div>
+
+              <div class="mb-4">
+                <label class="form-label fw-bold">Imagem de Capa</label>
+                <div class="helper mb-2">Escolha a imagem que melhor representa esse roteiro.</div>
+                <div id="erImgSelector" class="edit-img-grid">
+                  <div class="text-secondary text-center py-2" style="font-size:.85rem;">
+                    <span class="spinner-border spinner-border-sm me-1"></span>Carregando...
+                  </div>
+                </div>
+                <input type="hidden" id="erImagem" value="">
+              </div>
+
+              <div>
+                <div class="visibility-strip" id="erVisStrip">
+                  <div class="visibility-icon-wrap" id="erVisIconWrap">
+                    <i class="bi bi-lock-fill" id="erVisIcon"></i>
+                  </div>
+                  <div class="visibility-text">
+                    <div class="visibility-label" id="erVisLabel">Roteiro Privado</div>
+                    <div class="visibility-desc" id="erVisDesc">Somente você pode ver este roteiro</div>
+                  </div>
+                  <div class="visibility-toggle-wrap">
+                    <div class="form-check form-switch m-0">
+                      <input class="form-check-input" id="erVisPublico" type="checkbox" role="switch">
+                    </div>
+                    <span class="visibility-badge" id="erVisBadge">Privado</span>
+                  </div>
+                </div>
+              </div>
+            </div>
 
             <!-- Destino (leitura) -->
             <div class="destino-resumo mb-4">
@@ -188,7 +319,7 @@
             </div>
 
             <!-- Lista de locais -->
-            <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:14px;padding:14px;min-height:120px;margin-bottom:24px;">
+            <div class="edit-locais-box">
               <div class="fw-bold mb-2" style="font-size:.9rem;color:#64748b;">
                 <i class="bi bi-list-ul me-1"></i>Locais adicionados
               </div>
@@ -201,7 +332,7 @@
             </div>
 
             <!-- Botões finais -->
-            <div class="d-flex gap-3">
+            <div class="edit-actions">
               <a href="meus-roteiros.html" class="btn btn-outline-gray fw-bold" style="min-width:110px;">
                 <i class="bi bi-arrow-left me-1"></i>Voltar
               </a>
@@ -210,6 +341,7 @@
               </button>
             </div>
 
+          </div>
           </div>
         </div>
       </div><!-- /erConteudo -->

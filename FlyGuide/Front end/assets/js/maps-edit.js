@@ -69,6 +69,13 @@ function _fmtKm(v) {
   });
 }
 
+function _mapsUrlEdit(placeId, query) {
+  const place = String(placeId || "").trim();
+  const q = String(query || place || "").trim();
+  const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
+  return place ? `${url}&query_place_id=${encodeURIComponent(place)}` : url;
+}
+
 function _obterBaseAtiva() {
   return _basesEdit.find(b => String(b.id) === String(_baseAtivaIdEdit)) || _basesEdit[0] || null;
 }
@@ -689,7 +696,7 @@ function _initAIItemAutocomplete(input) {
     if (pidEl) pidEl.value = place.place_id || "";
     const mapsLink = item.querySelector("[data-ai-maps-link]");
     if (mapsLink) {
-      mapsLink.href = `https://www.google.com/maps/place/?q=place_id:${place.place_id}`;
+      mapsLink.href = _mapsUrlEdit(place.place_id, place.formatted_address || place.name);
       mapsLink.style.display = "flex";
     }
   });
@@ -753,7 +760,7 @@ function _renderAIItemCardMR(item, idx, uid, isDark) {
           <input type="hidden" data-ai-lat value="${escapeHtml(String(item.latitude ?? ""))}">
           <input type="hidden" data-ai-lng value="${escapeHtml(String(item.longitude ?? ""))}">
           <div data-ai-endereco style="font-size:.72rem;color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:${endereco ? "" : "none"};">${escapeHtml(endereco)}</div>
-          <a data-ai-maps-link href="${placeId ? `https://www.google.com/maps/place/?q=place_id:${placeId}` : "#"}" target="_blank" style="font-size:.7rem;color:#3b82f6;text-decoration:none;display:${placeId ? "flex" : "none"};align-items:center;gap:3px;margin-top:2px;"><i class="bi bi-map-fill"></i>Ver no Maps</a>
+          <a data-ai-maps-link href="${placeId ? _mapsUrlEdit(placeId, endereco || nome) : "#"}" target="_blank" style="font-size:.7rem;color:#3b82f6;text-decoration:none;display:${placeId ? "flex" : "none"};align-items:center;gap:3px;margin-top:2px;"><i class="bi bi-map-fill"></i>Ver no Maps</a>
         </div>
         <div class="col-12">
           <label style="font-size:.72rem;font-weight:700;color:#94a3b8;">Observações</label>
@@ -868,7 +875,7 @@ function _renderLocalCardMR(l, idx, isDark) {
         <label style="font-size:.72rem;font-weight:700;color:${corLabel};">Local</label>
         <div style="font-size:.88rem;font-weight:700;padding:3px 0 1px;">${escapeHtml(l.nome || "")}</div>
         ${l.endereco ? `<div style="font-size:.72rem;color:#94a3b8;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(l.endereco)}</div>` : ""}
-        ${l.placeId ? `<a href="https://www.google.com/maps/place/?q=place_id:${l.placeId}" target="_blank" style="font-size:.7rem;color:#3b82f6;text-decoration:none;display:inline-flex;align-items:center;gap:3px;margin-top:2px;"><i class="bi bi-map-fill"></i>Ver no Maps</a>` : ""}
+        ${l.placeId ? `<a href="${_mapsUrlEdit(l.placeId, l.endereco || l.nome)}" target="_blank" style="font-size:.7rem;color:#3b82f6;text-decoration:none;display:inline-flex;align-items:center;gap:3px;margin-top:2px;"><i class="bi bi-map-fill"></i>Ver no Maps</a>` : ""}
       </div>
       <div class="row g-2">
         <div class="col-12">
@@ -1165,7 +1172,7 @@ async function _autoLookupAIAddresses(lista, cidade) {
           if (details.place_id && pidEl) {
             pidEl.value = details.place_id;
             const mapsLink = item.querySelector("[data-ai-maps-link]");
-            if (mapsLink) { mapsLink.href = `https://www.google.com/maps/place/?q=place_id:${details.place_id}`; mapsLink.style.display = "flex"; }
+            if (mapsLink) { mapsLink.href = _mapsUrlEdit(details.place_id, addr || details.name); mapsLink.style.display = "flex"; }
           }
           if (details.geometry?.location) {
             const latEl = item.querySelector("[data-ai-lat]");
@@ -1260,7 +1267,7 @@ async function _autoLookupAIAddresses(lista, cidade) {
       if (place.place_id && pidEl) {
         pidEl.value = place.place_id;
         const mapsLink = item.querySelector("[data-ai-maps-link]");
-        if (mapsLink) { mapsLink.href = `https://www.google.com/maps/place/?q=place_id:${place.place_id}`; mapsLink.style.display = "flex"; }
+        if (mapsLink) { mapsLink.href = _mapsUrlEdit(place.place_id, addr || place.name); mapsLink.style.display = "flex"; }
       }
 
       if (place.geometry?.location) {

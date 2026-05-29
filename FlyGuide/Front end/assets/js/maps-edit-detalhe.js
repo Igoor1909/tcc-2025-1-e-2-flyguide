@@ -43,6 +43,13 @@ function _compararLocaisDetalhe(a, b) {
     || String(a.nome || "").localeCompare(String(b.nome || ""), "pt-BR");
 }
 
+function _mapsUrlDetalheEdit(placeId, query) {
+  var place = String(placeId || "").trim();
+  var q = String(query || place || "").trim();
+  var url = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(q);
+  return place ? url + "&query_place_id=" + encodeURIComponent(place) : url;
+}
+
 function _agruparLocaisDetalhe(locais) {
   var grupos = new Map();
 
@@ -285,7 +292,7 @@ function _initAIItemAutocompleteDet(input) {
     if (pidEl) pidEl.value = place.place_id || "";
     var mapsLink = item.querySelector("[data-ai-maps-link]");
     if (mapsLink) {
-      mapsLink.href = "https://www.google.com/maps/place/?q=place_id:" + place.place_id;
+      mapsLink.href = _mapsUrlDetalheEdit(place.place_id, place.formatted_address || place.name);
       mapsLink.style.display = "flex";
     }
   });
@@ -328,7 +335,7 @@ function _renderAIItemCardDet(item, idx, uid, dragAttrs, isDark) {
     + '<input type="hidden" data-ai-nome value="' + escapeHtml(nome) + '">'
     + '<input type="hidden" data-ai-place-id value="' + escapeHtml(placeId) + '">'
     + '<div data-ai-endereco style="font-size:.72rem;color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;display:' + (endereco ? '' : 'none') + ';">' + escapeHtml(endereco) + '</div>'
-    + '<a data-ai-maps-link href="' + (placeId ? 'https://www.google.com/maps/place/?q=place_id:' + placeId : '#') + '" target="_blank" style="font-size:.7rem;color:#3b82f6;text-decoration:none;display:' + (placeId ? 'flex' : 'none') + ';align-items:center;gap:3px;margin-top:2px;"><i class="bi bi-map-fill"></i>Ver no Maps</a>'
+    + '<a data-ai-maps-link href="' + (placeId ? _mapsUrlDetalheEdit(placeId, endereco || nome) : '#') + '" target="_blank" style="font-size:.7rem;color:#3b82f6;text-decoration:none;display:' + (placeId ? 'flex' : 'none') + ';align-items:center;gap:3px;margin-top:2px;"><i class="bi bi-map-fill"></i>Ver no Maps</a>'
     + '</div>'
     + '<div class="col-12">'
     + '<label style="font-size:.72rem;font-weight:700;color:' + cLabel + ';">Custo ($)</label>'
@@ -381,7 +388,7 @@ function _renderLocalCardDet(l, idx, dragAttrs, isDark) {
     + '<label style="font-size:.72rem;font-weight:700;color:' + cLabel + ';">Local</label>'
     + '<div style="font-size:.88rem;font-weight:700;color:' + cText + ';padding:3px 0 1px;">' + escapeHtml(l.nome || '') + '</div>'
     + (l.endereco ? '<div style="font-size:.72rem;color:#94a3b8;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(l.endereco) + '</div>' : '')
-    + (l.placeId ? '<a href="https://www.google.com/maps/place/?q=place_id:' + l.placeId + '" target="_blank" style="font-size:.7rem;color:#3b82f6;text-decoration:none;display:inline-flex;align-items:center;gap:3px;margin-top:2px;"><i class="bi bi-map-fill"></i>Ver no Maps</a>' : '')
+    + (l.placeId ? '<a href="' + _mapsUrlDetalheEdit(l.placeId, l.endereco || l.nome) + '" target="_blank" style="font-size:.7rem;color:#3b82f6;text-decoration:none;display:inline-flex;align-items:center;gap:3px;margin-top:2px;"><i class="bi bi-map-fill"></i>Ver no Maps</a>' : '')
     + '</div>'
     + '<div class="row g-2">'
     + '<div class="col-12"><label style="font-size:.75rem;font-weight:700;color:' + cText + ';">Custo ($)</label>'
@@ -426,7 +433,7 @@ async function _autoLookupAIAddressesDet(lista, cidade) {
         if (place.place_id && pidEl) {
           pidEl.value = place.place_id;
           var mapsLink = item.querySelector("[data-ai-maps-link]");
-          if (mapsLink) { mapsLink.href = "https://www.google.com/maps/place/?q=place_id:" + place.place_id; mapsLink.style.display = "flex"; }
+          if (mapsLink) { mapsLink.href = _mapsUrlDetalheEdit(place.place_id, place.formatted_address || place.name); mapsLink.style.display = "flex"; }
         }
       } catch (e) { /* place not found, skip */ }
     }
@@ -1343,7 +1350,6 @@ document.addEventListener("click", async function(e) {
     btn.innerHTML = '<i class="bi bi-plus-lg me-1"></i>Adicionar Local ao Roteiro';
   }
 });
-
 
 
 

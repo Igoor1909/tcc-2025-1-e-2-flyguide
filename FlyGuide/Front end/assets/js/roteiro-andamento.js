@@ -258,6 +258,13 @@
     var _mapsCache    = {};
     var _enrichSched  = false;
 
+    function _mapsUrlAndamento(placeId, query) {
+      var place = String(placeId || "").trim();
+      var q = String(query || place || "").trim();
+      var url = "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(q);
+      return place ? url + "&query_place_id=" + encodeURIComponent(place) : url;
+    }
+
     function _horarioToPeriodoAnd(horario) {
       if (!horario) return null;
       var hStr = String(horario).slice(0, 5);
@@ -308,7 +315,7 @@
         }
         if (d.placeId) {
           var mLink = el.querySelector(".and-maps-link");
-          if (mLink) mLink.href = "https://www.google.com/maps/place/?q=place_id:" + d.placeId;
+          if (mLink) mLink.href = _mapsUrlAndamento(d.placeId, d.address || d.name || d.query);
         }
       });
     }
@@ -353,9 +360,11 @@
             }
             _mapsCache[cacheKey] = {
               rating:  place.rating || null,
+              name:    place.name || null,
               address: place.formatted_address || null,
               openNow: openNow,
               placeId: place.place_id || null,
+              query:   query || null,
               types:   place.types || [],
             };
           } else {
@@ -1445,7 +1454,6 @@
     }
   }
 })();
-
 
 
 
