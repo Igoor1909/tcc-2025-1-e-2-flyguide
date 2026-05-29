@@ -1386,94 +1386,134 @@ function _renderMiniMapaPasso3(lista) {
   const box   = document.getElementById("miniMapaPasso3Box");
   if (!mapEl || !box || !window.google) return;
 
-  const base = _obterBaseAtiva();
-  const pontos = [];
+  const base   = _obterBaseAtiva();
+  const PALETA = ["#f97316","#3b82f6","#22c55e","#8b5cf6","#ec4899","#14b8a6","#f59e0b","#ef4444"];
+
+  // Coleta pontos agrupados por dia
+  const pontosPorDia = {};
   lista.querySelectorAll("[data-ai-item]").forEach(item => {
+    if (item.hasAttribute("data-ai-special")) return;
     const nome = item.querySelector("[data-ai-title]")?.textContent?.trim()
               || item.querySelector("[data-ai-nome]")?.value?.trim() || "";
     const lat  = parseFloat(item.querySelector("[data-ai-lat]")?.value || "");
     const lng  = parseFloat(item.querySelector("[data-ai-lng]")?.value || "");
-    if (nome && !isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
-      if (base?.latitude != null && base?.longitude != null) {
-        const dist = _calcularKm(parseFloat(base.latitude), parseFloat(base.longitude), lat, lng);
-        if (dist > _raioFiltroKmEdit) return;
-      }
-      pontos.push({ nome, lat, lng });
+    const dia  = parseInt(item.closest("[data-dia]")?.getAttribute("data-dia") || "1");
+    if (!nome || isNaN(lat) || isNaN(lng) || lat === 0 || lng === 0) return;
+    if (base?.latitude != null && base?.longitude != null) {
+      if (_calcularKm(parseFloat(base.latitude), parseFloat(base.longitude), lat, lng) > _raioFiltroKmEdit) return;
     }
+    if (!pontosPorDia[dia]) pontosPorDia[dia] = [];
+    pontosPorDia[dia].push({ nome, lat, lng, dia });
   });
 
-  if (!pontos.length) {
-    box.style.display = "none";
-    return;
-  }
+  const diasUnicos    = Object.keys(pontosPorDia).map(Number).sort((a, b) => a - b);
+  const todosOsPontos = diasUnicos.flatMap(d => pontosPorDia[d]);
+  if (!todosOsPontos.length) { box.style.display = "none"; return; }
   box.style.display = "";
 
-  const mapa = new google.maps.Map(mapEl, {
-    zoom: 12,
-    center: { lat: pontos[0].lat, lng: pontos[0].lng },
-    mapTypeControl: false,
-    streetViewControl: false,
-    fullscreenControl: false,
-    zoomControl: true,
-  });
+  const corPorDia = {};
+  diasUnicos.forEach((d, i) => { corPorDia[d] = PALETA[i % PALETA.length]; });
 
-  const infoWindow = new google.maps.InfoWindow();
-  const bounds     = new google.maps.LatLngBounds();
-
-  pontos.forEach((p, i) => {
-    const marker = new google.maps.Marker({
-      position: { lat: p.lat, lng: p.lng },
-      map:   mapa,
-      title: p.nome,
-      label: { text: String(i + 1), color: "#fff", fontWeight: "800", fontFamily: "Inter,sans-serif", fontSize: "11px" },
-      icon: {
-        path: google.maps.SymbolPath.CIRCLE,
-        scale: 14,
-        fillColor: "#f97316",
-        fillOpacity: 1,
-        strokeColor: "#fff",
-        strokeWeight: 2,
-      },
-      zIndex: 10,
-    });
-
-    marker.addListener("click", () => {
-      infoWindow.setContent(`
-        <div style="font-family:Inter,sans-serif;padding:2px 4px;min-width:140px;">
-          <div style="font-weight:700;font-size:.88rem;color:#0f172a;margin-bottom:2px;">${escapeHtml(p.nome)}</div>
-          <div style="font-size:.75rem;color:#f97316;font-weight:700;">#${i + 1} no roteiro</div>
-        </div>`);
-      infoWindow.open(mapa, marker);
-    });
-
-    bounds.extend({ lat: p.lat, lng: p.lng });
-  });
-
-  // Rotas entre os locais na ordem do roteiro
-  if (pontos.length > 1) {
-    new google.maps.Polyline({
-      path: pontos.map(p => ({ lat: p.lat, lng: p.lng })),
-      map: mapa,
-      strokeColor: "#f97316",
-      strokeOpacity: 0.65,
-      strokeWeight: 2.5,
-      icons: [{
-        icon: {
-          path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-          scale: 3,
-          fillColor: "#f97316",
-          fillOpacity: 1,
-          strokeColor: "#fff",
-          strokeWeight: 1,
-        },
-        offset: "100%",
-        repeat: "70px",
-      }],
-    });
-    mapa.fitBounds(bounds);
-  } else {
-    mapa.setZoom(15);
+  // Injeta container de filtros e legenda se ainda não existirem
+  if (!box.querySelector("#p3Filtros")) {
+    const fEl = document.createElement("div");
+    fEl.id = "p3Filtros";
+    fEl.style.cssText = "display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;";
+    box.querySelector(".mapa-titulo").after(fEl);
   }
+  if (!box.querySelector("#p3Legenda")) {
+    const lEl = document.createElement("div");
+    lEl.id = "p3Legenda";
+    lEl.style.cssText = "display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;";
+    mapEl.after(lEl);
+  }
+  const filtrosEl = box.querySelector("#p3Filtros");
+  const legendaEl = box.querySelector("#p3Legenda");
+
+  let diaFiltrado = null;
+  let mapInstance = null;
+  const infoWindow = new google.maps.InfoWindow();
+  let markers = [], polylines = [];
+
+  function _renderMapa() {
+    markers.forEach(m => m.setMap(null));
+    polylines.forEach(p => p.setMap(null));
+    markers = []; polylines = [];
+
+    const grupos = diaFiltrado
+      ? [{ dia: diaFiltrado, itens: pontosPorDia[diaFiltrado] || [] }]
+      : diasUnicos.map(d => ({ dia: d, itens: pontosPorDia[d] }));
+    const todosVisiveis = grupos.flatMap(g => g.itens);
+    if (!todosVisiveis.length) return;
+
+    if (!mapInstance) {
+      mapInstance = new google.maps.Map(mapEl, {
+        zoom: 12, center: { lat: todosVisiveis[0].lat, lng: todosVisiveis[0].lng },
+        mapTypeControl: false, streetViewControl: false, fullscreenControl: false, zoomControl: true,
+      });
+    }
+
+    const bounds = new google.maps.LatLngBounds();
+    grupos.forEach(({ dia, itens }) => {
+      const cor = corPorDia[dia];
+      itens.forEach((p, i) => {
+        const marker = new google.maps.Marker({
+          position: { lat: p.lat, lng: p.lng }, map: mapInstance, title: p.nome,
+          label: { text: String(i + 1), color: "#fff", fontWeight: "800", fontFamily: "Inter,sans-serif", fontSize: "11px" },
+          icon: { path: google.maps.SymbolPath.CIRCLE, scale: 14, fillColor: cor, fillOpacity: 1, strokeColor: "#fff", strokeWeight: 2 },
+          zIndex: 10,
+        });
+        marker.addListener("click", () => {
+          infoWindow.setContent(`<div style="font-family:Inter,sans-serif;padding:2px 4px;min-width:140px;">
+            <div style="font-size:.72rem;font-weight:700;color:${cor};margin-bottom:2px;">Dia ${dia}</div>
+            <div style="font-weight:700;font-size:.88rem;color:#0f172a;">${escapeHtml(p.nome)}</div>
+          </div>`);
+          infoWindow.open(mapInstance, marker);
+        });
+        bounds.extend({ lat: p.lat, lng: p.lng });
+        markers.push(marker);
+      });
+      if (itens.length > 1) {
+        const poly = new google.maps.Polyline({
+          path: itens.map(p => ({ lat: p.lat, lng: p.lng })), map: mapInstance,
+          strokeColor: cor, strokeOpacity: 0.7, strokeWeight: 3,
+        });
+        polylines.push(poly);
+      }
+    });
+    if (todosVisiveis.length > 1) mapInstance.fitBounds(bounds);
+    else { mapInstance.setCenter({ lat: todosVisiveis[0].lat, lng: todosVisiveis[0].lng }); mapInstance.setZoom(15); }
+  }
+
+  function _renderControles() {
+    filtrosEl.innerHTML = [
+      `<button style="padding:4px 14px;border-radius:999px;border:1px solid #e2e8f0;font-size:.78rem;font-weight:700;cursor:pointer;background:${diaFiltrado === null ? "#f97316" : "#fff"};color:${diaFiltrado === null ? "#fff" : "#64748b"};" data-p3-dia="todos">Todos</button>`,
+      ...diasUnicos.map(d => {
+        const cor = corPorDia[d], ativo = diaFiltrado === d;
+        return `<button style="padding:4px 14px;border-radius:999px;border:1px solid ${cor};font-size:.78rem;font-weight:700;cursor:pointer;background:${ativo ? cor : "#fff"};color:${ativo ? "#fff" : cor};" data-p3-dia="${d}">
+          <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${ativo ? "#fff" : cor};margin-right:4px;vertical-align:middle;"></span>Dia ${d}
+        </button>`;
+      }),
+    ].join("");
+    filtrosEl.querySelectorAll("[data-p3-dia]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const val = btn.getAttribute("data-p3-dia");
+        diaFiltrado = val === "todos" ? null : parseInt(val);
+        _renderControles(); _renderMapa();
+      });
+    });
+    legendaEl.innerHTML = diasUnicos.map(d => {
+      const cor = corPorDia[d], qtd = (pontosPorDia[d] || []).length;
+      return `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;background:${cor}1a;border:1px solid ${cor}44;">
+        <span style="width:9px;height:9px;border-radius:50%;background:${cor};display:inline-block;"></span>
+        <span style="font-size:.78rem;font-weight:700;color:${cor};">Dia ${d}</span>
+        <span style="font-size:.75rem;color:#64748b;">${qtd} ${qtd === 1 ? "local" : "locais"}</span>
+      </span>`;
+    }).join("");
+  }
+
+  _renderControles();
+  _renderMapa();
 }
 
 function renderLocaisEditAI() {
@@ -1507,7 +1547,7 @@ function renderLocaisEditAI() {
       ? _PERIODOS_AI_MR.reduce((s, p) => s + (diaObj.periodos[p.key] || []).length, 0)
       : (diaObj.locais || []).length;
 
-    html += `<div class="mb-2" data-ai-dia-idx="${dIdx}" style="border:1px solid ${corToggleBrd};border-radius:10px;overflow:hidden;">`;
+    html += `<div class="mb-2" data-ai-dia-idx="${dIdx}" data-dia="${diaNum}" style="border:1px solid ${corToggleBrd};border-radius:10px;overflow:hidden;">`;
     html += `<button type="button"
         class="w-100 d-flex align-items-center justify-content-between gap-3 px-3 py-2 border-0"
         style="background:${corToggle};cursor:pointer;"
