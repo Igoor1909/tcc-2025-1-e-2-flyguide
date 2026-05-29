@@ -15,7 +15,7 @@ let _locaisEdit                = [];
 let _roteiroIdEdit             = null;
 let _basesEdit                 = [];
 let _baseAtivaIdEdit           = null;
-let _raioFiltroKmEdit          = 50;
+let _raioFiltroKmEdit          = 10;
 let _cidadeBaseSelecionadaEdit = null;
 let _paisBaseSelecionadoEdit   = null;
 let _diasTotaisEdit            = 0;
@@ -33,7 +33,7 @@ let _localBaseEscolhidoEdit    = null;
 function _resetarEstadoBasesEdit() {
   _basesEdit = [];
   _baseAtivaIdEdit = null;
-  _raioFiltroKmEdit = 50;
+  _raioFiltroKmEdit = 10;
 }
 
 function _salvarBasesEdit() {}
@@ -2570,7 +2570,7 @@ document.getElementById("baseFiltroAtivaEdit")?.addEventListener("change", e => 
 });
 
 document.getElementById("raioBaseKmEdit")?.addEventListener("input", e => {
-  _raioFiltroKmEdit = Math.max(1, parseInt(e.target.value) || 50);
+  _raioFiltroKmEdit = Math.max(1, parseInt(e.target.value) || 10);
   e.target.value = _raioFiltroKmEdit;
   _salvarFiltroEdit();
   renderLocaisEdit();

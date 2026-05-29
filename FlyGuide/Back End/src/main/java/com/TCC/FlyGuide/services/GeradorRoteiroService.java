@@ -232,7 +232,7 @@ public class GeradorRoteiroService {
 
         // Solicita o suficiente para cobrir todos os dias sem repetição
         int needed = dias * 12 + 10;
-        int raio   = req.temCoordenadas() ? 10_000 : 0;
+        int raio   = req.temCoordenadas() ? 8_000 : 0;
 
         List<String> manhaPool = buscarNomesReaisComFallback(queriesManha(tipo, localidade), req.getLatitude(), req.getLongitude(), raio, needed);
         List<String> tardePool = buscarNomesReaisComFallback(queriesTarde(tipo, localidade), req.getLatitude(), req.getLongitude(), raio, needed);
@@ -581,7 +581,8 @@ public class GeradorRoteiroService {
              + "=== PERFIL DA VIAGEM ===\n"
              + perfilTipo + "\n\n"
              + "=== REGRAS GEOGRÁFICAS ===\n"
-             + "- Todos os locais devem estar na área de " + localizacao + " e arredores (até ~15 km).\n"
+             + "- Todos os locais devem estar na área de " + localizacao + " e arredores (até 8 km do centro).\n"
+             + "- Agrupe os locais de cada período dentro do mesmo bairro ou zona (máximo 3 km entre eles).\n"
              + (!estado.isBlank() ? "- Apenas locais do estado \"" + estado + "\". Nunca inclua outros estados.\n" : "")
              + (!pais.isBlank()   ? "- Apenas locais em \"" + pais + "\". Nunca inclua outros países.\n" : "")
              + "- Agrupe atrações próximas no mesmo dia para minimizar deslocamentos.\n\n"
