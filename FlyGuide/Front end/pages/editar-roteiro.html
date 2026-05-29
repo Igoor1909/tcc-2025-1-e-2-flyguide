@@ -13,90 +13,16 @@
   <link href="../assets/css/base.css" rel="stylesheet">
   <link href="../assets/css/layout.css" rel="stylesheet">
   <link href="../assets/css/components.css" rel="stylesheet">
-  <link href="../assets/css/pages/detalhes.css" rel="stylesheet">
+  <link href="../assets/css/pages/atividades-roteiro.css" rel="stylesheet">
   <style>
-    /* ── Itens editáveis da lista ──────────────────────────── */
-    .er-dia-header {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 10px 0 6px 0;
-      border-bottom: 2px solid #f1f5f9;
-      margin-bottom: 10px;
+    .destino-resumo {
+      background: #f8fafc; border: 1px solid #e2e8f0;
+      border-radius: 12px; padding: 14px 16px;
+      display: flex; align-items: center; gap: 14px;
     }
-    .er-dia-dot {
-      width: 12px; height: 12px;
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
-    .er-periodo-header {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 6px 0 4px 0;
-      margin-bottom: 4px;
-    }
-    .er-item {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      background: var(--fg-card, #fff);
-      border: 1px solid var(--fg-border, #eef2f7);
-      border-radius: 12px;
-      padding: 10px 12px;
-      margin-bottom: 8px;
-      cursor: grab;
-      transition: box-shadow .15s, opacity .15s;
-    }
-    .er-item:active { cursor: grabbing; }
-    .er-item.dragging { opacity: .4; }
-    .er-item.drag-over { box-shadow: 0 0 0 2px #f97316; }
-    .er-drag-handle {
-      color: #cbd5e1;
-      font-size: 1.1rem;
-      cursor: grab;
-      flex-shrink: 0;
-    }
-    .er-num {
-      width: 26px; height: 26px;
-      border-radius: 50%;
-      display: flex; align-items: center; justify-content: center;
-      font-size: .75rem; font-weight: 800;
-      flex-shrink: 0;
-    }
-    .er-info { flex: 1; min-width: 0; }
-    .er-info .nome { font-weight: 700; font-size: .9rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .er-info .end  { font-size: .75rem; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .er-info .obs  { font-size: .75rem; color: #64748b; margin-top: 2px; }
-    .er-btns { display: flex; gap: 6px; flex-shrink: 0; }
-    .er-btns button {
-      width: 32px; height: 32px;
-      border: none; border-radius: 8px;
-      display: flex; align-items: center; justify-content: center;
-      cursor: pointer; font-size: .85rem;
-      transition: background .15s;
-    }
-    .er-btn-edit   { background: #eff6ff; color: #3b82f6; }
-    .er-btn-edit:hover { background: #dbeafe; }
-    .er-btn-delete { background: #fef2f2; color: #ef4444; }
-    .er-btn-delete:hover { background: #fee2e2; }
-
-    .er-drop-zone { min-height: 40px; }
-
-    /* ── Formulário de info ──────────────────────────────────── */
-    .er-save-bar {
-      position: sticky;
-      bottom: 0;
-      background: var(--fg-card, #fff);
-      border-top: 1px solid var(--fg-border, #eef2f7);
-      padding: 14px 20px;
-      z-index: 10;
-    }
-
-    html[data-theme="dark"] .er-item { background: #1e293b; border-color: #334155; }
-    html[data-theme="dark"] .er-btn-edit   { background: #1e3a5f; color: #60a5fa; }
-    html[data-theme="dark"] .er-btn-delete { background: #3b1111; color: #f87171; }
-    html[data-theme="dark"] .er-save-bar   { background: #0f172a; border-color: #1e293b; }
+    html[data-theme="dark"] .destino-resumo { background: #1e293b; border-color: #334155; }
+    .pac-container { z-index: 9999 !important; border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.15); }
+    html[data-theme="dark"] .day-item { background: #1e293b !important; border-color: #334155 !important; }
   </style>
 </head>
 
@@ -127,7 +53,6 @@
       </div>
     </nav>
 
-    <!-- CONTEÚDO PRINCIPAL -->
     <main class="main" id="conteudo-principal">
       <div class="mobile-topbar">
         <button class="btn btn-outline-soft" data-sidebar-open><i class="bi bi-list"></i></button>
@@ -163,141 +88,131 @@
         <a href="meus-roteiros.html" class="btn btn-primary-orange mt-4">Voltar</a>
       </div>
 
-      <!-- Conteúdo -->
+      <!-- Conteúdo (mesma estrutura do passo 3 de criar-roteiro) -->
       <div id="erConteudo" style="display:none;">
+        <div class="page-head">
+          <a class="back-center" href="meus-roteiros.html"><i class="bi bi-arrow-left"></i>Voltar</a>
+        </div>
 
-        <!-- Hero -->
-        <section class="hero details" id="erHero">
-          <a class="back-btn" href="meus-roteiros.html">
-            <i class="bi bi-arrow-left"></i>Meus Roteiros
-          </a>
-          <div class="hero-inner">
-            <div>
-              <div class="details-badges">
-                <span class="badge rounded-pill text-bg-success px-3 py-2" id="erTipo">—</span>
-                <span class="badge rounded-pill text-bg-light px-3 py-2" style="color:#0f172a;" id="erVis">—</span>
+        <div class="grid-wrap pt-2">
+          <div class="text-center mb-4">
+            <div class="gen-success-icon" style="background:linear-gradient(135deg,#f97316,#fb923c);">
+              <i class="bi bi-map-fill"></i>
+            </div>
+            <h1 class="fw-bold mt-3" style="font-weight:900;font-size:clamp(1.6rem,3vw,2.4rem);">
+              Editar Roteiro
+            </h1>
+            <p class="text-muted mt-1">Edite os locais do seu roteiro antes de salvar</p>
+          </div>
+
+          <div class="form-card mx-auto" style="max-width:700px;">
+
+            <!-- Destino (leitura) -->
+            <div class="destino-resumo mb-4">
+              <i class="bi bi-geo-alt-fill" style="color:#f97316;font-size:1.4rem;flex-shrink:0;"></i>
+              <div style="flex:1;min-width:0;">
+                <div class="fw-bold" id="p3Destino">Carregando...</div>
+                <div class="small text-muted" id="p3Info"></div>
               </div>
-              <h1 class="mb-2" id="erTitulo">—</h1>
-              <div class="details-meta">
-                <div class="d-flex align-items-center gap-2">
-                  <i class="bi bi-geo-alt-fill"></i>
-                  <span id="erCidade">—</span>
+            </div>
+
+            <!-- Mini-mapa -->
+            <div id="miniMapaPasso3Box" style="display:none;">
+              <div class="mapa-titulo">
+                <i class="bi bi-map-fill me-1" style="color:#f97316;"></i>Mapa dos Locais
+              </div>
+              <div id="miniMapaPasso3"></div>
+            </div>
+
+            <!-- Erro inline -->
+            <div class="alert" id="erroLocalEdit" style="display:none;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:10px;font-size:.9rem;"></div>
+
+            <!-- Formulário: adicionar local -->
+            <div id="formAdicionarLocalEdit">
+
+              <!-- Busca manual -->
+              <div class="mb-3">
+                <label class="form-label fw-bold">Buscar Local</label>
+                <div class="input-group">
+                  <span class="input-group-text" style="background:transparent;border-right:0;border-radius:12px 0 0 12px;">
+                    <i class="bi bi-search" style="color:#f97316;"></i>
+                  </span>
+                  <input id="buscaLocalEdit" type="text" class="form-control"
+                         style="border-left:0;border-radius:0 12px 12px 0;"
+                         placeholder="Ex: Torre Eiffel, Paris...">
+                </div>
+              </div>
+
+              <!-- Preview do local selecionado -->
+              <div id="localPreviewEdit" style="display:none;" class="mb-3">
+                <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:12px;padding:12px 14px;">
+                  <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-geo-alt-fill" style="color:#f97316;font-size:1.1rem;"></i>
+                    <div style="flex:1;">
+                      <div class="fw-bold" id="previewNomeEdit"></div>
+                      <div class="text-secondary" style="font-size:.82rem;" id="previewEnderecoEdit"></div>
+                    </div>
+                    <i class="bi bi-check-circle-fill" style="color:#22c55e;font-size:1.2rem;"></i>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Dia, Período, Observações -->
+              <div class="row g-2 mb-3">
+                <div class="col-4">
+                  <label class="form-label fw-bold">Dia <span style="color:#ef4444;">*</span></label>
+                  <select id="localDiaEdit" class="form-select">
+                    <option value="" disabled selected>Selecione</option>
+                  </select>
+                </div>
+                <div class="col-4">
+                  <label class="form-label fw-bold">Período</label>
+                  <select id="localPeriodoEdit" class="form-select">
+                    <option value="" disabled selected>— selecione —</option>
+                    <option value="manha">🌅 Manhã</option>
+                    <option value="tarde">☀️ Tarde</option>
+                    <option value="noite">🌙 Noite</option>
+                  </select>
+                </div>
+                <div class="col-4">
+                  <label class="form-label fw-bold">Observações</label>
+                  <input id="localObsEdit" type="text" class="form-control" placeholder="Ex: Chegar cedo">
+                </div>
+              </div>
+
+              <button class="btn btn-primary-orange w-100 fw-bold mb-4" id="btnAdicionarLocalEdit" type="button">
+                <i class="bi bi-plus-lg me-1"></i>Adicionar Local ao Roteiro
+              </button>
+            </div>
+
+            <!-- Lista de locais -->
+            <div style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:14px;padding:14px;min-height:120px;margin-bottom:24px;">
+              <div class="fw-bold mb-2" style="font-size:.9rem;color:#64748b;">
+                <i class="bi bi-list-ul me-1"></i>Locais adicionados
+              </div>
+              <div id="listaLocaisEdit">
+                <div id="vazioLocaisEdit" class="text-center py-3 text-secondary" style="font-size:.88rem;">
+                  <i class="bi bi-map" style="color:#cbd5e1;font-size:1.5rem;display:block;margin-bottom:6px;"></i>
+                  Nenhum local adicionado ainda
                 </div>
               </div>
             </div>
-          </div>
-        </section>
 
-        <div class="details-top">
-
-          <!-- Mapa -->
-          <div class="section-card" id="erSecaoMapa" style="display:none;">
-            <div class="section-title"><i class="bi bi-map-fill me-2" style="color:#f97316;"></i>Mapa do Roteiro</div>
-            <div id="erFiltrosDias" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;"></div>
-            <div id="erMapa" style="width:100%;height:360px;border-radius:14px;overflow:hidden;background:#f1f5f9;"></div>
-          </div>
-
-          <!-- Roteiro Dia a Dia (editável) -->
-          <div class="section-card" style="margin-top:16px;">
-            <div class="section-title"><i class="bi bi-list-ul me-2" style="color:#f97316;"></i>Roteiro Dia a Dia</div>
-            <div class="small text-secondary mb-3" style="font-size:.83rem;">
-              <i class="bi bi-info-circle me-1"></i>Arraste para reordenar · Use os botões para editar ou excluir cada local
-            </div>
-            <div id="erListaDias"></div>
-          </div>
-
-          <!-- Informações Básicas -->
-          <div class="section-card" style="margin-top:16px;">
-            <div class="section-title"><i class="bi bi-pencil-square me-2" style="color:#f97316;"></i>Informações do Roteiro</div>
-            <div class="row g-3">
-              <div class="col-12">
-                <label class="form-label fw-bold">Título *</label>
-                <input class="form-control" id="erInfoTitulo" placeholder="Nome do roteiro">
-              </div>
-              <div class="col-12 col-md-6">
-                <label class="form-label fw-bold">Cidade</label>
-                <input class="form-control" id="erInfoCidade" placeholder="Ex: Paris">
-              </div>
-              <div class="col-12 col-md-3">
-                <label class="form-label fw-bold">Duração (dias)</label>
-                <input class="form-control" type="number" id="erInfoDuracao" min="1" placeholder="Ex: 7">
-              </div>
-              <div class="col-12 col-md-3">
-                <label class="form-label fw-bold">Tipo de Viagem</label>
-                <select class="form-select" id="erInfoTipo">
-                  <option value="Cidade">Cidade</option>
-                  <option value="Aventura">Aventura</option>
-                  <option value="Cultural">Cultural</option>
-                  <option value="Praia">Praia</option>
-                  <option value="Natureza">Natureza</option>
-                  <option value="Gastronomia">Gastronomia</option>
-                  <option value="Mochilão">Mochilão</option>
-                  <option value="Luxo">Luxo</option>
-                </select>
-              </div>
-              <div class="col-12">
-                <label class="form-label fw-bold">Descrição</label>
-                <textarea class="form-control" id="erInfoDescricao" rows="3" placeholder="Descreva sua viagem..."></textarea>
-              </div>
-            </div>
-
-            <div id="erSalvarErro" class="alert alert-danger mt-3" style="display:none;"></div>
-
-            <div class="mt-4 d-flex gap-3">
-              <a href="meus-roteiros.html" class="btn btn-outline-gray fw-bold flex-shrink-0">Cancelar</a>
-              <button class="btn btn-primary-orange fw-bold w-100" id="btnErSalvar">
-                <i class="bi bi-check-circle-fill me-2"></i>Salvar Roteiro
+            <!-- Botões finais -->
+            <div class="d-flex gap-3">
+              <a href="meus-roteiros.html" class="btn btn-outline-gray fw-bold" style="min-width:110px;">
+                <i class="bi bi-arrow-left me-1"></i>Voltar
+              </a>
+              <button class="btn btn-primary-orange flex-fill fw-bold" id="btnSalvarRoteiro" type="button">
+                <i class="bi bi-check-lg me-2"></i>Salvar Roteiro
               </button>
             </div>
-          </div>
 
-        </div><!-- /details-top -->
+          </div>
+        </div>
       </div><!-- /erConteudo -->
-    </main>
-  </div><!-- /app-shell -->
 
-  <!-- Modal: Editar Local -->
-  <div class="modal fade" id="erModalLocal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
-      <div class="modal-content" style="border-radius:18px;">
-        <div class="modal-header border-0 pb-0">
-          <h5 class="modal-title fw-bold"><i class="bi bi-pencil me-2" style="color:#f97316;"></i>Editar Local</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-        </div>
-        <div class="modal-body">
-          <input type="hidden" id="erLocalId">
-          <div class="mb-3">
-            <div class="fw-bold" id="erLocalNome" style="font-size:.95rem;"></div>
-            <div class="text-secondary" id="erLocalEndereco" style="font-size:.8rem;"></div>
-          </div>
-          <div class="row g-2">
-            <div class="col-6">
-              <label class="form-label fw-bold">Dia *</label>
-              <select class="form-select" id="erLocalDia"></select>
-            </div>
-            <div class="col-6">
-              <label class="form-label fw-bold">Período</label>
-              <select class="form-select" id="erLocalPeriodo">
-                <option value="manha">🌅 Manhã</option>
-                <option value="tarde">☀️ Tarde</option>
-                <option value="noite">🌙 Noite</option>
-              </select>
-            </div>
-            <div class="col-12">
-              <label class="form-label fw-bold">Observações</label>
-              <input class="form-control" id="erLocalObs" placeholder="Ex: Reservar com antecedência">
-            </div>
-          </div>
-          <div id="erLocalErro" class="alert alert-danger mt-2" style="display:none;"></div>
-        </div>
-        <div class="modal-footer border-0 pt-0">
-          <button class="btn btn-outline-gray" data-bs-dismiss="modal">Cancelar</button>
-          <button class="btn btn-primary-orange fw-bold" id="btnErSalvarLocal">
-            <i class="bi bi-check-lg me-1"></i>Salvar
-          </button>
-        </div>
-      </div>
-    </div>
+    </main>
   </div>
 
   <script src="../assets/js/transitions.js"></script>
@@ -305,7 +220,18 @@
   <script src="../assets/js/app.js"></script>
   <script src="../assets/js/imagens.js"></script>
   <script src="../assets/js/editar-roteiro.js"></script>
+  <script src="../assets/js/maps-edit.js"></script>
+  <script>
+    window.initCombinado = function () {
+      if (typeof window.initMapsEdit === "function") window.initMapsEdit();
+    };
+    function mascHorario(input) {
+      let v = input.value.replace(/\D/g, '').slice(0, 4);
+      if (v.length >= 3) v = v.slice(0, 2) + ':' + v.slice(2);
+      input.value = v;
+    }
+  </script>
+  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDJDXcLhGd99ryVpWwvkVpeFaKuzDWbvwI&libraries=places&language=pt-BR&loading=async&callback=initCombinado" async defer></script>
   <script src="../assets/js/dark-mode.js"></script>
-  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDJDXcLhGd99ryVpWwvkVpeFaKuzDWbvwI&libraries=places&language=pt-BR&loading=async&callback=initMapaEditRoteiro" async defer></script>
 </body>
 </html>
