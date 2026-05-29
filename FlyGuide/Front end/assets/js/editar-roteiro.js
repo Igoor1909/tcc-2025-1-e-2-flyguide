@@ -28,24 +28,24 @@
       document.getElementById("erConteudo").style.display = "";
 
       // Abre o editor de locais (mesmo mecanismo do modal de edição em meus-roteiros)
+      var optsLocais = {
+        diasTotais:              roteiro.diasTotais  || 0,
+        userId:                  parseInt(userId),
+        roteiro:                 roteiro,
+        pais:                    roteiro.pais        || null,
+        stateCode:               roteiro.stateCode   || null,
+        latDestino:              roteiro.latDestino  || null,
+        lngDestino:              roteiro.lngDestino  || null,
+        ocultarBtnSalvarSugestoes: true,
+      };
       if (typeof window.abrirLocaisEdit === "function") {
-        window.abrirLocaisEdit(roteiroId, roteiro.cidade, {
-          diasTotais:              roteiro.diasTotais  || 0,
-          userId:                  parseInt(userId),
-          roteiro:                 roteiro,
-          ocultarBtnSalvarSugestoes: true,
-        });
+        window.abrirLocaisEdit(roteiroId, roteiro.cidade, optsLocais);
       } else {
         // maps-edit.js ainda não carregou — aguarda
         var _check = setInterval(function () {
           if (typeof window.abrirLocaisEdit === "function") {
             clearInterval(_check);
-            window.abrirLocaisEdit(roteiroId, roteiro.cidade, {
-              diasTotais:              roteiro.diasTotais  || 0,
-              userId:                  parseInt(userId),
-              roteiro:                 roteiro,
-              ocultarBtnSalvarSugestoes: true,
-            });
+            window.abrirLocaisEdit(roteiroId, roteiro.cidade, optsLocais);
           }
         }, 100);
       }
