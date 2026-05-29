@@ -471,20 +471,42 @@
         </div>`;
     }
 
+    function _pagHtml(totalPags, prefixo) {
+      return `
+        ${paginaMR > 0 ? `<button id="${prefixo}Prev" class="btn btn-outline-secondary" style="border-radius:999px;padding:6px 18px;font-weight:700;">← Anterior</button>` : ""}
+        <span style="font-size:.88rem;color:#64748b;">Página ${paginaMR + 1} de ${totalPags}</span>
+        ${paginaMR < totalPags - 1 ? `<button id="${prefixo}Next" class="btn btn-outline-secondary" style="border-radius:999px;padding:6px 18px;font-weight:700;">Próxima →</button>` : ""}
+      `;
+    }
+
     function renderPaginacaoMR(lista, total) {
       const totalPags = Math.ceil(total / POR_PAGINA_MR);
+      const estilo = "display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;";
+
+      // Paginação topo
+      const pagTopo = document.getElementById("mrPaginacaoTopo");
+      if (pagTopo) {
+        pagTopo.style.cssText = estilo + "margin-bottom:16px;";
+        pagTopo.innerHTML = _pagHtml(totalPags, "mrT");
+        document.getElementById("mrTPrev")?.addEventListener("click", () => {
+          paginaMR--; aplicarFiltro(filtroAtivo);
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        });
+        document.getElementById("mrTNext")?.addEventListener("click", () => {
+          paginaMR++; aplicarFiltro(filtroAtivo);
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        });
+      }
+
+      // Paginação rodapé
       let pag = document.getElementById("mrPaginacao");
       if (!pag) {
         pag = document.createElement("div");
         pag.id = "mrPaginacao";
-        pag.style.cssText = "display:flex;align-items:center;justify-content:center;gap:12px;margin-top:24px;flex-wrap:wrap;";
         lista.after(pag);
       }
-      pag.innerHTML = `
-        ${paginaMR > 0 ? `<button id="mrPrev" class="btn btn-outline-secondary" style="border-radius:999px;padding:6px 18px;font-weight:700;">← Anterior</button>` : ""}
-        <span style="font-size:.88rem;color:#64748b;">Página ${paginaMR + 1} de ${totalPags}</span>
-        ${paginaMR < totalPags - 1 ? `<button id="mrNext" class="btn btn-outline-secondary" style="border-radius:999px;padding:6px 18px;font-weight:700;">Próxima →</button>` : ""}
-      `;
+      pag.style.cssText = estilo + "margin-top:24px;";
+      pag.innerHTML = _pagHtml(totalPags, "mr");
       document.getElementById("mrPrev")?.addEventListener("click", () => {
         paginaMR--; aplicarFiltro(filtroAtivo);
         window.scrollTo({ top: 0, behavior: "smooth" });
@@ -505,6 +527,7 @@
       if (roteiros.length === 0) {
         lista.style.display = "none"; empty.style.display = "";
         document.getElementById("mrPaginacao")?.remove();
+        const pt = document.getElementById("mrPaginacaoTopo"); if (pt) pt.innerHTML = "";
         return;
       }
       empty.style.display = "none";
@@ -517,7 +540,10 @@
       const inicio = paginaMR * POR_PAGINA_MR;
       lista.innerHTML = ordenados.slice(inicio, inicio + POR_PAGINA_MR).map(renderCard).join("");
       if (roteiros.length > POR_PAGINA_MR) renderPaginacaoMR(lista, roteiros.length);
-      else document.getElementById("mrPaginacao")?.remove();
+      else {
+        document.getElementById("mrPaginacao")?.remove();
+        const pt = document.getElementById("mrPaginacaoTopo"); if (pt) pt.innerHTML = "";
+      }
 
       lista.querySelectorAll("[data-excluir-roteiro]").forEach(btn => {
         btn.addEventListener("click", async () => {
