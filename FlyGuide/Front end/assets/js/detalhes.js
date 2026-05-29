@@ -270,6 +270,12 @@
 
     function onAllDone() {
       if (aiPlaces.length > 0 && typeof window.renderMapaAiSugestoes === "function") {
+        const totalPorDia = {};
+        items.forEach(el => {
+          const dia = parseInt(el.getAttribute("data-dia")) || 0;
+          if (dia > 0) totalPorDia[dia] = (totalPorDia[dia] || 0) + 1;
+        });
+        window._aiTotalLocaisPorDia = totalPorDia;
         window.renderMapaAiSugestoes(aiPlaces);
       }
     }

@@ -2186,7 +2186,9 @@ const URL_API_BASE  = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app
       legendaEl.style.display = "flex";
       legendaEl.innerHTML = diasUnicos.map(dia => {
         const cor = corPorDia[dia];
-        const qtd = places.filter(p => p.dia === dia).length;
+        const qtd = (window._aiTotalLocaisPorDia && window._aiTotalLocaisPorDia[dia] != null)
+          ? window._aiTotalLocaisPorDia[dia]
+          : places.filter(p => p.dia === dia).length;
         return `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;background:${cor}1a;border:1px solid ${cor}44;">
           <span style="width:9px;height:9px;border-radius:50%;background:${cor};display:inline-block;flex-shrink:0;"></span>
           <span style="font-size:.78rem;font-weight:700;color:${cor};">Dia ${dia}</span>
