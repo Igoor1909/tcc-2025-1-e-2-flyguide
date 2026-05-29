@@ -7,9 +7,15 @@ import com.TCC.FlyGuide.DTO.CadastroPessoaFisicaDTO;
 import com.TCC.FlyGuide.DTO.CadastroPessoaJuridicaDTO;
 import com.TCC.FlyGuide.entities.PessoaFisica;
 import com.TCC.FlyGuide.entities.PessoaJuridica;
+import com.TCC.FlyGuide.entities.Roteiro;
 import com.TCC.FlyGuide.entities.User;
+import com.TCC.FlyGuide.repositories.AssinaturaPremiumRepository;
+import com.TCC.FlyGuide.repositories.ComentarioLikeRepository;
 import com.TCC.FlyGuide.repositories.PessoaFisicaRepository;
 import com.TCC.FlyGuide.repositories.PessoaJuridicaRepository;
+import com.TCC.FlyGuide.repositories.RoteiroAvaliacaoRepository;
+import com.TCC.FlyGuide.repositories.RoteiroLocalRepository;
+import com.TCC.FlyGuide.repositories.RoteiroRepository;
 import com.TCC.FlyGuide.repositories.UserRepository;
 import com.TCC.FlyGuide.services.exceptions.DatabaseException;
 import com.TCC.FlyGuide.services.exceptions.ResourceNotFoundException;
@@ -34,6 +40,11 @@ class UserServiceTest {
     @Mock UserRepository userRepository;
     @Mock PessoaFisicaRepository pessoaFisicaRepository;
     @Mock PessoaJuridicaRepository pessoaJuridicaRepository;
+    @Mock RoteiroRepository roteiroRepository;
+    @Mock RoteiroLocalRepository roteiroLocalRepository;
+    @Mock RoteiroAvaliacaoRepository avaliacaoRepository;
+    @Mock ComentarioLikeRepository comentarioLikeRepository;
+    @Mock AssinaturaPremiumRepository assinaturaPremiumRepository;
     @Mock PasswordEncoder passwordEncoder;
     @InjectMocks UserService userService;
 
@@ -363,6 +374,24 @@ class UserServiceTest {
         verify(pessoaFisicaRepository).deleteById(1L);
         verify(pessoaJuridicaRepository, never()).deleteById(any());
         verify(userRepository).deleteById(1L);
+    }
+
+    @Test
+    void delete_usuarioComRoteiroPublico_removeRoteiroSemDesvincularUsuario() {
+        Roteiro roteiro = new Roteiro();
+        roteiro.setIdRoteiro(10L);
+        roteiro.setVisibilidadeRoteiro("Público");
+        roteiro.setUsuario(userSalvo(1L, "user@email.com"));
+
+        when(roteiroRepository.findByUsuario_IdUsuario(1L)).thenReturn(List.of(roteiro));
+
+        userService.delete(1L);
+
+        verify(comentarioLikeRepository).deleteByAvaliacao_Roteiro_IdRoteiro(10L);
+        verify(avaliacaoRepository).deleteByRoteiro_IdRoteiro(10L);
+        verify(roteiroLocalRepository).deleteByRoteiro_IdRoteiro(10L);
+        verify(roteiroRepository).deleteById(10L);
+        assertThat(roteiro.getUsuario()).isNotNull();
     }
 
     // ─── expirarTrialsVencidos ─────────────────────────────────────────────

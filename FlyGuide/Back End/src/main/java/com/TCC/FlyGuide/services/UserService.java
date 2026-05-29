@@ -26,6 +26,7 @@ import com.TCC.FlyGuide.repositories.RoteiroAvaliacaoRepository;
 import com.TCC.FlyGuide.repositories.RoteiroLocalRepository;
 import com.TCC.FlyGuide.repositories.RoteiroRepository;
 import com.TCC.FlyGuide.repositories.UserRepository;
+import com.TCC.FlyGuide.repositories.AssinaturaPremiumRepository;
 import com.TCC.FlyGuide.services.exceptions.DatabaseException;
 import com.TCC.FlyGuide.services.exceptions.ResourceNotFoundException;
 import com.TCC.FlyGuide.DTO.AtualizarUsuarioDTO;
@@ -55,6 +56,9 @@ public class UserService {
 
     @Autowired
     private ComentarioLikeRepository comentarioLikeRepository;
+
+    @Autowired
+    private AssinaturaPremiumRepository assinaturaPremiumRepository;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -175,21 +179,15 @@ public class UserService {
             // 1. Remove likes que o usuário deu em comentários alheios
             comentarioLikeRepository.deleteByUsuario_IdUsuario(id);
 
-            // 2. Processa roteiros do usuário
+            // 2. Remove todos os roteiros do usuario e seus dependentes.
+            // A coluna id_usuario nao aceita NULL no banco.
             List<Roteiro> roteiros = roteiroRepository.findByUsuario_IdUsuario(id);
             for (Roteiro roteiro : roteiros) {
                 Long idRoteiro = roteiro.getIdRoteiro();
-                if ("Público".equals(roteiro.getVisibilidadeRoteiro())) {
-                    // Roteiro público: mantém no sistema, apenas desvincula o dono
-                    roteiro.setUsuario(null);
-                    roteiroRepository.save(roteiro);
-                } else {
-                    // Roteiro privado: remove tudo em cascata
-                    comentarioLikeRepository.deleteByAvaliacao_Roteiro_IdRoteiro(idRoteiro);
-                    avaliacaoRepository.deleteByRoteiro_IdRoteiro(idRoteiro);
-                    roteiroLocalRepository.deleteByRoteiro_IdRoteiro(idRoteiro);
-                    roteiroRepository.deleteById(idRoteiro);
-                }
+                comentarioLikeRepository.deleteByAvaliacao_Roteiro_IdRoteiro(idRoteiro);
+                avaliacaoRepository.deleteByRoteiro_IdRoteiro(idRoteiro);
+                roteiroLocalRepository.deleteByRoteiro_IdRoteiro(idRoteiro);
+                roteiroRepository.deleteById(idRoteiro);
             }
 
             // 3. Remove comentários do usuário em roteiros de terceiros (e likes nesses comentários)
@@ -199,7 +197,9 @@ public class UserService {
             }
             avaliacaoRepository.deleteByUsuario_IdUsuario(id);
 
-            // 4. Remove dados pessoais e conta
+            // 4. Remove assinatura, dados pessoais e conta
+            assinaturaPremiumRepository.findByUsuario_IdUsuario(id)
+                    .ifPresent(assinaturaPremiumRepository::delete);
             if (pessoaFisicaRepository.existsById(id))  pessoaFisicaRepository.deleteById(id);
             if (pessoaJuridicaRepository.existsById(id)) pessoaJuridicaRepository.deleteById(id);
             userRepository.deleteById(id);
