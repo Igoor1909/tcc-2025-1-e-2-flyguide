@@ -709,7 +709,6 @@ function _renderAIItemCardMR(item, idx, uid, isDark) {
         ${window.placeCategoryBadgeHtml ? window.placeCategoryBadgeHtml([window.inferPlaceType ? window.inferPlaceType(nome) : "tourist_attraction"]) : ""}
         <span id="mr-rating-ai-${uid}" data-mr-rating-id="mr-rating-ai-${uid}" data-mr-rating-nome="${escapeHtml(nome)}" data-mr-rating-pid="${escapeHtml(placeId)}" style="display:none;font-size:.7rem;font-weight:700;color:#92400e;background:#fef3c7;padding:1px 6px;border-radius:999px;align-items:center;gap:3px;"></span>
       </div>
-      <div data-ai-cost-display style="min-width:48px;text-align:right;font-size:.8rem;font-weight:700;color:#f97316;background:#fff7ed;border:1px solid #ffffff;border-radius:4px;padding:2px 6px;flex-shrink:0;">${escapeHtml(custoLabel)}</div>
       <div style="display:flex;gap:4px;flex-shrink:0;">
         <button type="button" class="btn btn-sm btn-outline-secondary" data-ai-edit="${uid}" title="Editar"><i class="bi bi-pencil"></i></button>
         <button type="button" class="btn btn-sm btn-outline-danger" data-ai-del title="Remover"><i class="bi bi-trash"></i></button>
@@ -726,10 +725,6 @@ function _renderAIItemCardMR(item, idx, uid, isDark) {
           <input type="hidden" data-ai-lng value="${escapeHtml(String(item.longitude ?? ""))}">
           <div data-ai-endereco style="font-size:.72rem;color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:${endereco ? "" : "none"};">${escapeHtml(endereco)}</div>
           <a data-ai-maps-link href="${placeId ? `https://www.google.com/maps/place/?q=place_id:${placeId}` : "#"}" target="_blank" style="font-size:.7rem;color:#3b82f6;text-decoration:none;display:${placeId ? "flex" : "none"};align-items:center;gap:3px;margin-top:2px;"><i class="bi bi-map-fill"></i>Ver no Maps</a>
-        </div>
-        <div class="col-12">
-          <label style="font-size:.72rem;font-weight:700;color:#94a3b8;">Custo ($)</label>
-          <input type="number" min="0" step="0.01" class="form-control form-control-sm" data-ai-custo value="${escapeHtml(custo)}" placeholder="$">
         </div>
         <div class="col-12">
           <label style="font-size:.72rem;font-weight:700;color:#94a3b8;">Observações</label>
@@ -833,7 +828,6 @@ function _renderLocalCardMR(l, idx, isDark) {
         ${l.observacoes ? `<div style="font-size:.72rem;color:${corLabel};">${escapeHtml(l.observacoes)}</div>` : ""}
         <span id="mr-rating-lr-${vid}" data-mr-rating-id="mr-rating-lr-${vid}" data-mr-rating-nome="${escapeHtml(l.nome || '')}" data-mr-rating-pid="${escapeHtml(l.placeId || '')}" style="display:none;font-size:.7rem;font-weight:700;color:#92400e;background:#fef3c7;padding:1px 6px;border-radius:999px;align-items:center;gap:3px;"></span>
       </div>
-      <div id="lcusto-display-${vid}" style="min-width:48px;text-align:right;font-size:.8rem;font-weight:700;color:#f97316;background:#fff7ed;border:1px solid #ffffff;border-radius:4px;padding:2px 6px;flex-shrink:0;">${escapeHtml(custoLabel)}</div>
       <div style="display:flex;gap:4px;flex-shrink:0;">
         <button class="btn btn-sm btn-outline-secondary" data-edit-vinculo-mr="${vid}"><i class="bi bi-pencil"></i></button>
         <button class="btn btn-sm btn-outline-danger" data-del-local-mr="${l.idLocal}" data-del-vinculo-mr="${vid}"><i class="bi bi-trash"></i></button>
@@ -848,10 +842,6 @@ function _renderLocalCardMR(l, idx, isDark) {
         ${l.placeId ? `<a href="https://www.google.com/maps/place/?q=place_id:${l.placeId}" target="_blank" style="font-size:.7rem;color:#3b82f6;text-decoration:none;display:inline-flex;align-items:center;gap:3px;margin-top:2px;"><i class="bi bi-map-fill"></i>Ver no Maps</a>` : ""}
       </div>
       <div class="row g-2">
-        <div class="col-12">
-          <label style="font-size:.72rem;font-weight:700;color:${corLabel};">Custo ($)</label>
-          <input type="number" min="0" step="0.01" class="form-control form-control-sm" id="ledit-mr-custo-${vid}" value="${escapeHtml(custoVal)}" placeholder="$">
-        </div>
         <div class="col-12">
           <label style="font-size:.72rem;font-weight:700;color:${corLabel};">Observações</label>
           <input type="text" class="form-control form-control-sm" id="ledit-mr-obs-${vid}" value="${escapeHtml(l.observacoes || "")}" placeholder="Opcional">

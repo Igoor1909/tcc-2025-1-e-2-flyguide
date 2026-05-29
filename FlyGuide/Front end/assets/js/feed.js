@@ -82,9 +82,6 @@
               <div class="d-flex align-items-center gap-2">
                 <i class="bi bi-calendar-event"></i><span>${dias}</span>
               </div>
-              <div class="d-flex align-items-center gap-2 money">
-                <i class="bi bi-currency-dollar"></i><span>${orc}</span>
-              </div>
             </div>
           </div>
           <div class="trip-footer">

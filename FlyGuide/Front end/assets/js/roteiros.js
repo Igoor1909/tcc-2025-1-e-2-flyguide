@@ -414,9 +414,6 @@
                 <div class="d-flex align-items-center gap-2">
                   <i class="bi bi-calendar-event"></i><span>${dias}</span>
                 </div>
-                <div class="d-flex align-items-center gap-2 money">
-                  <i class="bi bi-currency-dollar"></i><span>${orc}</span>
-                </div>
                 <div class="d-flex align-items-center gap-2" style="color:#64748b;">${visIcon}</div>
               </div>
             </div>
@@ -851,10 +848,15 @@
     document.querySelectorAll("[data-filtro]").forEach(b =>
       b.addEventListener("click", () => aplicarFiltro(b.getAttribute("data-filtro"), true)));
 
-    document.getElementById("ordenacaoMR")?.addEventListener("change", e => {
-      _ordemMR = e.target.value;
-      paginaMR = 0;
-      aplicarFiltro(filtroAtivo);
+    document.querySelectorAll("[data-ordem]").forEach(item => {
+      item.addEventListener("click", e => {
+        e.preventDefault();
+        _ordemMR = item.getAttribute("data-ordem");
+        paginaMR = 0;
+        const label = document.getElementById("ordenacaoMRLabel");
+        if (label) label.textContent = item.textContent.trim();
+        aplicarFiltro(filtroAtivo);
+      });
     });
 
     function atualizarVisibilityStrip(isPublico) {
@@ -1380,10 +1382,6 @@
 
       document.getElementById("genTitulo").value    = data.titulo || "";
       document.getElementById("genDescricao").value = data.descricao || "";
-      const orcEl = document.getElementById("genOrcamento");
-      orcEl.textContent = orcamentoGerado > 0
-        ? Number(orcamentoGerado).toLocaleString("pt-BR", { minimumFractionDigits: 2 })
-        : "—";
 
       const imgs = await carregarImagens();
       renderSeletorImagens("imgSelector2", "itImagem2", data.idImagem || (imgs[0]?.idImagem ?? null));
