@@ -231,7 +231,7 @@ public class GeradorRoteiroService {
                 ? ", " + req.getEstado() : "");
 
         // Solicita o suficiente para cobrir todos os dias sem repetição
-        int needed = dias * 9 + 10;
+        int needed = dias * 12 + 10;
         int raio   = req.temCoordenadas() ? 10_000 : 0;
 
         List<String> manhaPool = buscarNomesReaisComFallback(queriesManha(tipo, localidade), req.getLatitude(), req.getLongitude(), raio, needed);
@@ -253,7 +253,7 @@ public class GeradorRoteiroService {
 
             // Manhã: exclusivamente resultados do Google Places
             List<Map<String, Object>> locaisManha = new ArrayList<>();
-            for (int i = 0; i < 3; i++) {
+            for (int i = 0; i < 4; i++) {
                 String nome = null;
                 while (nome == null && manhaIdx < manhaPool.size()) {
                     String c = manhaPool.get(manhaIdx++);
@@ -279,7 +279,7 @@ public class GeradorRoteiroService {
                 poiItem.put("custo", "Preço varia");
                 locaisTarde.add(poiItem);
             }
-            for (int i = 0; i < 3; i++) {
+            for (int i = 0; i < 4; i++) {
                 String nome = null;
                 while (nome == null && tardeIdx < tardePool.size()) {
                     String c = tardePool.get(tardeIdx++);
@@ -298,7 +298,7 @@ public class GeradorRoteiroService {
 
             // Noite: exclusivamente resultados do Google Places
             List<Map<String, Object>> locaisNoite = new ArrayList<>();
-            for (int i = 0; i < 3; i++) {
+            for (int i = 0; i < 4; i++) {
                 String nome = null;
                 while (nome == null && noiteIdx < noitePool.size()) {
                     String c = noitePool.get(noiteIdx++);
@@ -532,16 +532,16 @@ public class GeradorRoteiroService {
         String bloqueioCheckin = "";
         if (temCheckin(checkinP)) {
             bloqueioCheckin = switch (checkinP) {
-                case "tarde" -> "CHECK-IN NO DIA 1: turista chega na TARDE. Dia 1: manhã=[]. Dia 1 tarde e noite: 3 atividades cada.\n";
-                case "noite" -> "CHECK-IN NO DIA 1: turista chega à NOITE. Dia 1: manhã=[], tarde=[]. Dia 1 noite: 3 atividades.\n";
+                case "tarde" -> "CHECK-IN NO DIA 1: turista chega na TARDE. Dia 1: manhã=[]. Dia 1 tarde e noite: de 3 a 4 atividades cada.\n";
+                case "noite" -> "CHECK-IN NO DIA 1: turista chega à NOITE. Dia 1: manhã=[], tarde=[]. Dia 1 noite: de 3 a 4 atividades.\n";
                 default -> "";
             };
         }
         String bloqueioCheckout = "";
         if (temCheckin(checkoutP)) {
             bloqueioCheckout = switch (checkoutP) {
-                case "manha" -> "CHECKOUT NO DIA " + dias + ": turista parte de manhã. Dia " + dias + ": tarde=[], noite=[]. Manhã: 3 atividades.\n";
-                case "tarde" -> "CHECKOUT NO DIA " + dias + ": turista parte à tarde. Dia " + dias + ": noite=[]. Manhã e tarde: 3 atividades cada.\n";
+                case "manha" -> "CHECKOUT NO DIA " + dias + ": turista parte de manhã. Dia " + dias + ": tarde=[], noite=[]. Manhã: de 3 a 4 atividades.\n";
+                case "tarde" -> "CHECKOUT NO DIA " + dias + ": turista parte à tarde. Dia " + dias + ": noite=[]. Manhã e tarde: de 3 a 4 atividades cada.\n";
                 default -> "";
             };
         }
@@ -606,7 +606,7 @@ public class GeradorRoteiroService {
              + "- Noite: restaurantes famosos, bares, experiências gastronômicas, shows, vida noturna.\n\n"
              + "=== CHECKIN / CHECKOUT ===\n"
              + (bloqueioCheckin.isBlank() && bloqueioCheckout.isBlank()
-                 ? "Todos os períodos de todos os dias devem ter 3 atividades.\n"
+                 ? "Todos os períodos de todos os dias devem ter de 3 a 4 atividades.\n"
                  : bloqueioCheckin + bloqueioCheckout)
              + "\n"
              + "=== ESTRUTURA JSON OBRIGATÓRIA ===\n"
@@ -620,7 +620,7 @@ public class GeradorRoteiroService {
              + "- descricao: 2-3 frases inspiradoras sobre o destino.\n"
              + "- imagemChave: UMA de: cidade, praia, natureza, montanha, aventura, cultural, gastronomia, luxo, neve, mochilao, familia.\n"
              + "- sugestoes: EXATAMENTE " + dias + " dia(s), numerados de 1 a " + dias + ".\n"
-             + "- Cada período ATIVO: EXATAMENTE 3 atividades. Período bloqueado: array vazio [].\n";
+             + "- Cada período ATIVO: de 3 a 4 atividades. Período bloqueado: array vazio [].\n";
     }
 
     private String stripMarkdown(String text) {
