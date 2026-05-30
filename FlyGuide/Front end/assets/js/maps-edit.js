@@ -26,6 +26,7 @@ let _estadoBaseCode            = null; // código do estado da base (ex: "SP") �
 let _estadoBaseName            = null; // nome legível do estado (ex: "São Paulo")
 let _ocultarBtnSalvarSugestoes = false; // true no passo3 do criar-roteiro
 let _lookupAiSeq               = 0;
+let _lookupAiPendente          = false;
 let _destinoPOIEdit            = false;
 let _localBaseEscolhidoEdit    = null;
 
@@ -38,6 +39,46 @@ function _resetarEstadoBasesEdit() {
 
 function _salvarBasesEdit() {}
 function _salvarFiltroEdit() {}
+
+function _setLookupAiPendente(pendente) {
+  _lookupAiPendente = !!pendente;
+  window._flyguideLookupAiPendente = _lookupAiPendente;
+  _atualizarBotoesLookupAi();
+}
+
+window.flyguideAiLookupPendente = function () {
+  return !!_lookupAiPendente;
+};
+
+function _alternarBotaoLookup(btn, pendente, htmlPendente) {
+  if (!btn) return;
+  if (pendente) {
+    if (!btn.dataset.lookupOriginalHtml) {
+      btn.dataset.lookupOriginalHtml = btn.innerHTML;
+    }
+    btn.disabled = true;
+    btn.innerHTML = htmlPendente;
+    return;
+  }
+  if (btn.dataset.lookupOriginalHtml) {
+    btn.innerHTML = btn.dataset.lookupOriginalHtml;
+    delete btn.dataset.lookupOriginalHtml;
+    btn.disabled = false;
+  }
+}
+
+function _atualizarBotoesLookupAi() {
+  _alternarBotaoLookup(
+    document.getElementById("btnFinalizarRoteiro"),
+    _lookupAiPendente,
+    `<span class="spinner-border spinner-border-sm me-2"></span>Preparando locais...`
+  );
+  _alternarBotaoLookup(
+    document.getElementById("btnSalvarSugestoesAIMR"),
+    _lookupAiPendente,
+    `<span class="spinner-border spinner-border-sm me-2"></span>Preparando locais...`
+  );
+}
 
 // ── Utilidades ────────────────────────────────────────────────────
 function _normalizar(v) {
@@ -922,9 +963,12 @@ function _ehNomeGenericoAI(nome) {
 }
 
 async function _autoLookupAIAddresses(lista, cidade) {
+  const lookupSeq = ++_lookupAiSeq;
+  let manterPendente = false;
+  _setLookupAiPendente(true);
+
   try {
     if (!window.google || !window.google.maps || !window.google.maps.places) return;
-    const lookupSeq = ++_lookupAiSeq;
     const svc          = new google.maps.places.PlacesService(document.createElement("div"));
     const base         = _obterBaseAtiva();
     const OK           = google.maps.places.PlacesServiceStatus.OK;
@@ -938,9 +982,12 @@ async function _autoLookupAIAddresses(lista, cidade) {
     const MAX_KM_BASE  = Number(_raioFiltroKmEdit) > 0 ? Number(_raioFiltroKmEdit) : 30;
     const cidadeBusca  = cidade || base?.city || base?.label || "";
     if (!hasBaseCoords) {
+      manterPendente = true;
       setTimeout(() => {
         if (lookupSeq === _lookupAiSeq && _obterBaseAtiva()?.latitude != null) {
           _autoLookupAIAddresses(lista, cidade);
+        } else if (lookupSeq === _lookupAiSeq) {
+          _setLookupAiPendente(false);
         }
       }, 500);
       return;
@@ -1422,6 +1469,24 @@ async function _autoLookupAIAddresses(lista, cidade) {
     _renderMiniMapaPasso3(lista);
     _renderMapaModalEdit(lista);
   } catch (_) { /* API unavailable, skip entirely */ }
+  finally {
+    if (!manterPendente && lookupSeq === _lookupAiSeq) {
+      _setLookupAiPendente(false);
+    }
+  }
+}
+
+function _posicaoDeslocadaMapaEdit(p, contadorCoordenada) {
+  const key = `${Number(p.lat).toFixed(5)},${Number(p.lng).toFixed(5)}`;
+  const repeticao = contadorCoordenada[key] || 0;
+  contadorCoordenada[key] = repeticao + 1;
+  if (repeticao === 0) return { lat: p.lat, lng: p.lng };
+  const angulo = repeticao * 1.7;
+  const raio = 0.00008 * Math.ceil(repeticao / 2);
+  return {
+    lat: p.lat + Math.cos(angulo) * raio,
+    lng: p.lng + Math.sin(angulo) * raio,
+  };
 }
 
 function _renderMiniMapaPasso3(lista) {
@@ -1432,8 +1497,9 @@ function _renderMiniMapaPasso3(lista) {
   const base   = _obterBaseAtiva();
   const PALETA = ["#f97316","#3b82f6","#22c55e","#8b5cf6","#ec4899","#14b8a6","#f59e0b","#ef4444"];
 
-  // Coleta pontos agrupados por dia
+  // Coleta pontos agrupados por dia e mantém o total real da lista para evitar contagem enganosa no mapa.
   const pontosPorDia = {};
+  const statusPorDia = {};
   lista.querySelectorAll("[data-ai-item]").forEach(item => {
     if (item.hasAttribute("data-ai-special")) return;
     const nome = item.querySelector("[data-ai-title]")?.textContent?.trim()
@@ -1441,17 +1507,28 @@ function _renderMiniMapaPasso3(lista) {
     const lat  = parseFloat(item.querySelector("[data-ai-lat]")?.value || "");
     const lng  = parseFloat(item.querySelector("[data-ai-lng]")?.value || "");
     const dia  = parseInt(item.closest("[data-dia]")?.getAttribute("data-dia") || "1");
-    if (!nome || isNaN(lat) || isNaN(lng) || lat === 0 || lng === 0) return;
-    if (base?.latitude != null && base?.longitude != null) {
-      if (_calcularKm(parseFloat(base.latitude), parseFloat(base.longitude), lat, lng) > _raioFiltroKmEdit) return;
+    if (!statusPorDia[dia]) statusPorDia[dia] = { total: 0, mapeados: 0, pendentes: [] };
+    statusPorDia[dia].total += 1;
+
+    const semCoord = !nome || isNaN(lat) || isNaN(lng) || lat === 0 || lng === 0;
+    const foraDoRaio = !semCoord && base?.latitude != null && base?.longitude != null
+      ? _calcularKm(parseFloat(base.latitude), parseFloat(base.longitude), lat, lng) > _raioFiltroKmEdit
+      : false;
+    if (semCoord || foraDoRaio) {
+      if (nome) statusPorDia[dia].pendentes.push(nome);
+      return;
     }
     if (!pontosPorDia[dia]) pontosPorDia[dia] = [];
     pontosPorDia[dia].push({ nome, lat, lng, dia });
+    statusPorDia[dia].mapeados += 1;
   });
 
-  const diasUnicos    = Object.keys(pontosPorDia).map(Number).sort((a, b) => a - b);
+  const diasUnicos = [...new Set([
+    ...Object.keys(statusPorDia).map(Number),
+    ...Object.keys(pontosPorDia).map(Number),
+  ])].filter(d => Number.isFinite(d)).sort((a, b) => a - b);
   const todosOsPontos = diasUnicos.flatMap(d => pontosPorDia[d]);
-  if (!todosOsPontos.length) { box.style.display = "none"; return; }
+  if (!todosOsPontos.length && diasUnicos.length === 0) { box.style.display = "none"; return; }
   box.style.display = "";
 
   const corPorDia = {};
@@ -1470,26 +1547,58 @@ function _renderMiniMapaPasso3(lista) {
     lEl.style.cssText = "display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;";
     mapEl.before(lEl);
   }
+  if (!box.querySelector("#p3AvisoMapa")) {
+    const aEl = document.createElement("div");
+    aEl.id = "p3AvisoMapa";
+    mapEl.before(aEl);
+  }
   const filtrosEl = box.querySelector("#p3Filtros");
   const legendaEl = box.querySelector("#p3Legenda");
+  const avisoEl   = box.querySelector("#p3AvisoMapa");
 
   let diaFiltrado = null;
   let mapInstance = null;
   const infoWindow = new google.maps.InfoWindow();
   let markers = [], polylines = [];
 
+  function _renderAvisoMapa() {
+    const dias = diaFiltrado ? [diaFiltrado] : diasUnicos;
+    const infos = dias.map(d => statusPorDia[d]).filter(Boolean);
+    const incompletos = infos.filter(info => info.total > info.mapeados);
+    if (!incompletos.length) {
+      avisoEl.style.display = "none";
+      avisoEl.innerHTML = "";
+      return;
+    }
+    const total = infos.reduce((sum, info) => sum + info.total, 0);
+    const mapeados = infos.reduce((sum, info) => sum + info.mapeados, 0);
+    const exemplos = incompletos.flatMap(info => info.pendentes || []).slice(0, 3);
+    const detalheExemplos = exemplos.length ? ` Ex.: ${exemplos.map(escapeHtml).join(", ")}.` : "";
+    avisoEl.style.cssText = "display:flex;align-items:flex-start;gap:8px;margin:-2px 0 10px;padding:9px 12px;border-radius:10px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.35);color:#f59e0b;font-size:.82rem;font-weight:700;";
+    avisoEl.innerHTML = `<i class="bi bi-exclamation-triangle-fill" style="font-size:.95rem;line-height:1.25;"></i><span>${mapeados}/${total} locais foram posicionados no mapa. A lista continua completa.${detalheExemplos}</span>`;
+  }
+
   function _renderMapa() {
     markers.forEach(m => m.setMap(null));
     polylines.forEach(p => p.setMap(null));
     markers = []; polylines = [];
+    _renderAvisoMapa();
 
     const grupos = diaFiltrado
       ? [{ dia: diaFiltrado, itens: pontosPorDia[diaFiltrado] || [] }]
       : diasUnicos.map(d => ({ dia: d, itens: pontosPorDia[d] }));
     const todosVisiveis = grupos.flatMap(g => g.itens);
-    if (!todosVisiveis.length) return;
+    if (!todosVisiveis.length) {
+      mapInstance = null;
+      mapEl.innerHTML = `
+        <div style="height:100%;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;color:#94a3b8;font-weight:700;">
+          Nenhum local deste filtro tem coordenadas confiáveis para exibir no mapa.
+        </div>`;
+      return;
+    }
 
     if (!mapInstance) {
+      mapEl.innerHTML = "";
       mapInstance = new google.maps.Map(mapEl, {
         zoom: 12, center: { lat: todosVisiveis[0].lat, lng: todosVisiveis[0].lng },
         mapTypeControl: false, streetViewControl: false, fullscreenControl: false, zoomControl: true,
@@ -1497,11 +1606,14 @@ function _renderMiniMapaPasso3(lista) {
     }
 
     const bounds = new google.maps.LatLngBounds();
+    const contadorCoordenada = {};
     grupos.forEach(({ dia, itens }) => {
       const cor = corPorDia[dia];
       itens.forEach((p, i) => {
+        const pos = _posicaoDeslocadaMapaEdit(p, contadorCoordenada);
+        p._mapPos = pos;
         const marker = new google.maps.Marker({
-          position: { lat: p.lat, lng: p.lng }, map: mapInstance, title: p.nome,
+          position: pos, map: mapInstance, title: p.nome,
           label: { text: String(i + 1), color: "#fff", fontWeight: "800", fontFamily: "Inter,sans-serif", fontSize: "11px" },
           icon: { path: google.maps.SymbolPath.CIRCLE, scale: 14, fillColor: cor, fillOpacity: 1, strokeColor: "#fff", strokeWeight: 2 },
           zIndex: 10,
@@ -1513,12 +1625,12 @@ function _renderMiniMapaPasso3(lista) {
           </div>`);
           infoWindow.open(mapInstance, marker);
         });
-        bounds.extend({ lat: p.lat, lng: p.lng });
+        bounds.extend(pos);
         markers.push(marker);
       });
       if (itens.length > 1) {
         const poly = new google.maps.Polyline({
-          path: itens.map(p => ({ lat: p.lat, lng: p.lng })), map: mapInstance,
+          path: itens.map(p => p._mapPos || ({ lat: p.lat, lng: p.lng })), map: mapInstance,
           strokeColor: cor, strokeOpacity: 0.7, strokeWeight: 3,
         });
         polylines.push(poly);
@@ -1538,9 +1650,13 @@ function _renderMiniMapaPasso3(lista) {
       `<button style="padding:4px 14px;border-radius:999px;border:1px solid ${chipBorder};font-size:.78rem;font-weight:700;cursor:pointer;white-space:nowrap;background:${diaFiltrado === null ? "#f97316" : chipBg};color:${diaFiltrado === null ? "#fff" : chipMuted};" data-p3-dia="todos">Todos</button>`,
       ...diasUnicos.map(d => {
         const cor = corPorDia[d], ativo = diaFiltrado === d;
-        const qtd = (pontosPorDia[d] || []).length;
-        return `<button style="padding:4px 14px;border-radius:999px;border:1px solid ${cor};font-size:.78rem;font-weight:700;cursor:pointer;white-space:nowrap;background:${ativo ? cor : chipBg};color:${ativo ? "#fff" : cor};" data-p3-dia="${d}">
-          <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${ativo ? "#fff" : cor};margin-right:4px;vertical-align:middle;"></span>Dia ${d} - ${qtd} ${qtd === 1 ? "local" : "locais"}
+        const status = statusPorDia[d] || { total: (pontosPorDia[d] || []).length, mapeados: (pontosPorDia[d] || []).length };
+        const incompleto = status.total > status.mapeados;
+        const textoQtd = incompleto
+          ? `${status.mapeados}/${status.total} no mapa`
+          : `${status.total} ${status.total === 1 ? "local" : "locais"}`;
+        return `<button title="${incompleto ? "Alguns locais deste dia não foram posicionados no mapa." : ""}" style="padding:4px 14px;border-radius:999px;border:1px ${incompleto ? "dashed" : "solid"} ${cor};font-size:.78rem;font-weight:700;cursor:pointer;white-space:nowrap;background:${ativo ? cor : chipBg};color:${ativo ? "#fff" : cor};" data-p3-dia="${d}">
+          <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${ativo ? "#fff" : cor};margin-right:4px;vertical-align:middle;"></span>Dia ${d} - ${textoQtd}
         </button>`;
       }),
     ].join("");
@@ -1882,11 +1998,16 @@ function _getAiSugestoesEditadasEdit() {
   const sugestoes = _roteiroObjEdit.sugestoes;
   const result = [];
   const base = _obterBaseAtiva();
+  const _coordsValidas = (latVal, lngVal) => {
+    const lat = parseFloat(latVal);
+    const lng = parseFloat(lngVal);
+    return Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0);
+  };
   const _itemDentroDaBase = (latVal, lngVal) => {
+    if (!_coordsValidas(latVal, lngVal)) return false;
     if (!base || base.latitude == null || base.longitude == null) return true;
     const lat = parseFloat(latVal);
     const lng = parseFloat(lngVal);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return true;
     return _calcularKm(
       parseFloat(base.latitude), parseFloat(base.longitude),
       lat, lng
@@ -1921,14 +2042,16 @@ function _getAiSugestoesEditadasEdit() {
           const latVal   = ((itemEl.querySelector("[data-ai-lat]")  || {}).value || "").trim();
           const lngVal   = ((itemEl.querySelector("[data-ai-lng]")  || {}).value || "").trim();
           if (!_itemDentroDaBase(latVal, lngVal)) return;
+          const lat = parseFloat(latVal);
+          const lng = parseFloat(lngVal);
           itens.push({
             nome: nome.trim(),
             custo: custo != null ? `R$ ${custo.toLocaleString("pt-BR", {minimumFractionDigits: 0, maximumFractionDigits: 2})}` : "",
             ...(endereco && { endereco }),
             ...(placeId  && { placeId  }),
             ...(obs      && { observacoes: obs }),
-            ...(latVal   && { latitude:  parseFloat(latVal)  }),
-            ...(lngVal   && { longitude: parseFloat(lngVal)  }),
+            latitude:  lat,
+            longitude: lng,
           });
         });
         obj.periodos[perKey] = itens;
@@ -1944,13 +2067,15 @@ function _getAiSugestoesEditadasEdit() {
         const latVal2 = ((itemEl.querySelector("[data-ai-lat]") || {}).value || "").trim();
         const lngVal2 = ((itemEl.querySelector("[data-ai-lng]") || {}).value || "").trim();
         if (!_itemDentroDaBase(latVal2, lngVal2)) return;
+        const lat = parseFloat(latVal2);
+        const lng = parseFloat(lngVal2);
         if (nome.trim()) locais.push({
           nome: nome.trim(), custo: custo.trim(),
           ...(endereco && { endereco }),
           ...(placeId  && { placeId  }),
           ...(obs      && { observacoes: obs }),
-          ...(latVal2  && { latitude:  parseFloat(latVal2)  }),
-          ...(lngVal2  && { longitude: parseFloat(lngVal2)  }),
+          latitude:  lat,
+          longitude: lng,
         });
       });
       obj.locais = locais;
@@ -1996,6 +2121,11 @@ async function _salvarOrdemSilencioso() {
 }
 
 async function _salvarSugestoesAIEdit() {
+  if (_lookupAiPendente) {
+    alert("Aguarde a preparação dos locais no mapa terminar antes de salvar.");
+    return;
+  }
+
   const btnSalvar = document.getElementById("btnSalvarSugestoesAIMR");
   if (btnSalvar) { btnSalvar.disabled = true; btnSalvar.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Salvando...`; }
 
@@ -2445,7 +2575,6 @@ function _renderMapaModalEdit(lista) {
   if (!box || !mapEl || !window.google) return;
 
   const pontos = [];
-  const vistos = new Set();
 
   // 1. Locais de IA presentes no DOM (já com lat/lng resolvidos pelo _autoLookupAIAddresses)
   if (lista) {
@@ -2455,8 +2584,7 @@ function _renderMapaModalEdit(lista) {
       const lat  = parseFloat((item.querySelector("[data-ai-lat]") || {}).value || "");
       const lng  = parseFloat((item.querySelector("[data-ai-lng]") || {}).value || "");
       if (nome && !isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
-        const chave = `${lat.toFixed(5)},${lng.toFixed(5)}`;
-        if (!vistos.has(chave)) { vistos.add(chave); pontos.push({ nome, lat, lng }); }
+        pontos.push({ nome, lat, lng });
       }
     });
   }
@@ -2466,8 +2594,7 @@ function _renderMapaModalEdit(lista) {
     if (l.latitude == null || l.longitude == null) return;
     const lat = parseFloat(l.latitude), lng = parseFloat(l.longitude);
     if (isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0)) return;
-    const chave = `${lat.toFixed(5)},${lng.toFixed(5)}`;
-    if (!vistos.has(chave)) { vistos.add(chave); pontos.push({ nome: l.nome || "Local", lat, lng }); }
+    pontos.push({ nome: l.nome || "Local", lat, lng });
   });
 
   if (!pontos.length) { box.style.display = "none"; return; }
@@ -2481,10 +2608,13 @@ function _renderMapaModalEdit(lista) {
 
   const infoWindow = new google.maps.InfoWindow();
   const bounds     = new google.maps.LatLngBounds();
+  const contadorCoordenada = {};
 
   pontos.forEach((p, i) => {
+    const pos = _posicaoDeslocadaMapaEdit(p, contadorCoordenada);
+    p._mapPos = pos;
     const marker = new google.maps.Marker({
-      position: { lat: p.lat, lng: p.lng },
+      position: pos,
       map: mapa,
       title: p.nome,
       label: { text: String(i + 1), color: "#fff", fontWeight: "800", fontFamily: "Inter,sans-serif", fontSize: "11px" },
@@ -2495,12 +2625,12 @@ function _renderMapaModalEdit(lista) {
       infoWindow.setContent(`<div style="font-family:Inter,sans-serif;padding:2px 4px;min-width:120px;"><div style="font-weight:700;font-size:.85rem;color:#0f172a;">${escapeHtml(p.nome)}</div><div style="font-size:.72rem;color:#f97316;font-weight:700;">#${i + 1} no roteiro</div></div>`);
       infoWindow.open(mapa, marker);
     });
-    bounds.extend({ lat: p.lat, lng: p.lng });
+    bounds.extend(pos);
   });
 
   if (pontos.length > 1) {
     new google.maps.Polyline({
-      path: pontos.map(p => ({ lat: p.lat, lng: p.lng })),
+      path: pontos.map(p => p._mapPos || ({ lat: p.lat, lng: p.lng })),
       map: mapa, strokeColor: "#f97316", strokeOpacity: 0.65, strokeWeight: 2.5,
       icons: [{ icon: { path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW, scale: 3, fillColor: "#f97316", fillOpacity: 1, strokeColor: "#fff", strokeWeight: 1 }, offset: "100%", repeat: "70px" }]
     });

@@ -2068,25 +2068,104 @@ const URL_API_BASE  = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app
     const secao   = document.getElementById("secaoMapa");
     if (!mapEl || !secao || !window.google) return;
 
-    // Ordena por dia para que a numeração fique correta
-    places.sort((a, b) => a.dia - b.dia);
+    const statusMapa = window._aiMapaStatusPorDia || {};
 
-    const diasUnicos = [...new Set(places.map(p => p.dia))].sort((a, b) => a - b);
+    // Ordena por dia e pela ordem original da lista para que a numeração fique correta
+    places.sort((a, b) => (a.dia - b.dia) || ((a.ordem || 0) - (b.ordem || 0)));
+
+    const diasUnicos = [...new Set([
+      ...places.map(p => p.dia),
+      ...Object.keys(statusMapa).map(Number),
+    ])].filter(dia => Number.isFinite(dia)).sort((a, b) => a - b);
     const corPorDia  = {};
     diasUnicos.forEach((dia, idx) => { corPorDia[dia] = PALETA_DETALHE[idx % PALETA_DETALHE.length]; });
 
     let diaFiltrado = null;
 
+    function statusDoDia(dia) {
+      return statusMapa[dia] || statusMapa[String(dia)] || null;
+    }
+
+    function totalMapeadoDia(dia) {
+      return places.filter(p => p.dia === dia).length;
+    }
+
+    function avisoMapaEl() {
+      let aviso = document.getElementById("avisoMapaAiSugestoes");
+      if (!aviso) {
+        aviso = document.createElement("div");
+        aviso.id = "avisoMapaAiSugestoes";
+        mapEl.parentNode.insertBefore(aviso, mapEl);
+      }
+      return aviso;
+    }
+
+    function renderAvisoMapa() {
+      const aviso = avisoMapaEl();
+      const dias = diaFiltrado !== null ? [diaFiltrado] : diasUnicos;
+      const infos = dias
+        .map(dia => {
+          const status = statusDoDia(dia);
+          if (!status) return null;
+          const mapeados = totalMapeadoDia(dia);
+          return { dia, total: status.total || 0, mapeados, pendentes: status.pendentes || [] };
+        })
+        .filter(Boolean);
+      const incompletos = infos.filter(info => info.total > info.mapeados);
+
+      if (incompletos.length === 0) {
+        aviso.style.display = "none";
+        aviso.innerHTML = "";
+        return;
+      }
+
+      const total = infos.reduce((sum, info) => sum + info.total, 0);
+      const mapeados = infos.reduce((sum, info) => sum + Math.min(info.mapeados, info.total), 0);
+      const exemplos = incompletos.flatMap(info => info.pendentes || []).slice(0, 3);
+      const detalheExemplos = exemplos.length
+        ? ` Ex.: ${exemplos.map(escapeHtml).join(", ")}.`
+        : "";
+      const texto = diaFiltrado !== null
+        ? `Neste dia, ${mapeados}/${total} locais foram posicionados no mapa.`
+        : `Alguns locais ainda não possuem coordenadas confiáveis no mapa (${mapeados}/${total} exibidos nos dias filtrados).`;
+
+      aviso.style.cssText = "display:flex;align-items:flex-start;gap:8px;margin:-2px 0 10px;padding:9px 12px;border-radius:10px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.35);color:#f59e0b;font-size:.82rem;font-weight:700;";
+      aviso.innerHTML = `<i class="bi bi-exclamation-triangle-fill" style="font-size:.95rem;line-height:1.25;"></i><span>${texto} A lista abaixo continua completa.${detalheExemplos}</span>`;
+    }
+
+    function posicaoComDeslocamento(p, contadorCoordenada) {
+      const key = `${Number(p.lat).toFixed(5)},${Number(p.lng).toFixed(5)}`;
+      const repeticao = contadorCoordenada[key] || 0;
+      contadorCoordenada[key] = repeticao + 1;
+      if (repeticao === 0) return { lat: p.lat, lng: p.lng };
+      const angulo = repeticao * 1.7;
+      const raio = 0.00008 * Math.ceil(repeticao / 2);
+      return {
+        lat: p.lat + Math.cos(angulo) * raio,
+        lng: p.lng + Math.sin(angulo) * raio,
+      };
+    }
+
     function renderMapa() {
-      const filtrados = diaFiltrado !== null ? places.filter(p => p.dia === diaFiltrado) : places;
-      if (filtrados.length === 0) return;
+      const filtrados = (diaFiltrado !== null ? places.filter(p => p.dia === diaFiltrado) : places)
+        .filter(p => Number.isFinite(Number(p.lat)) && Number.isFinite(Number(p.lng)));
 
       mapEl.style.display = "";
       secao.style.display = "";
       window._flyguide_ai_mapa_pronto = true;
+      renderAvisoMapa();
+
+      if (filtrados.length === 0) {
+        mapEl.innerHTML = `
+          <div style="height:100%;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;color:#94a3b8;font-weight:700;">
+            Nenhum local deste filtro tem coordenadas confiáveis para exibir no mapa.
+          </div>`;
+        return;
+      }
 
       const bounds     = new google.maps.LatLngBounds();
       const infoWindow = new google.maps.InfoWindow();
+      const contadorCoordenada = {};
 
       const map = new google.maps.Map(mapEl, {
         zoom:      13,
@@ -2101,7 +2180,7 @@ const URL_API_BASE  = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app
       filtrados.forEach(p => {
         const cor = corPorDia[p.dia] || "#f97316";
         contadorPorDia[p.dia] = (contadorPorDia[p.dia] || 0) + 1;
-        const pos    = { lat: p.lat, lng: p.lng };
+        const pos    = posicaoComDeslocamento(p, contadorCoordenada);
         const marker = new google.maps.Marker({
           position: pos,
           map,
@@ -2124,6 +2203,7 @@ const URL_API_BASE  = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app
                 <span style="font-size:.72rem;font-weight:700;color:${cor};">Dia ${p.dia}${p.isReal ? "" : " · IA"}</span>
               </div>
               <div style="font-weight:700;font-size:.9rem;">${escapeHtml(p.nome)}</div>
+              ${p.endereco ? `<div style="color:#64748b;font-size:.78rem;margin-top:3px;">${escapeHtml(p.endereco)}</div>` : ""}
             </div>`);
           infoWindow.open(map, marker);
         });
@@ -2192,12 +2272,19 @@ const URL_API_BASE  = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app
         ...diasUnicos.map(dia => {
           const cor   = corPorDia[dia];
           const ativo = diaFiltrado === dia;
+          const status = statusDoDia(dia);
+          const mapeados = totalMapeadoDia(dia);
           const qtd = (window._aiTotalLocaisPorDia && window._aiTotalLocaisPorDia[dia] != null)
             ? window._aiTotalLocaisPorDia[dia]
-            : places.filter(p => p.dia === dia).length;
-          return `<button style="padding:4px 14px;border-radius:999px;border:1px solid ${cor};font-size:.78rem;font-weight:700;cursor:pointer;white-space:nowrap;background:${ativo ? cor : chipBg};color:${ativo ? "#fff" : cor};"
+            : (status?.total || mapeados);
+          const incompleto = qtd > mapeados;
+          const textoQtd = incompleto
+            ? `${mapeados}/${qtd} no mapa`
+            : `${qtd} ${qtd === 1 ? "local" : "locais"}`;
+          return `<button title="${incompleto ? "Alguns locais deste dia não foram posicionados no mapa." : ""}"
+                     style="padding:4px 14px;border-radius:999px;border:1px ${incompleto ? "dashed" : "solid"} ${cor};font-size:.78rem;font-weight:700;cursor:pointer;white-space:nowrap;background:${ativo ? cor : chipBg};color:${ativo ? "#fff" : cor};"
                      data-ai-dia="${dia}">
-                    <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${ativo ? "#fff" : cor};margin-right:4px;vertical-align:middle;"></span>Dia ${dia} - ${qtd} ${qtd === 1 ? "local" : "locais"}
+                    <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${ativo ? "#fff" : cor};margin-right:4px;vertical-align:middle;"></span>Dia ${dia} - ${textoQtd}
                   </button>`;
         }),
       ].join("");

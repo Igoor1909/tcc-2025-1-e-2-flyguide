@@ -163,10 +163,13 @@
   };
 
   function normalizarLocal(l) {
-    if (!l) return { nome: "", custo: null, _replace: false, _busca: null, _checkin: false, _checkout: false, endereco: null };
-    if (typeof l === "string") return { nome: l, custo: null, _replace: false, _busca: null, _checkin: false, _checkout: false, endereco: null };
+    if (!l) return { nome: "", custo: null, _replace: false, _busca: null, _checkin: false, _checkout: false, endereco: null, placeId: null, latitude: null, longitude: null };
+    if (typeof l === "string") return { nome: l, custo: null, _replace: false, _busca: null, _checkin: false, _checkout: false, endereco: null, placeId: null, latitude: null, longitude: null };
     return { nome: l.nome || "", custo: l.custo || null, _replace: !!l._replace, _busca: l._busca || null,
-             _checkin: !!l._checkin, _checkout: !!l._checkout, endereco: l.endereco || null };
+             _checkin: !!l._checkin, _checkout: !!l._checkout, endereco: l.endereco || null,
+             placeId: l.placeId || l.place_id || null,
+             latitude: l.latitude ?? l.lat ?? null,
+             longitude: l.longitude ?? l.lng ?? null };
   }
 
   const PERIODOS_CONFIG = [
@@ -209,15 +212,27 @@
       setTimeout(() => enrichWithMaps(cidade, pais, latSalva, lngSalva), 600);
       return;
     }
-    const service = new google.maps.places.PlacesService(document.createElement("div"));
-    const items   = [...document.querySelectorAll("#aiDiasContainer [data-maps-query]")];
+    const service  = new google.maps.places.PlacesService(document.createElement("div"));
+    const geocoder = new google.maps.Geocoder();
+    const items    = [...document.querySelectorAll("#aiDiasContainer [data-maps-query]")];
     if (items.length === 0) return;
 
-    let pending   = items.length;
+    let pending        = items.length;
     const aiPlaces    = [];
     const usedPlaceIds = new Set();
+    const statusPorDia = {};
+    const ordemPorDia  = {};
 
-    // Tipos que nunca devem aparecer em roteiro turístico
+    items.forEach(el => {
+      const dia = parseInt(el.getAttribute("data-dia")) || 0;
+      if (dia <= 0) return;
+      ordemPorDia[dia] = (ordemPorDia[dia] || 0) + 1;
+      el.dataset.mapaOrdem = String(ordemPorDia[dia]);
+      if (!statusPorDia[dia]) statusPorDia[dia] = { total: 0, resolvidos: 0, pendentes: [] };
+      statusPorDia[dia].total += 1;
+    });
+
+    // Tipos que nunca devem aparecer em roteiro turistico
     const _BLOCKED_TYPES = new Set([
       "lodging", "supermarket", "grocery_or_supermarket", "convenience_store",
       "gas_station", "bank", "atm", "car_dealer", "car_repair", "car_wash",
@@ -228,27 +243,36 @@
       "fire_station", "funeral_home", "cemetery"
     ]);
 
-    // Escolhe o melhor resultado excluindo tipos não turísticos e lugares já exibidos
-    function _pickPlace(results, minRatings) {
+    function _statusOk(status) {
+      return status === google.maps.places.PlacesServiceStatus.OK || status === "OK";
+    }
+
+    function _overQueryLimit(status) {
+      return status === google.maps.places.PlacesServiceStatus.OVER_QUERY_LIMIT || status === "OVER_QUERY_LIMIT";
+    }
+
+    // Escolhe o melhor resultado excluindo tipos nao turisticos e, quando necessario, duplicados
+    function _pickPlace(results, minRatings, permitirRepetido = false) {
       if (!results?.length) return null;
       const valid = results.filter(r =>
         r?.place_id &&
-        !usedPlaceIds.has(r.place_id) &&
+        (permitirRepetido || !usedPlaceIds.has(r.place_id)) &&
         !(r.types || []).some(t => _BLOCKED_TYPES.has(t))
       );
       return valid.find(r => (r.user_ratings_total || 0) >= minRatings) || valid[0] || null;
     }
 
-    function onAllDone() {
-      if (aiPlaces.length > 0 && typeof window.renderMapaAiSugestoes === "function") {
-        const totalPorDia = {};
-        items.forEach(el => {
-          const dia = parseInt(el.getAttribute("data-dia")) || 0;
-          if (dia > 0) totalPorDia[dia] = (totalPorDia[dia] || 0) + 1;
+    function _uniqueQueries(list) {
+      const seen = new Set();
+      return list
+        .map(q => String(q || "").replace(/\s+/g, " ").trim())
+        .filter(q => {
+          if (!q) return false;
+          const key = q.toLowerCase();
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
         });
-        window._aiTotalLocaisPorDia = totalPorDia;
-        window.renderMapaAiSugestoes(aiPlaces);
-      }
     }
 
     function _distKm(lat1, lng1, lat2, lng2) {
@@ -258,18 +282,79 @@
       return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     }
 
+    function _nearbySearch(params, minRatings, permitirRepetido, callback, tentativa = 0) {
+      service.nearbySearch(params, (results, status) => {
+        if (_overQueryLimit(status) && tentativa < 3) {
+          setTimeout(() => _nearbySearch(params, minRatings, permitirRepetido, callback, tentativa + 1), 450 * (tentativa + 1));
+          return;
+        }
+        callback(_statusOk(status) ? _pickPlace(results, minRatings, permitirRepetido) : null);
+      });
+    }
 
+    function _textSearch(params, minRatings, permitirRepetido, callback, tentativa = 0) {
+      service.textSearch(params, (results, status) => {
+        if (_overQueryLimit(status) && tentativa < 3) {
+          setTimeout(() => _textSearch(params, minRatings, permitirRepetido, callback, tentativa + 1), 450 * (tentativa + 1));
+          return;
+        }
+        callback(_statusOk(status) ? _pickPlace(results, minRatings, permitirRepetido) : null);
+      });
+    }
+
+    function _geocode(address, nomeFallback, callback, tentativa = 0) {
+      if (!address) { callback(null); return; }
+      geocoder.geocode({ address }, (results, status) => {
+        if (_overQueryLimit(status) && tentativa < 3) {
+          setTimeout(() => _geocode(address, nomeFallback, callback, tentativa + 1), 500 * (tentativa + 1));
+          return;
+        }
+        if (status !== "OK" || !results?.[0]?.geometry?.location) { callback(null); return; }
+        const result = results[0];
+        callback({
+          place_id: result.place_id,
+          name: nomeFallback || result.formatted_address || address,
+          formatted_address: result.formatted_address || address,
+          geometry: result.geometry,
+          types: result.types || [],
+        });
+      });
+    }
+
+    function registrarStatus(el, dia, ok, query) {
+      const status = statusPorDia[dia];
+      if (!status) return;
+      if (ok) {
+        status.resolvidos += 1;
+        return;
+      }
+      const nome = (el.querySelector(".ai-place-name")?.textContent || query || "Local").trim();
+      if (nome && !status.pendentes.includes(nome)) status.pendentes.push(nome);
+    }
+
+    function onAllDone() {
+      const totalPorDia = {};
+      Object.entries(statusPorDia).forEach(([dia, status]) => {
+        totalPorDia[dia] = status.total;
+      });
+      window._aiTotalLocaisPorDia = totalPorDia;
+      window._aiMapaStatusPorDia = statusPorDia;
+
+      if ((aiPlaces.length > 0 || Object.keys(statusPorDia).length > 0) && typeof window.renderMapaAiSugestoes === "function") {
+        window.renderMapaAiSugestoes(aiPlaces);
+      }
+    }
 
     // Map common PT activity keywords to a Google Places type for nearbySearch
     const _inferType = window.inferPlaceType;
 
     function applyPlace(place, el, replace, dia, query) {
-      if (!place) return;
+      if (!place) return false;
       if (replace && place.name) {
         const nameEl = el.querySelector(".ai-place-name");
         if (nameEl) nameEl.textContent = place.name;
       }
-      const addr = place.formatted_address || place.vicinity || "";
+      const addr = place.formatted_address || place.vicinity || el.dataset.addr || "";
       if (addr) {
         const addrEl = el.querySelector(".ai-place-addr");
         if (addrEl) { addrEl.innerHTML = `<i class="bi bi-geo-alt me-1"></i>${escapeHtml(addr)}`; addrEl.style.display = ""; }
@@ -303,63 +388,148 @@
       if (mapsLink) {
         mapsLink.href = mapsUrlDetalhes(place.place_id, place.formatted_address || place.name || query);
       }
-      if (place.geometry?.location) {
-        const nomeFinal = replace && place.name
-          ? place.name
-          : (el.querySelector(".ai-place-name")?.textContent || query);
-        aiPlaces.push({ dia, nome: nomeFinal, lat: place.geometry.location.lat(), lng: place.geometry.location.lng() });
-      }
+      if (!place.geometry?.location) return false;
+
+      const nomeFinal = replace && place.name
+        ? place.name
+        : (el.querySelector(".ai-place-name")?.textContent || query);
+      aiPlaces.push({
+        dia,
+        nome: nomeFinal,
+        lat: place.geometry.location.lat(),
+        lng: place.geometry.location.lng(),
+        endereco: addr,
+        ordem: parseInt(el.dataset.mapaOrdem) || 0,
+      });
+      return true;
     }
 
     function runSearches(destLat, destLng) {
-      const destLocation = destLat != null ? new google.maps.LatLng(destLat, destLng) : null;
+      const destLocation = destLat != null && destLng != null ? new google.maps.LatLng(destLat, destLng) : null;
+      const fila = [...items];
+      let ativos = 0;
+      const limiteParalelo = 4;
 
-      items.forEach(el => {
-        const query   = el.getAttribute("data-maps-query");
-        const replace = el.hasAttribute("data-maps-replace");
-        const dia     = parseInt(el.getAttribute("data-dia")) || 0;
-        if (!query) { if (--pending === 0) onAllDone(); return; }
+      function processarItem(el, finished) {
+        const query    = el.getAttribute("data-maps-query");
+        const replace  = el.hasAttribute("data-maps-replace");
+        const dia      = parseInt(el.getAttribute("data-dia")) || 0;
+        const endereco = (el.dataset.addr || "").trim();
+        const nameText = (el.querySelector(".ai-place-name")?.textContent || query || "").trim();
+        const permitirRepetido = !replace;
+        const latSalvaItem = parseFloat(el.dataset.lat || "");
+        const lngSalvaItem = parseFloat(el.dataset.lng || "");
 
-        function done(rawPlace) {
-          let place = rawPlace;
-          if (place && destLat != null && place.geometry?.location) {
-            if (_distKm(destLat, destLng, place.geometry.location.lat(), place.geometry.location.lng()) > 200) {
-              place = null;
-            }
+        if (Number.isFinite(latSalvaItem) && Number.isFinite(lngSalvaItem) && !(latSalvaItem === 0 && lngSalvaItem === 0)) {
+          finalizar({
+            place_id: el.dataset.placeId || "",
+            name: nameText || query || "Local",
+            formatted_address: endereco,
+            geometry: {
+              location: {
+                lat: () => latSalvaItem,
+                lng: () => lngSalvaItem,
+              },
+            },
+            types: [],
+          });
+          return;
+        }
+
+        if (!query) {
+          registrarStatus(el, dia, false, query);
+          finished();
+          return;
+        }
+
+        function validarDestino(rawPlace) {
+          if (!rawPlace) return null;
+          if (destLat != null && destLng != null && rawPlace.geometry?.location) {
+            const dist = _distKm(destLat, destLng, rawPlace.geometry.location.lat(), rawPlace.geometry.location.lng());
+            if (dist > 200) return null;
           }
+          return rawPlace;
+        }
+
+        function finalizar(rawPlace) {
+          const place = validarDestino(rawPlace);
           if (place?.place_id) usedPlaceIds.add(place.place_id);
-          applyPlace(place, el, replace, dia, query);
-          if (--pending === 0) onAllDone();
+          const ok = applyPlace(place, el, replace, dia, query);
+          registrarStatus(el, dia, ok, query);
+          finished();
+        }
+
+        function fallbackSearch(callback) {
+          const queries = _uniqueQueries([
+            endereco && nameText ? `${nameText}, ${endereco}` : "",
+            endereco,
+            [nameText || query, cidade, pais].filter(Boolean).join(", "),
+            [query, cidade, pais].filter(Boolean).join(", "),
+            [endereco, cidade, pais].filter(Boolean).join(", "),
+          ]);
+
+          function tentarTexto(idx) {
+            if (idx >= queries.length) {
+              const enderecoCompleto = [endereco, cidade, pais].filter(Boolean).join(", ");
+              _geocode(enderecoCompleto || queries[0], nameText, callback);
+              return;
+            }
+            const params = { query: queries[idx] };
+            if (destLocation) {
+              params.location = destLocation;
+              params.radius = 100000;
+            }
+            _textSearch(params, 0, permitirRepetido, place => {
+              const validado = validarDestino(place);
+              if (validado) callback(validado);
+              else tentarTexto(idx + 1);
+            });
+          }
+
+          tentarTexto(0);
+        }
+
+        function doneComFallback(rawPlace) {
+          const validado = validarDestino(rawPlace);
+          if (validado) {
+            finalizar(validado);
+            return;
+          }
+          fallbackSearch(finalizar);
         }
 
         if (destLocation && replace) {
-          const nameText = el.querySelector(".ai-place-name")?.textContent || "";
           const type = _inferType(nameText);
-          // Usa a cidade como keyword SOMENTE no item de chegada, para garantir que o destino
-          // específico apareça. Os demais itens buscam só por tipo, trazendo variedade de lugares.
+          // Usa a cidade como keyword somente no item de chegada; os demais usam tipo para variar os lugares.
           const isChegada = /check.in|chegada/i.test(nameText);
           const searchParams = { location: destLocation, radius: 100000, type };
           if (isChegada && cidade) searchParams.keyword = cidade;
-          service.nearbySearch(searchParams, (results, status) => {
-            done(status === google.maps.places.PlacesServiceStatus.OK ? _pickPlace(results, 10) : null);
-          });
+          _nearbySearch(searchParams, 10, permitirRepetido, doneComFallback);
 
         } else if (destLocation) {
-          service.nearbySearch({
-            location: destLocation,
-            radius:   100000,
-            keyword:  query,
-          }, (results, status) => {
-            done(status === google.maps.places.PlacesServiceStatus.OK ? _pickPlace(results, 5) : null);
-          });
+          const geoQuery = [query, cidade, pais].filter(Boolean).join(", ");
+          _textSearch({ query: geoQuery, location: destLocation, radius: 100000 }, 0, permitirRepetido, doneComFallback);
 
         } else {
           const geoQuery = [query, cidade, pais].filter(Boolean).join(", ");
-          service.textSearch({ query: geoQuery }, (results, status) => {
-            done(status === google.maps.places.PlacesServiceStatus.OK ? _pickPlace(results, 10) : null);
+          _textSearch({ query: geoQuery }, 0, permitirRepetido, doneComFallback);
+        }
+      }
+
+      function pump() {
+        while (ativos < limiteParalelo && fila.length > 0) {
+          const el = fila.shift();
+          ativos += 1;
+          processarItem(el, () => {
+            ativos -= 1;
+            pending -= 1;
+            if (pending === 0) onAllDone();
+            else setTimeout(pump, 80);
           });
         }
-      });
+      }
+
+      pump();
     }
 
     // Se o roteiro já tem coordenadas salvas, usa diretamente — sem geocoding
@@ -448,8 +618,12 @@
           ? `background:${bubbleCor}22;color:${bubbleCor};`
           : `background:#e0e7ff;color:#4338ca;`;
         const _endAI = local.endereco ? escapeHtml(local.endereco) : "";
+        const latAI = parseFloat(local.latitude);
+        const lngAI = parseFloat(local.longitude);
+        const temCoordAI = Number.isFinite(latAI) && Number.isFinite(lngAI) && !(latAI === 0 && lngAI === 0);
+        const placeIdAI = local.placeId ? escapeHtml(local.placeId) : "";
         return `<div class="day-item" id="ai-place-${diaIdx}-${curIdx}"
-             data-maps-query="${escapeHtml(query)}" ${dataRep} data-dia="${dia}"${_endAI ? ` data-addr="${_endAI}"` : ""}>
+             data-maps-query="${escapeHtml(query)}" ${dataRep} data-dia="${dia}"${_endAI ? ` data-addr="${_endAI}"` : ""}${temCoordAI ? ` data-lat="${latAI}" data-lng="${lngAI}"` : ""}${placeIdAI ? ` data-place-id="${placeIdAI}"` : ""}>
           <div class="day-bubble" style="${bStyle}">${curIdx + 1}</div>
           <div class="day-main">
             <div class="topline" style="flex-wrap:wrap;gap:6px;">

@@ -1410,6 +1410,12 @@
     });
 
     document.getElementById("btnFinalizarRoteiro")?.addEventListener("click", async () => {
+      if (typeof window.flyguideAiLookupPendente === "function" && window.flyguideAiLookupPendente()) {
+        erroEl.textContent = "Aguarde a preparação dos locais no mapa terminar antes de finalizar.";
+        erroEl.style.display = "";
+        return;
+      }
+
       const btn = document.getElementById("btnFinalizarRoteiro");
       btn.disabled = true;
       btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Finalizando...`;
@@ -1447,7 +1453,7 @@
               observacoes:         document.getElementById("genDescricao")?.value || null,
               idImagem:            imagemSelecionadaFinal?.idImagem ?? (typeof normalizarIdImagem === "function" ? normalizarIdImagem(idImagemFinal) : (idImagemFinal ? parseInt(idImagemFinal) : null)),
               imagemChave:         imagemSelecionadaFinal?.imagemChave || null,
-              sugestoes:           sugestoesRevisadas || aiSugestoes || null,
+              sugestoes:           sugestoesRevisadas || null,
               latDestino:          latGerada,
               lngDestino:          lngGerada,
             }),
