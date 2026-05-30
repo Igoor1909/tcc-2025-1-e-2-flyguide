@@ -162,42 +162,6 @@
     "default":     [{busca:"centro histórico",custo:"Gratuito"},{busca:"ponto turístico",custo:"Gratuito a R$ 40"},{busca:"museu",custo:"R$ 15 a R$ 40"},{busca:"restaurante",custo:"R$ 40 a R$ 100"}],
   };
 
-  function parseCustoMedia(custo) {
-    if (!custo || custo === "—" || /varia/i.test(custo)) return null;
-    if (/gratuito/i.test(custo)) return 0;
-    const nums = (custo.match(/\d[\d.,]*/g) || []).map(n => parseFloat(n.replace(",", ".")));
-    if (!nums.length) return null;
-    return nums.length >= 2 ? (nums[0] + nums[1]) / 2 : nums[0];
-  }
-
-  function calcularTotalSugestoes(dias) {
-    let total = 0;
-    let temValor = false;
-    (dias || []).forEach(d => {
-      locaisDoDia(d).forEach(l => {
-        const local = normalizarLocal(l);
-        const val   = parseCustoMedia(local.custo);
-        if (val !== null) { total += val; temValor = true; }
-      });
-    });
-    return temValor ? total : null;
-  }
-
-  function atualizarOrcamento(roteiro, dias) {
-    const orcEl   = document.getElementById("detalheOrcamento");
-    const labelEl = document.getElementById("detalheOrcamentoLabel");
-    if (!orcEl) return;
-    if (roteiro.orcamento && roteiro.orcamento > 0) {
-      orcEl.textContent  = "R$ " + Number(roteiro.orcamento).toLocaleString("pt-BR", { minimumFractionDigits: 0 });
-      return;
-    }
-    const total = calcularTotalSugestoes(dias);
-    if (total !== null) {
-      orcEl.textContent  = "R$ " + Math.round(total).toLocaleString("pt-BR");
-      if (labelEl) labelEl.textContent = "Estimado por atividade";
-    }
-  }
-
   function normalizarLocal(l) {
     if (!l) return { nome: "", custo: null, _replace: false, _busca: null, _checkin: false, _checkout: false, endereco: null };
     if (typeof l === "string") return { nome: l, custo: null, _replace: false, _busca: null, _checkin: false, _checkout: false, endereco: null };
@@ -825,10 +789,6 @@
           periodoEl.style.display = "none";
         }
       }
-      if (r.orcamento && r.orcamento > 0) {
-        setText("detalheOrcamento", `R$ ${Number(r.orcamento).toLocaleString("pt-BR")}`);
-      }
-
       // Descrição
       if (r.observacoes) {
         document.getElementById("secaoSobre").style.display = "";
@@ -1105,7 +1065,6 @@
 
   function exportarPDF(roteiro, locais) {
     const diasStr = roteiro.diasTotais ? `${roteiro.diasTotais} dia${roteiro.diasTotais > 1 ? "s" : ""}` : "—";
-    const orcStr  = roteiro.orcamento  ? `R$ ${Number(roteiro.orcamento).toLocaleString("pt-BR")}` : null;
     const locStr  = [roteiro.cidade, roteiro.pais].filter(Boolean).join(", ") || "—";
 
     let gruposHtml = "";
@@ -1196,7 +1155,6 @@
     .titulo{font-size:2rem;font-weight:900;color:#0f172a;margin-bottom:10px;}
     .meta{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:8px;font-size:.9rem;color:#475569;align-items:center;}
     .meta .tag{background:#fff7ed;color:#c2410c;border-radius:8px;padding:3px 12px;font-weight:700;font-size:.82rem;}
-    .orc{color:#15803d;font-weight:700;}
     hr{border:none;border-top:1px solid #e2e8f0;margin:20px 0;}
     .secao-titulo{font-size:.82rem;font-weight:800;color:#f97316;text-transform:uppercase;letter-spacing:.07em;margin-bottom:12px;}
     .descricao{font-size:.92rem;color:#475569;line-height:1.7;white-space:pre-wrap;}
@@ -1221,7 +1179,6 @@
     <span>📍 ${locStr}</span>
     <span>🗓 ${diasStr}</span>
     ${roteiro.tipoRoteiro ? `<span class="tag">${roteiro.tipoRoteiro}</span>` : ""}
-    ${orcStr ? `<span class="orc">💰 ${orcStr}</span>` : ""}
   </div>
   ${roteiro.observacoes ? `<hr><div class="secao-titulo">Sobre a Viagem</div><div class="descricao">${roteiro.observacoes}</div>` : ""}
   ${gruposHtml ? `<hr><div class="secao-titulo">Roteiro Dia a Dia</div>${gruposHtml}` : ""}
@@ -1248,7 +1205,6 @@ function abrirModalEdicaoDetalhes(roteiro, locaisIniciais) {
   document.getElementById("detalheEditTitulo").value    = roteiro.titulo || "";
   document.getElementById("detalheEditDuracao").value   = roteiro.diasTotais || "";
   document.getElementById("detalheEditTipo").value      = roteiro.tipoRoteiro || "Cidade";
-  document.getElementById("detalheEditOrcamento").value = roteiro.orcamento || "";
   document.getElementById("detalheEditDesc").value      = roteiro.observacoes || "";
   document.getElementById("detalheEditErro").style.display = "none";
 
@@ -1330,7 +1286,7 @@ function abrirModalEdicaoDetalhes(roteiro, locaisIniciais) {
       statusRoteiro:       roteiro.statusRoteiro || "PLANEJADO",
       visibilidadeRoteiro: isPublico ? PUBLICO : PRIVADO,
       diasTotais:          dias > 0 ? dias : null,
-      orcamento:           parseFloat(document.getElementById("detalheEditOrcamento").value) || null,
+      orcamento:           null,
       observacoes:         document.getElementById("detalheEditDesc").value.trim() || null,
       idImagem:            imagemSelecionada?.idImagem ?? (typeof normalizarIdImagem === "function" ? normalizarIdImagem(idImg) : (idImg ? parseInt(idImg) : null)),
       imagemChave:         imagemSelecionada?.imagemChave || null,

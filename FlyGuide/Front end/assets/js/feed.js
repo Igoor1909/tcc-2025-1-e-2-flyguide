@@ -33,34 +33,10 @@
     return `${formatarDataCurta(dataInicio)} → ${formatarDataCurta(dataFim)}`;
   }
 
-  function estimarOrcamento(r) {
-    if (r.orcamento && r.orcamento > 0) {
-      return `R$ ${Number(r.orcamento).toLocaleString("pt-BR")}`;
-    }
-    if (!Array.isArray(r.sugestoes) || r.sugestoes.length === 0) return "—";
-    let total = 0, temValor = false;
-    r.sugestoes.forEach(d => {
-      const locais = d.periodos
-        ? ["manha","tarde","noite"].flatMap(p => Array.isArray(d.periodos[p]) ? d.periodos[p] : [])
-        : (Array.isArray(d.locais) ? d.locais : []);
-      locais.forEach(l => {
-        const custo = typeof l === "object" ? l.custo : null;
-        if (!custo || /varia/i.test(custo)) return;
-        if (/gratuito/i.test(custo)) { temValor = true; return; }
-        const nums = (custo.match(/\d[\d.,]*/g) || []).map(n => parseFloat(n.replace(",",".")));
-        if (!nums.length) return;
-        total += nums.length >= 2 ? (nums[0] + nums[1]) / 2 : nums[0];
-        temValor = true;
-      });
-    });
-    return temValor ? `~R$ ${Math.round(total).toLocaleString("pt-BR")}` : "—";
-  }
-
   function renderCardFeed(r) {
     const imgUrl  = typeof obterImagemUrlRoteiro === "function" ? obterImagemUrlRoteiro(r) : (r.imagemUrl || IMG_FALLBACK);
     const badge   = badgeClasse[r.tipoRoteiro] || "";
     const dias    = r.diasTotais ? `${r.diasTotais} dia${r.diasTotais > 1 ? "s" : ""}` : "—";
-    const orc     = estimarOrcamento(r);
     const desc    = (r.observacoes || "Sem descrição").substring(0, 120);
     const reticencias = r.observacoes && r.observacoes.length > 120 ? "..." : "";
     const isOwner = userId && String(r.idUsuario) === String(userId);
@@ -281,8 +257,6 @@
   let _premiumChecked    = false;
   let _isPremium         = false;
   let _filtroPais        = null;
-  let _filtroOrcMin      = null;
-  let _filtroOrcMax      = null;
   let _filtroDiasMin     = null;
   let _filtroDiasMax     = null;
   let _filtroAvalMin     = null;
@@ -308,53 +282,42 @@
   }
 
   function _inicializarFiltrosPremium() {
-    const sliderOrcMin  = document.getElementById("filtroOrcMin");
-    const sliderOrcMax  = document.getElementById("filtroOrcMax");
     const sliderDiasMin = document.getElementById("filtroDiasMin");
     const sliderDiasMax = document.getElementById("filtroDiasMax");
     const sliderAval    = document.getElementById("filtroAvaliacao");
     const sliderTotAval = document.getElementById("filtroTotalAval");
     const inputPais     = document.getElementById("filtroPais");
-    if (!sliderOrcMax || sliderOrcMax.dataset.inicializado) return;
-    sliderOrcMax.dataset.inicializado = "1";
+    if (!sliderDiasMax || sliderDiasMax.dataset.inicializado) return;
+    sliderDiasMax.dataset.inicializado = "1";
 
     function atualizarLabels() {
-      const orcMin  = parseInt(sliderOrcMin.value);
-      const orcMax  = parseInt(sliderOrcMax.value);
       const diasMin = parseInt(sliderDiasMin.value);
       const diasMax = parseInt(sliderDiasMax.value);
       const aval    = parseFloat(sliderAval.value);
       const totAval = parseInt(sliderTotAval.value);
 
-      document.getElementById("filtroOrcMinVal").textContent  = `R$ ${orcMin.toLocaleString("pt-BR")}`;
-      document.getElementById("filtroOrcMaxVal").textContent  = orcMax  >= 50000 ? "Sem limite" : `R$ ${orcMax.toLocaleString("pt-BR")}`;
       document.getElementById("filtroDiasMinVal").textContent = `${diasMin} dia${diasMin > 1 ? "s" : ""}`;
       document.getElementById("filtroDiasMaxVal").textContent = diasMax >= 30    ? "Sem limite" : `${diasMax} dia${diasMax > 1 ? "s" : ""}`;
       document.getElementById("filtroAvaliacaoVal").textContent = aval  > 0    ? `${aval.toFixed(1)} ⭐` : "Qualquer";
       document.getElementById("filtroTotalAvalVal").textContent = totAval > 0  ? `${totAval} ou mais` : "Sem filtro";
     }
 
-    [sliderOrcMin, sliderOrcMax, sliderDiasMin, sliderDiasMax, sliderAval, sliderTotAval]
+    [sliderDiasMin, sliderDiasMax, sliderAval, sliderTotAval]
       .forEach(el => el.addEventListener("input", atualizarLabels));
 
     document.getElementById("btnAplicarFiltros")?.addEventListener("click", () => {
-      const orcMin  = parseInt(sliderOrcMin.value);
-      const orcMax  = parseInt(sliderOrcMax.value);
       const diasMin = parseInt(sliderDiasMin.value);
       const diasMax = parseInt(sliderDiasMax.value);
       const aval    = parseFloat(sliderAval.value);
       const totAval = parseInt(sliderTotAval.value);
 
       _filtroPais        = (inputPais?.value || "").trim() || null;
-      _filtroOrcMin      = orcMin  > 0     ? orcMin  : null;
-      _filtroOrcMax      = orcMax  < 50000 ? orcMax  : null;
       _filtroDiasMin     = diasMin > 1     ? diasMin : null;
       _filtroDiasMax     = diasMax < 30    ? diasMax : null;
       _filtroAvalMin     = aval    > 0     ? aval    : null;
       _filtroTotalAvalMin = totAval > 0    ? totAval : null;
 
-      const temFiltro = _filtroPais || _filtroOrcMin != null || _filtroOrcMax != null
-        || _filtroDiasMin != null || _filtroDiasMax != null
+      const temFiltro = _filtroPais || _filtroDiasMin != null || _filtroDiasMax != null
         || _filtroAvalMin != null || _filtroTotalAvalMin != null;
       const aviso = document.getElementById("filtrosAtivosAviso");
       if (aviso) aviso.style.display = temFiltro ? "" : "none";
@@ -363,14 +326,12 @@
     });
 
     document.getElementById("btnLimparFiltros")?.addEventListener("click", () => {
-      sliderOrcMin.value  = 0;
-      sliderOrcMax.value  = 50000;
       sliderDiasMin.value = 1;
       sliderDiasMax.value = 30;
       sliderAval.value    = 0;
       sliderTotAval.value = 0;
       if (inputPais) inputPais.value = "";
-      _filtroPais = _filtroOrcMin = _filtroOrcMax = null;
+      _filtroPais = null;
       _filtroDiasMin = _filtroDiasMax = _filtroAvalMin = _filtroTotalAvalMin = null;
       atualizarLabels();
       const aviso = document.getElementById("filtrosAtivosAviso");
@@ -398,13 +359,11 @@
         || (r.observacoes|| "").toLowerCase().includes(busca);
       const matchTipo     = !tipo || r.tipoRoteiro === tipo;
       const matchPais     = !_filtroPais || (r.pais || "").toLowerCase().includes(_filtroPais.toLowerCase());
-      const matchOrcMin   = _filtroOrcMin      == null || (r.orcamento     != null && Number(r.orcamento)     >= _filtroOrcMin);
-      const matchOrcMax   = _filtroOrcMax      == null || (r.orcamento     != null && Number(r.orcamento)     <= _filtroOrcMax);
       const matchDiasMin  = _filtroDiasMin     == null || (r.diasTotais    != null && Number(r.diasTotais)    >= _filtroDiasMin);
       const matchDiasMax  = _filtroDiasMax     == null || (r.diasTotais    != null && Number(r.diasTotais)    <= _filtroDiasMax);
       const matchAval     = _filtroAvalMin     == null || (Number(r.mediaAvaliacao || 0) >= _filtroAvalMin);
       const matchTotAval  = _filtroTotalAvalMin == null || (Number(r.totalAvaliacoes || 0) >= _filtroTotalAvalMin);
-      return matchBusca && matchTipo && matchPais && matchOrcMin && matchOrcMax && matchDiasMin && matchDiasMax && matchAval && matchTotAval;
+      return matchBusca && matchTipo && matchPais && matchDiasMin && matchDiasMax && matchAval && matchTotAval;
     });
     paginaFeed = 0;
     renderFeed(roteirosVisiveis);
@@ -429,4 +388,3 @@
       document.getElementById("feedVazio").style.display   = "";
     });
 })();
-

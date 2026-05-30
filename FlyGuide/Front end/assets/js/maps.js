@@ -1230,16 +1230,22 @@ const URL_API_BASE  = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app
     // ── Filtros de dia ─────────────────────────────────────────────
     const filtrosEl = document.getElementById("filtrosDiasMapa");
     if (filtrosEl) {
+      const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+      const chipBg = isDark ? "#1e293b" : "#fff";
+      const chipMuted = isDark ? "#cbd5e1" : "#64748b";
+      const chipBorder = isDark ? "#334155" : "#e2e8f0";
       filtrosEl.innerHTML = [
-        `<button class="btn btn-sm ${diaFiltradoMapa === null ? "btn-primary-orange" : "btn-outline-gray"}"
+        `<button class="btn btn-sm"
+           style="padding:4px 14px;border-radius:999px;border:1px solid ${diaFiltradoMapa === null ? "#f97316" : chipBorder};font-size:.78rem;font-weight:700;cursor:pointer;white-space:nowrap;background:${diaFiltradoMapa === null ? "#f97316" : chipBg};color:${diaFiltradoMapa === null ? "#fff" : chipMuted};"
            data-dia-mapa="todos">Todos</button>`,
         ...grupos.map(g => {
           const cor = corPorDia[g.dia];
           const ativo = diaFiltradoMapa === g.dia;
-          return `<button class="btn btn-sm btn-outline-gray"
+          const qtd = g.itens.filter(l => l.latitude && l.longitude).length;
+          return `<button class="btn btn-sm"
                     data-dia-mapa="${g.dia}"
-                    style="border-color:${cor};color:${cor};${ativo ? `background:${cor}22;font-weight:700;` : ""}">
-                    <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${cor};margin-right:4px;"></span>Dia ${g.dia}
+                    style="padding:4px 14px;border-radius:999px;border:1px solid ${cor};font-size:.78rem;font-weight:700;cursor:pointer;white-space:nowrap;background:${ativo ? cor : chipBg};color:${ativo ? "#fff" : cor};">
+                    <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${ativo ? "#fff" : cor};margin-right:4px;"></span>Dia ${g.dia} - ${qtd} ${qtd === 1 ? "local" : "locais"}
                   </button>`;
         }),
       ].join("");
@@ -1256,15 +1262,8 @@ const URL_API_BASE  = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app
     // ── Legenda ────────────────────────────────────────────────────
     const legendaEl = document.getElementById("legendaMapa");
     if (legendaEl) {
-      legendaEl.innerHTML = grupos.map(g => {
-        const cor = corPorDia[g.dia];
-        const qtd = g.itens.filter(l => l.latitude && l.longitude).length;
-        return `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;background:${cor}1a;border:1px solid ${cor}44;">
-          <span style="width:9px;height:9px;border-radius:50%;background:${cor};display:inline-block;"></span>
-          <span style="font-size:.78rem;font-weight:700;color:${cor};">Dia ${g.dia}</span>
-          <span style="font-size:.75rem;color:#64748b;">${qtd !== 1 ? `${qtd} locais` : "1 local"}</span>
-        </span>`;
-      }).join("");
+      legendaEl.innerHTML = "";
+      legendaEl.style.display = "none";
     }
 
     // ── Filtra locais a exibir ─────────────────────────────────────
@@ -2014,16 +2013,22 @@ const URL_API_BASE  = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app
     }
 
     // Filtros
+    const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+    const chipBg = isDark ? "#1e293b" : "#fff";
+    const chipMuted = isDark ? "#cbd5e1" : "#64748b";
+    const chipBorder = isDark ? "#334155" : "#e2e8f0";
+
     filtrosEl.style.display = "flex";
     filtrosEl.innerHTML = [
-      `<button style="padding:4px 14px;border-radius:999px;border:1px solid #e2e8f0;font-size:.78rem;font-weight:700;cursor:pointer;background:${_diaFiltrado === null ? "#f97316" : "#fff"};color:${_diaFiltrado === null ? "#fff" : "#64748b"};"
+      `<button style="padding:4px 14px;border-radius:999px;border:1px solid ${chipBorder};font-size:.78rem;font-weight:700;cursor:pointer;white-space:nowrap;background:${_diaFiltrado === null ? "#f97316" : chipBg};color:${_diaFiltrado === null ? "#fff" : chipMuted};"
          data-dia-detalhe="todos">Todos</button>`,
       ..._diasUnicos.map(dia => {
         const cor   = _corPorDia[dia];
         const ativo = _diaFiltrado === dia;
-        return `<button style="padding:4px 14px;border-radius:999px;border:1px solid ${cor};font-size:.78rem;font-weight:700;cursor:pointer;background:${ativo ? cor : "#fff"};color:${ativo ? "#fff" : cor};"
+        const qtd = _locaisDetalhe.filter(l => (l.dia || 0) === dia && l.latitude && l.longitude).length;
+        return `<button style="padding:4px 14px;border-radius:999px;border:1px solid ${cor};font-size:.78rem;font-weight:700;cursor:pointer;white-space:nowrap;background:${ativo ? cor : chipBg};color:${ativo ? "#fff" : cor};"
                    data-dia-detalhe="${dia}">
-                  <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${ativo ? "#fff" : cor};margin-right:4px;vertical-align:middle;"></span>Dia ${dia}
+                  <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${ativo ? "#fff" : cor};margin-right:4px;vertical-align:middle;"></span>Dia ${dia} - ${qtd} ${qtd === 1 ? "local" : "locais"}
                 </button>`;
       }),
     ].join("");
@@ -2037,17 +2042,8 @@ const URL_API_BASE  = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app
       });
     });
 
-    // Legenda
-    legendaEl.style.display = "flex";
-    legendaEl.innerHTML = _diasUnicos.map(dia => {
-      const cor = _corPorDia[dia];
-      const qtd = _locaisDetalhe.filter(l => (l.dia || 0) === dia && l.latitude && l.longitude).length;
-      return `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;background:${cor}1a;border:1px solid ${cor}44;">
-        <span style="width:9px;height:9px;border-radius:50%;background:${cor};display:inline-block;flex-shrink:0;"></span>
-        <span style="font-size:.78rem;font-weight:700;color:${cor};">Dia ${dia}</span>
-        <span style="font-size:.75rem;color:#64748b;">${qtd !== 1 ? `${qtd} locais` : "1 local"}</span>
-      </span>`;
-    }).join("");
+    legendaEl.style.display = "none";
+    legendaEl.innerHTML = "";
   }
 
   // Mapa para roteiros com sugestões da IA (sem locais reais cadastrados)
@@ -2184,16 +2180,24 @@ const URL_API_BASE  = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app
         return;
       }
 
+      const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+      const chipBg = isDark ? "#1e293b" : "#fff";
+      const chipMuted = isDark ? "#cbd5e1" : "#64748b";
+      const chipBorder = isDark ? "#334155" : "#e2e8f0";
+
       filtrosEl.style.display = "flex";
       filtrosEl.innerHTML = [
-        `<button style="padding:4px 14px;border-radius:999px;border:1px solid #e2e8f0;font-size:.78rem;font-weight:700;cursor:pointer;background:${diaFiltrado === null ? "#f97316" : "#fff"};color:${diaFiltrado === null ? "#fff" : "#64748b"};"
+        `<button style="padding:4px 14px;border-radius:999px;border:1px solid ${chipBorder};font-size:.78rem;font-weight:700;cursor:pointer;white-space:nowrap;background:${diaFiltrado === null ? "#f97316" : chipBg};color:${diaFiltrado === null ? "#fff" : chipMuted};"
            data-ai-dia="todos">Todos</button>`,
         ...diasUnicos.map(dia => {
           const cor   = corPorDia[dia];
           const ativo = diaFiltrado === dia;
-          return `<button style="padding:4px 14px;border-radius:999px;border:1px solid ${cor};font-size:.78rem;font-weight:700;cursor:pointer;background:${ativo ? cor : "#fff"};color:${ativo ? "#fff" : cor};"
+          const qtd = (window._aiTotalLocaisPorDia && window._aiTotalLocaisPorDia[dia] != null)
+            ? window._aiTotalLocaisPorDia[dia]
+            : places.filter(p => p.dia === dia).length;
+          return `<button style="padding:4px 14px;border-radius:999px;border:1px solid ${cor};font-size:.78rem;font-weight:700;cursor:pointer;white-space:nowrap;background:${ativo ? cor : chipBg};color:${ativo ? "#fff" : cor};"
                      data-ai-dia="${dia}">
-                    <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${ativo ? "#fff" : cor};margin-right:4px;vertical-align:middle;"></span>Dia ${dia}
+                    <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${ativo ? "#fff" : cor};margin-right:4px;vertical-align:middle;"></span>Dia ${dia} - ${qtd} ${qtd === 1 ? "local" : "locais"}
                   </button>`;
         }),
       ].join("");
@@ -2207,18 +2211,8 @@ const URL_API_BASE  = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app
         });
       });
 
-      legendaEl.style.display = "flex";
-      legendaEl.innerHTML = diasUnicos.map(dia => {
-        const cor = corPorDia[dia];
-        const qtd = (window._aiTotalLocaisPorDia && window._aiTotalLocaisPorDia[dia] != null)
-          ? window._aiTotalLocaisPorDia[dia]
-          : places.filter(p => p.dia === dia).length;
-        return `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;background:${cor}1a;border:1px solid ${cor}44;">
-          <span style="width:9px;height:9px;border-radius:50%;background:${cor};display:inline-block;flex-shrink:0;"></span>
-          <span style="font-size:.78rem;font-weight:700;color:${cor};">Dia ${dia}</span>
-          <span style="font-size:.75rem;color:#64748b;">${qtd !== 1 ? `${qtd} locais` : "1 local"}</span>
-        </span>`;
-      }).join("");
+      legendaEl.style.display = "none";
+      legendaEl.innerHTML = "";
     }
 
     renderControles();

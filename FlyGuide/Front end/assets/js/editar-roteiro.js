@@ -88,7 +88,7 @@
       dataFim:             roteiro.dataFim || null,
       observacoes:         descricao || null,
       diasTotais:          roteiro.diasTotais || null,
-      orcamento:           roteiro.orcamento || null,
+      orcamento:           null,
       idImagem:            idImagem,
       imagemChave:         imagemSelecionada?.imagemChave || roteiro.imagemChave || null,
     };

@@ -21,6 +21,16 @@
     "Luxo": "badge-yellow", "Cidade": "",
   };
 
+  function normalizarVisibilidadeRoteiro(valor) {
+    const texto = String(valor || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim()
+      .toLowerCase();
+    if (texto === "privado" || texto === "private" || texto === "privada") return PRIVADO;
+    return PUBLICO;
+  }
+
   function formatarDataCurta(dataStr) {
     if (!dataStr) return EMPTY_TEXT;
     const [y, m, d] = dataStr.split("-");
@@ -364,41 +374,14 @@
       });
     }
 
-    function estimarOrcamento(r) {
-      if (r.orcamento && r.orcamento > 0) {
-        return `R$ ${Number(r.orcamento).toLocaleString("pt-BR")}`;
-      }
-      if (!Array.isArray(r.sugestoes) || r.sugestoes.length === 0) return EMPTY_TEXT;
-      let total = 0, temValor = false;
-      r.sugestoes.forEach(d => {
-        const locais = d.periodos
-          ? ["manha","tarde","noite"].flatMap(p => Array.isArray(d.periodos[p]) ? d.periodos[p] : [])
-          : (Array.isArray(d.locais) ? d.locais : []);
-        locais.forEach(l => {
-          const custo = typeof l === "object" ? l.custo : null;
-          if (!custo || /varia/i.test(custo)) return;
-          if (/gratuito/i.test(custo)) { temValor = true; return; }
-          const nums = (custo.match(/\d[\d.,]*/g) || []).map(n => parseFloat(n.replace(",",".")));
-          if (!nums.length) return;
-          total += nums.length >= 2 ? (nums[0] + nums[1]) / 2 : nums[0];
-          temValor = true;
-        });
-      });
-      return temValor ? `~R$ ${Math.round(total).toLocaleString("pt-BR")}` : EMPTY_TEXT;
-    }
-
     function renderCard(r) {
       const imgUrl  = typeof obterImagemUrlRoteiro === "function" ? obterImagemUrlRoteiro(r) : (r.imagemUrl || IMG_FALLBACK);
       const badge   = badgeClasse[r.tipoRoteiro] || "";
       const dias    = r.diasTotais ? `${r.diasTotais} dia${r.diasTotais > 1 ? "s" : ""}` : EMPTY_TEXT;
-      const orc     = estimarOrcamento(r);
-      const visIcon = r.visibilidadeRoteiro === PUBLICO
+      const visibilidade = normalizarVisibilidadeRoteiro(r.visibilidadeRoteiro);
+      const visIcon = visibilidade === PUBLICO
         ? `<i class="bi bi-globe" title="${PUBLICO}"></i>`
         : `<i class="bi bi-lock-fill" title="${PRIVADO}"></i>`;
-
-      const orcHtml = orc !== EMPTY_TEXT
-        ? `<div class="d-flex align-items-center gap-1 money"><i class="bi bi-currency-dollar"></i><span>${orc}</span></div>`
-        : "";
 
       const bottomHtml = r.statusRoteiro === "CONCLUIDO"
         ? `<button class="btn fw-bold w-100"
@@ -416,7 +399,7 @@
       return `
         <div class="col-12 col-md-6 col-xl-4"
              data-roteiro-id="${r.idRoteiro}"
-             data-vis="${r.visibilidadeRoteiro || PUBLICO}">
+             data-vis="${visibilidade}">
           <div class="trip-card h-100" onclick="if(!event.target.closest('button,a')){window.location.href='detalhes-roteiro.html?id=${r.idRoteiro}'}">
             <div class="trip-cover" style="background-image:url('${imgUrl}');">
               <span class="badge-pill ${badge}">${r.tipoRoteiro || "Viagem"}</span>
@@ -446,7 +429,6 @@
                 <div class="d-flex align-items-center gap-2">
                   <i class="bi bi-calendar-event"></i><span>${dias}</span>
                 </div>
-                ${orcHtml}
                 <div class="d-flex align-items-center gap-2" style="color:#64748b;">${visIcon}</div>
               </div>
               <hr style="margin:10px 0;border-color:#f1f5f9;opacity:1;">
@@ -534,6 +516,25 @@
       loading.style.display = "none";
 
       if (roteiros.length === 0) {
+        const emptyTitulo = document.getElementById("emptyRoteirosTitulo");
+        const emptyTexto  = document.getElementById("emptyRoteirosTexto");
+        const mensagens = {
+          [PUBLICO]: {
+            titulo: "Nenhum roteiro público encontrado",
+            texto:  "Marque algum roteiro como público para ele aparecer aqui.",
+          },
+          [PRIVADO]: {
+            titulo: "Nenhum roteiro privado encontrado",
+            texto:  "Roteiros privados ficam visíveis apenas para você.",
+          },
+          todos: {
+            titulo: "Nenhum roteiro criado ainda",
+            texto:  "Crie seu primeiro roteiro e comece a explorar o mundo!",
+          },
+        };
+        const msg = mensagens[filtroAtivo] || mensagens.todos;
+        if (emptyTitulo) emptyTitulo.textContent = msg.titulo;
+        if (emptyTexto)  emptyTexto.textContent  = msg.texto;
         lista.style.display = "none"; empty.style.display = "";
         document.getElementById("mrPaginacao")?.remove();
         const pt = document.getElementById("mrPaginacaoTopo"); if (pt) pt.innerHTML = "";
@@ -719,7 +720,6 @@
       document.getElementById("editTitulo").value       = r.titulo || "";
       document.getElementById("editDuracao").value      = r.diasTotais || "";
       document.getElementById("editTipo").value         = r.tipoRoteiro || "Cidade";
-      document.getElementById("editOrcamento").value    = r.orcamento || "";
       document.getElementById("editDescricao").value    = r.observacoes || "";
       document.getElementById("editImagem").value       = r.idImagem || "";
       const isPublico = r.visibilidadeRoteiro === PUBLICO;
@@ -745,8 +745,8 @@
     function atualizarContadores(roteiros) {
       const s = id => document.getElementById(id);
       if (s("cntTodos"))    s("cntTodos").textContent    = roteiros.length;
-      if (s("cntPublicos")) s("cntPublicos").textContent = roteiros.filter(r => r.visibilidadeRoteiro === PUBLICO).length;
-      if (s("cntPrivados")) s("cntPrivados").textContent = roteiros.filter(r => r.visibilidadeRoteiro === PRIVADO).length;
+      if (s("cntPublicos")) s("cntPublicos").textContent = roteiros.filter(r => normalizarVisibilidadeRoteiro(r.visibilidadeRoteiro) === PUBLICO).length;
+      if (s("cntPrivados")) s("cntPrivados").textContent = roteiros.filter(r => normalizarVisibilidadeRoteiro(r.visibilidadeRoteiro) === PRIVADO).length;
     }
 
     let todosRascunhos = [];
@@ -838,7 +838,7 @@
 
       if (listaEl)     listaEl.style.display     = "";
       if (rascunhosEl) rascunhosEl.style.display = "none";
-      renderLista(filtro === "todos" ? todosRoteiros : todosRoteiros.filter(r => r.visibilidadeRoteiro === filtro));
+      renderLista(filtro === "todos" ? todosRoteiros : todosRoteiros.filter(r => normalizarVisibilidadeRoteiro(r.visibilidadeRoteiro) === filtro));
     }
 
     document.querySelectorAll("[data-filtro]").forEach(b =>
@@ -909,7 +909,7 @@
         statusRoteiro:       roteiroParaEditar.statusRoteiro || "PLANEJADO",
         visibilidadeRoteiro: isPublico ? PUBLICO : PRIVADO,
         diasTotais:  duracao,
-        orcamento:   parseFloat(document.getElementById("editOrcamento").value) || null,
+        orcamento:   null,
         observacoes: document.getElementById("editDescricao").value.trim() || null,
         idImagem:    imagemSelecionada?.idImagem ?? (typeof normalizarIdImagem === "function" ? normalizarIdImagem(idImagem) : (idImagem ? parseInt(idImagem) : null)),
         imagemChave: imagemSelecionada?.imagemChave || null,
@@ -1052,7 +1052,7 @@
     let roteiroIdCriado = null;
     let destinoAbertoNoResumo = null;
     let cidadeGerada = "", paisGerado = "", estadoGerado = "", estadoGeradoCode = "", codigoPaisGerado = "", diasGerados = 0, tipoGerado = "Cidade";
-    let orcamentoGerado = null, aiSugestoes = null, latGerada = null, lngGerada = null, destinoPOIGerado = false, ruaGerada = null;
+    let aiSugestoes = null, latGerada = null, lngGerada = null, destinoPOIGerado = false, ruaGerada = null;
     let destinoPlaceIdGerado = null, destinoEnderecoGerado = null;
     let autocompleteCidadeGen = null;
 
@@ -1356,7 +1356,6 @@
     }
 
     async function popularPasso2(data) {
-      orcamentoGerado = data.orcamentoEstimado || 0;
       // Deduplica antes de armazenar: nenhum local repete entre dias/períodos
       aiSugestoes = data.sugestoes
         ? _deduplicarSugestoes(data.sugestoes, destinoPOIGerado, cidadeGerada, diasGerados)
@@ -1444,7 +1443,7 @@
               statusRoteiro:       "PLANEJADO",
               visibilidadeRoteiro: isPublicFinal ? PUBLICO : "Privado",
               diasTotais:          diasGerados,
-              orcamento:           orcamentoGerado || null,
+              orcamento:           null,
               observacoes:         document.getElementById("genDescricao")?.value || null,
               idImagem:            imagemSelecionadaFinal?.idImagem ?? (typeof normalizarIdImagem === "function" ? normalizarIdImagem(idImagemFinal) : (idImagemFinal ? parseInt(idImagemFinal) : null)),
               imagemChave:         imagemSelecionadaFinal?.imagemChave || null,
@@ -1503,7 +1502,7 @@
 
       btn.disabled = true;
       btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>Verificando...`;
-      const textoParaValidar = [titulo, descricao].filter(Boolean).join(" ");
+      const textoParaValidar = titulo;
       try {
         const resVal = await authFetch(`${URL_API_BASE}/validar/texto`, {
           method: "POST",
@@ -1513,7 +1512,7 @@
         if (resVal.ok) {
           const val = await resVal.json();
           if (!val.valido) {
-            erroEl.textContent = "O título ou descrição contém linguagem inapropriada. Por favor, revise.";
+            erroEl.textContent = "O título contém linguagem inapropriada. Por favor, revise.";
             erroEl.style.display = "";
             btn.disabled = false;
             btn.innerHTML = `Salvar Roteiro <i class="bi bi-check-lg ms-1"></i>`;
@@ -1535,7 +1534,7 @@
         statusRoteiro:       modoEdicao ? "PLANEJADO" : "RASCUNHO",
         visibilidadeRoteiro: modoEdicao ? (isPublic ? PUBLICO : "Privado") : "Privado",
         diasTotais:          diasGerados,
-        orcamento:           orcamentoGerado || null,
+        orcamento:           null,
         observacoes:         descricao || null,
         idImagem:            imagemSelecionada?.idImagem ?? (typeof normalizarIdImagem === "function" ? normalizarIdImagem(idImagem) : (idImagem ? parseInt(idImagem) : null)),
         imagemChave:         imagemSelecionada?.imagemChave || null,

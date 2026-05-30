@@ -922,7 +922,7 @@ async function _salvarSugestoesAI() {
       dataFim:             r.dataFim,
       observacoes:         r.observacoes,
       diasTotais:          r.diasTotais,
-      orcamento:           r.orcamento,
+      orcamento:           null,
       sugestoes:           sugestoesEditadas
     };
 
@@ -1350,6 +1350,5 @@ document.addEventListener("click", async function(e) {
     btn.innerHTML = '<i class="bi bi-plus-lg me-1"></i>Adicionar Local ao Roteiro';
   }
 });
-
 
 

@@ -139,8 +139,12 @@
         <!-- Filtros -->
         <div class="mt-4 d-flex flex-wrap gap-2" id="filtrosRoteiros">
           <button class="btn btn-outline-soft rounded-pill fw-bold active-filter" data-filtro="todos">Todos (<span id="cntTodos">0</span>)</button>
-          <button class="btn btn-outline-soft rounded-pill fw-bold" data-filtro="Público">Públicos (<span id="cntPublicos">0</span>)</button>
-          <button class="btn btn-outline-soft rounded-pill fw-bold" data-filtro="Privado">Privados (<span id="cntPrivados">0</span>)</button>
+          <button class="btn btn-outline-soft rounded-pill fw-bold" data-filtro="Público">
+            <i class="bi bi-globe2 me-1"></i>Roteiros públicos (<span id="cntPublicos">0</span>)
+          </button>
+          <button class="btn btn-outline-soft rounded-pill fw-bold" data-filtro="Privado">
+            <i class="bi bi-lock-fill me-1"></i>Roteiros privados (<span id="cntPrivados">0</span>)
+          </button>
           <button class="btn btn-outline-soft rounded-pill fw-bold" data-filtro="rascunhos" id="btnFiltroRascunhos" style="display:none;">
             <i class="bi bi-bookmark me-1"></i>Rascunhos (<span id="cntRascunhos">0</span>)
           </button>
@@ -155,8 +159,8 @@
         <!-- Vazio -->
         <div id="emptyRoteiros" class="text-center py-5" style="display:none;">
           <i class="bi bi-map" style="font-size:3rem; color:#cbd5e1;"></i>
-          <div class="fw-bold mt-3" style="color:#64748b;">Nenhum roteiro criado ainda</div>
-          <div class="small-muted mt-1">Crie seu primeiro roteiro e comece a explorar o mundo!</div>
+          <div class="fw-bold mt-3" id="emptyRoteirosTitulo" style="color:#64748b;">Nenhum roteiro criado ainda</div>
+          <div class="small-muted mt-1" id="emptyRoteirosTexto">Crie seu primeiro roteiro e comece a explorar o mundo!</div>
           <a href="criar-roteiro.html" class="btn btn-primary-orange mt-4"><i class="bi bi-plus-lg me-2"></i>Criar Roteiro</a>
         </div>
 

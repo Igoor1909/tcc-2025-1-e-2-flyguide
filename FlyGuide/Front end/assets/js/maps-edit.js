@@ -1529,12 +1529,18 @@ function _renderMiniMapaPasso3(lista) {
   }
 
   function _renderControles() {
+    const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+    const chipBg = isDark ? "#1e293b" : "#fff";
+    const chipMuted = isDark ? "#cbd5e1" : "#64748b";
+    const chipBorder = isDark ? "#334155" : "#e2e8f0";
+
     filtrosEl.innerHTML = [
-      `<button style="padding:4px 14px;border-radius:999px;border:1px solid #e2e8f0;font-size:.78rem;font-weight:700;cursor:pointer;background:${diaFiltrado === null ? "#f97316" : "#fff"};color:${diaFiltrado === null ? "#fff" : "#64748b"};" data-p3-dia="todos">Todos</button>`,
+      `<button style="padding:4px 14px;border-radius:999px;border:1px solid ${chipBorder};font-size:.78rem;font-weight:700;cursor:pointer;white-space:nowrap;background:${diaFiltrado === null ? "#f97316" : chipBg};color:${diaFiltrado === null ? "#fff" : chipMuted};" data-p3-dia="todos">Todos</button>`,
       ...diasUnicos.map(d => {
         const cor = corPorDia[d], ativo = diaFiltrado === d;
-        return `<button style="padding:4px 14px;border-radius:999px;border:1px solid ${cor};font-size:.78rem;font-weight:700;cursor:pointer;background:${ativo ? cor : "#fff"};color:${ativo ? "#fff" : cor};" data-p3-dia="${d}">
-          <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${ativo ? "#fff" : cor};margin-right:4px;vertical-align:middle;"></span>Dia ${d}
+        const qtd = (pontosPorDia[d] || []).length;
+        return `<button style="padding:4px 14px;border-radius:999px;border:1px solid ${cor};font-size:.78rem;font-weight:700;cursor:pointer;white-space:nowrap;background:${ativo ? cor : chipBg};color:${ativo ? "#fff" : cor};" data-p3-dia="${d}">
+          <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${ativo ? "#fff" : cor};margin-right:4px;vertical-align:middle;"></span>Dia ${d} - ${qtd} ${qtd === 1 ? "local" : "locais"}
         </button>`;
       }),
     ].join("");
@@ -1545,14 +1551,8 @@ function _renderMiniMapaPasso3(lista) {
         _renderControles(); _renderMapa();
       });
     });
-    legendaEl.innerHTML = diasUnicos.map(d => {
-      const cor = corPorDia[d], qtd = (pontosPorDia[d] || []).length;
-      return `<span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;background:${cor}1a;border:1px solid ${cor}44;">
-        <span style="width:9px;height:9px;border-radius:50%;background:${cor};display:inline-block;"></span>
-        <span style="font-size:.78rem;font-weight:700;color:${cor};">Dia ${d}</span>
-        <span style="font-size:.75rem;color:#64748b;">${qtd} ${qtd === 1 ? "local" : "locais"}</span>
-      </span>`;
-    }).join("");
+    legendaEl.innerHTML = "";
+    legendaEl.style.display = "none";
   }
 
   _renderControles();
@@ -1987,7 +1987,7 @@ async function _salvarOrdemSilencioso() {
         dataFim:             r.dataFim,
         observacoes:         r.observacoes,
         diasTotais:          r.diasTotais,
-        orcamento:           r.orcamento,
+        orcamento:           null,
         sugestoes:           sugestoesEditadas,
       }),
     });
@@ -2016,7 +2016,7 @@ async function _salvarSugestoesAIEdit() {
       dataFim:             r.dataFim,
       observacoes:         r.observacoes,
       diasTotais:          r.diasTotais,
-      orcamento:           r.orcamento,
+      orcamento:           null,
       sugestoes:           sugestoesEditadas,
     };
 
