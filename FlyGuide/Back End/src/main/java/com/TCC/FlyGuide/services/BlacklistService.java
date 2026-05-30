@@ -15,7 +15,8 @@ public class BlacklistService {
 
         // ─ genitália masculina ───────────────────────────────────────────────
         "pinto", "pintos", "pintao",
-        "piroca", "pirocao", "pirocuda",
+        "pica", "pika", "pikka", "picca", "picao", "picona", "picudo",
+        "piroca", "piroka", "pirocao", "pirokao", "pirocuda",
         "rola", "rolao",
         "cacete", "cacetada", "cacetao",
         "caralho", "caralhao",
@@ -30,13 +31,16 @@ public class BlacklistService {
         "broqueta", "broxa",
 
         // ─ genitália feminina ────────────────────────────────────────────────
-        "buceta", "boceta", "busseta", "bucetona", "bocetao",
+        "buceta", "bucetinha", "bucetona", "bucetao",
+        "boceta", "bocetinha", "bocetao",
+        "busseta", "buseta", "bct",
         "xota", "xotinha", "xotao",
         "xoxota", "xoxotinha",
-        "xereca", "xerecao",
-        "xana",
-        "pepeca",
-        "xibiu",
+        "xereca", "xereka", "xhereca", "xhereka", "xerequinha", "xerecao",
+        "chereca", "chereka", "shereca", "shereka",
+        "xana", "xaninha",
+        "pepeca", "pepeka",
+        "xibiu", "xibio",
         "grelo",
         "racha", "rachada",
         "vagina",
@@ -50,7 +54,8 @@ public class BlacklistService {
         "anus",
 
         // ─ ato sexual ────────────────────────────────────────────────────────
-        "foda", "fode", "foder", "fodido", "fodida", "fodasse", "fodendo", "fodao",
+        "foda", "fode", "foder", "fodido", "fodida", "fodasse", "foda-se", "fodase", "fodendo", "fodao",
+        "fude", "fuder", "fudido", "fudida", "fudendo", "fudasse", "fudase",
         "trepar", "trepando", "trepada",
         "transar", "transa", "transando",
         "meter", "metendo",
@@ -60,11 +65,11 @@ public class BlacklistService {
         "chupa", "chupar",         // sentido vulgar
         "mamar", "mamada",
         "gozar", "gozando", "gozo", "gozada",
-        "boquete",
-        "punheta", "punheteiro", "punhetando",
-        "siririca", "siriricar",
+        "boquete", "boquetinho", "boquetao",
+        "punheta", "punheteiro", "punhetando", "punhetinha",
+        "siririca", "siriricar", "siririqueira",
         "sexoanal", "sexooral",
-        "tesao",
+        "tesao", "tesudo", "tesuda",
         "sacanagem", "sacana",
         "libertino", "libertina",
         "ninfomaniaca",
@@ -72,17 +77,17 @@ public class BlacklistService {
         "pervertido", "pervertida",
         "depravado", "depravada",
         "pornô", "porno",
-        "puteiro",
+        "puteiro", "pornografia", "pornografico", "pornografica",
 
         // ─ puta / prostituição ───────────────────────────────────────────────
-        "puta", "putas", "putaria", "putinha", "putao",
+        "puta", "putas", "putaria", "putinha", "putao", "putona", "puto",
         "prostituta", "meretriz",
         "piranha", "piranhas",
         "piriguete", "piriguetes",
         "galinha",                 // gíria ofensiva
 
         // ─ porra / merda / bosta / cagar ─────────────────────────────────────
-        "porra", "porrada", "porras",
+        "porra", "porrada", "porras", "poha", "porrinha",
         "merda", "merdas", "merdinha",
         "bosta", "bostas", "bostinha",
         "cagar", "cagando", "cagada", "cagao",
@@ -90,7 +95,7 @@ public class BlacklistService {
         "peido", "peidar",
 
         // ─ viado / homofobia ─────────────────────────────────────────────────
-        "viado", "viadao", "viadinho",
+        "viado", "viadao", "viadinho", "viadagem",
         "veado",                   // outra grafia
         "baitola",
         "boiola",
@@ -99,7 +104,7 @@ public class BlacklistService {
         "paneleiro",
 
         // ─ ofensas gerais ────────────────────────────────────────────────────
-        "arrombado", "arrombada", "arromba",
+        "arrombado", "arrombada", "arromba", "arrombadao",
         "escroto", "escrota",
         "idiota", "idiotas",
         "imbecil", "imbecis",
@@ -128,7 +133,7 @@ public class BlacklistService {
         "cocaina", "maconha", "heroina", "crack", "lança",
 
         // ─ inglês ────────────────────────────────────────────────────────────
-        "fuck", "fucker", "fucking", "fucked",
+        "fuck", "fucker", "fucking", "fucked", "wtf", "stfu",
         "shit", "bitch", "asshole", "bastard",
         "cunt", "whore", "slut", "dickhead",
         "nigger", "nigga", "motherfucker", "cock", "dick",
@@ -146,6 +151,23 @@ public class BlacklistService {
         "putaquepariu",
         "sexoanal", "sexooral",
         "lixohumano", "escoria"
+    );
+
+    // Termos mais seguros para detectar mesmo quando o usuario separa letras
+    // com ponto, espaco, numero ou simbolo. Evita termos curtos/contextuais.
+    private static final List<String> PALAVRAS_OFUSCADAS = List.of(
+        "pica", "pika", "pikka", "picca", "piroca", "piroka", "caralho", "cacete",
+        "buceta", "boceta", "busseta", "buseta",
+        "xereca", "xereka", "xhereca", "xhereka", "chereca", "chereka", "shereca", "shereka",
+        "xoxota", "xota", "xana", "pepeca", "pepeka", "xibiu",
+        "merda", "bosta", "porra", "poha",
+        "puta", "putaria", "piranha", "piriguete",
+        "foda", "foder", "fude", "fuder", "boquete", "punheta", "siririca",
+        "pornografia", "porno", "puteiro",
+        "arrombado", "escroto", "vagabundo", "desgracado",
+        "estupro", "estuprador", "estuprar",
+        "fuck", "fucker", "fucking", "motherfucker", "bitch", "asshole", "bastard",
+        "cunt", "whore", "slut", "dickhead", "cock", "dick", "pussy"
     );
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -177,7 +199,17 @@ public class BlacklistService {
              .replace("(", "c")
              .replace(")", "o")
              .replace("ph", "f")   // phoda → foda, phuck → fuck
-             .replace("k", "c");   // kuzao → cuzao, karalho → caralho
+             .replace("sh", "x")
+             .replace("ch", "x")
+             .replace("y", "i")
+             .replace("w", "v")
+             .replace("k", "c")
+             .replace("h", "");
+
+        // Reduz alongamentos comuns usados para burlar filtro: piiika, bucettaa.
+        // Mantem "ss" para evitar falso positivo com a palavra inglesa "ass".
+        r = r.replaceAll("([aeiou])\\1+", "$1");
+        r = r.replaceAll("([bdfgjlmnpqrtvxz])\\1+", "$1");
 
         // Substitui qualquer coisa não alfanumérica por espaço (preserva fronteiras)
         r = r.replaceAll("[^a-z0-9]", " ").trim();
@@ -206,7 +238,15 @@ public class BlacklistService {
             }
         }
 
-        // 2. Frases / siglas coladas (sem espaços)
+        // 2. Palavras ofuscadas com separadores entre letras
+        for (String palavra : PALAVRAS_OFUSCADAS) {
+            String norm = normalizarSemEspacos(palavra);
+            if (norm.length() < 4) continue;
+            if (semEspacos.contains(norm)) {
+                return true;
+            }
+        }
+        // 3. Frases / siglas coladas (sem espacos)
         for (String frase : FRASES_COLADAS) {
             String norm = normalizarSemEspacos(frase);
             if (norm.isBlank()) continue;

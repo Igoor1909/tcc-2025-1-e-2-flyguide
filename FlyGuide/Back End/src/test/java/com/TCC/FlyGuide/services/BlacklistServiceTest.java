@@ -66,10 +66,25 @@ class BlacklistServiceTest {
     @Test
     void contemPalavraProibida_leetSpeakFuck_retornaTrue() {
         // f4ck → fack — não detectado, mas f*ck com substituição
-        assertThat(service.contemPalavraProibida("f uck this")).isFalse(); // separado por espaço não detecta
+        assertThat(service.contemPalavraProibida("f uck this")).isTrue();
     }
 
     // ─── frases coladas ───────────────────────────────────────────────────
+
+    @Test
+    void contemPalavraProibida_giriasComK_retornaTrue() {
+        assertThat(service.contemPalavraProibida("Pika")).isTrue();
+    }
+
+    @Test
+    void contemPalavraProibida_giriasComHInserido_retornaTrue() {
+        assertThat(service.contemPalavraProibida("Xhereka")).isTrue();
+    }
+
+    @Test
+    void contemPalavraProibida_palavraOfuscadaComSeparadores_retornaTrue() {
+        assertThat(service.contemPalavraProibida("p.i.k.a")).isTrue();
+    }
 
     @Test
     void contemPalavraProibida_siglaColada_retornaTrue() {
