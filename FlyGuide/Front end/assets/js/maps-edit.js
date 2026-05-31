@@ -830,6 +830,7 @@ function _renderAIItemCardMR(item, idx, uid, isDark) {
   const corBorda = isDark ? "#334155" : "#e2e8f0";
   const corForm = isDark ? "#0f172a" : "#f1f5f9";
   const custoLabel = custo ? "$ " + custo : "$";
+  const obs = String(item.observacoes || "").trim();
 
   return `<div data-ai-item style="margin-top:5px;">
     <div style="background:${corCard};border:1px solid ${corBorda};border-radius:8px;display:flex;align-items:center;gap:8px;padding:7px 10px;">
@@ -839,6 +840,7 @@ function _renderAIItemCardMR(item, idx, uid, isDark) {
         <div data-ai-address style="font-size:.72rem;color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:${endereco ? "" : "none"};">${endereco ? `<i class="bi bi-geo-alt me-1"></i>${escapeHtml(endereco)}` : ""}</div>
         ${window.placeCategoryBadgeHtml ? window.placeCategoryBadgeHtml([window.inferPlaceType ? window.inferPlaceType(nome) : "tourist_attraction"]) : ""}
         <span id="mr-rating-ai-${uid}" data-mr-rating-id="mr-rating-ai-${uid}" data-mr-rating-nome="${escapeHtml(nome)}" data-mr-rating-pid="${escapeHtml(placeId)}" style="display:none;font-size:.7rem;font-weight:700;color:#92400e;background:#fef3c7;padding:1px 6px;border-radius:999px;align-items:center;gap:3px;"></span>
+        <div data-ai-obs-display style="display:${obs ? "" : "none"};font-size:.72rem;color:#94a3b8;margin-top:2px;"><i class="bi bi-pencil-fill me-1"></i><span>${escapeHtml(obs)}</span></div>
         <a data-ai-maps-link href="${mapsUrl ? escapeHtml(mapsUrl) : "#"}" target="_blank" rel="noopener" style="font-size:.7rem;color:#f97316;text-decoration:none;display:${mapsUrl ? "inline-flex" : "none"};align-items:center;gap:3px;margin-top:3px;font-weight:700;"><i class="bi bi-map"></i>Ver no Maps</a>
       </div>
       <div style="display:flex;gap:4px;flex-shrink:0;">
@@ -918,6 +920,26 @@ function _garantirLocalBaseNoDiaUnicoEdit(sugestoes) {
     diaUm.locais.unshift(baseItem);
   }
   return sugestoes;
+}
+
+function _atualizarObservacaoSugestaoEdit(uid, obs) {
+  if (!_roteiroObjEdit || !Array.isArray(_roteiroObjEdit.sugestoes) || !uid) return;
+  const parts = String(uid).split("-");
+  let item = null;
+  if (parts[0] === "p" && parts.length >= 4) {
+    const dIdx = parseInt(parts[1], 10);
+    const perKey = parts[2];
+    const idx = parseInt(parts[3], 10);
+    item = _roteiroObjEdit.sugestoes[dIdx]?.periodos?.[perKey]?.[idx];
+  } else if (parts[0] === "l" && parts.length >= 3) {
+    const dIdx = parseInt(parts[1], 10);
+    const idx = parseInt(parts[2], 10);
+    item = _roteiroObjEdit.sugestoes[dIdx]?.locais?.[idx];
+  }
+  if (!item || typeof item !== "object") return;
+  const texto = String(obs || "").trim();
+  if (texto) item.observacoes = texto;
+  else delete item.observacoes;
 }
 
 function _renderLocalCardMR(l, idx, isDark) {
@@ -1945,7 +1967,17 @@ function renderLocaisEditAI() {
       const item = btn.closest("[data-ai-item]");
       const custoInput = item?.querySelector("[data-ai-custo]");
       const costBox = item?.querySelector("[data-ai-cost-display]");
+      const obsInput = item?.querySelector("[data-ai-obs]");
+      const obsBox = item?.querySelector("[data-ai-obs-display]");
+      const obsText = obsBox?.querySelector("span");
       if (costBox && custoInput) costBox.textContent = custoInput.value.trim() ? "$ " + custoInput.value.trim() : "$";
+      const obs = obsInput?.value.trim() || "";
+      if (obsBox && obsText) {
+        obsText.textContent = obs;
+        obsBox.style.display = obs ? "" : "none";
+      }
+      _atualizarObservacaoSugestaoEdit(uid, obs);
+      if (!_lookupAiPendente) _salvarOrdemSilencioso();
       const form = document.getElementById(`aiedit-mr-${uid}`);
       if (form) form.style.display = "none";
     });
@@ -2929,6 +2961,7 @@ document.getElementById("btnAdicionarLocalEdit")?.addEventListener("click", asyn
     if (!(resVinculo.ok || resVinculo.status === 201)) throw new Error("Erro ao vincular local.");
 
     const vinculo = await resVinculo.json();
+    if (obs && !vinculo.observacoes) vinculo.observacoes = obs;
     _locaisEdit.push(vinculo);
     renderLocaisEdit();
 

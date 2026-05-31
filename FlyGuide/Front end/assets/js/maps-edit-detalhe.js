@@ -365,6 +365,7 @@ function _renderAIItemCardDet(item, idx, uid, dragAttrs, isDark) {
   var longitude = item.longitude != null ? item.longitude : "";
   var custo = _parseCustoAIDet(item.custo);
   var custoLabel = custo !== "" ? "$ " + custo : "$";
+  var obs = String(item.observacoes || "").trim();
   return '<div data-ai-item ' + dragAttrs + ' style="margin-top:5px;">'
     + '<div style="background:' + cCard + ';border:1px solid ' + cBorda + ';border-radius:8px;display:flex;align-items:center;gap:8px;padding:7px 10px;">'
     + '<div style="background:#f97316;color:#fff;min-width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:.75rem;flex-shrink:0;">' + (idx + 1) + '</div>'
@@ -374,6 +375,7 @@ function _renderAIItemCardDet(item, idx, uid, dragAttrs, isDark) {
     + (endereco ? '<i class="bi bi-geo-alt me-1"></i>' + escapeHtml(endereco) : '')
     + '</div>'
     + (window.placeCategoryBadgeHtml ? window.placeCategoryBadgeHtml([window.inferPlaceType ? window.inferPlaceType(nome) : 'tourist_attraction']) : '')
+    + '<div data-ai-obs-display style="display:' + (obs ? '' : 'none') + ';font-size:.72rem;color:#94a3b8;margin-top:2px;"><i class="bi bi-pencil-fill me-1"></i><span>' + escapeHtml(obs) + '</span></div>'
     + '</div>'
     + '<div data-ai-cost-display style="min-width:48px;text-align:right;font-size:.8rem;font-weight:700;color:#f97316;background:#fff7ed;border:1px solid #ffffff;border-radius:4px;padding:2px 6px;flex-shrink:0;">' + escapeHtml(String(custoLabel)) + '</div>'
     + '<div style="display:flex;gap:4px;flex-shrink:0;">'
@@ -458,6 +460,31 @@ function _renderLocalCardDet(l, idx, dragAttrs, isDark) {
     + '</div>'
     + '</div>'
     + '</div>';
+}
+
+function _atualizarObservacaoSugestaoDetalhe(uid, obs) {
+  if (!_roteiroDetalheEdit || !Array.isArray(_roteiroDetalheEdit.sugestoes) || !uid) return;
+  var parts = String(uid).split("-");
+  var item = null;
+  if (parts[0] === "p" && parts.length >= 4) {
+    var dIdxP = parseInt(parts[1], 10);
+    var perKey = parts[2];
+    var idxP = parseInt(parts[3], 10);
+    item = _roteiroDetalheEdit.sugestoes[dIdxP]
+      && _roteiroDetalheEdit.sugestoes[dIdxP].periodos
+      && _roteiroDetalheEdit.sugestoes[dIdxP].periodos[perKey]
+      && _roteiroDetalheEdit.sugestoes[dIdxP].periodos[perKey][idxP];
+  } else if (parts[0] === "l" && parts.length >= 3) {
+    var dIdxL = parseInt(parts[1], 10);
+    var idxL = parseInt(parts[2], 10);
+    item = _roteiroDetalheEdit.sugestoes[dIdxL]
+      && _roteiroDetalheEdit.sugestoes[dIdxL].locais
+      && _roteiroDetalheEdit.sugestoes[dIdxL].locais[idxL];
+  }
+  if (!item || typeof item !== "object") return;
+  var texto = String(obs || "").trim();
+  if (texto) item.observacoes = texto;
+  else delete item.observacoes;
 }
 
 async function _autoLookupAIAddressesDet(lista, cidade) {
@@ -645,7 +672,17 @@ function renderLocaisDetalheEditAI() {
       var item = btn.closest("[data-ai-item]");
       var custoInput = item && item.querySelector("[data-ai-custo]");
       var costBox = item && item.querySelector("[data-ai-cost-display]");
+      var obsInput = item && item.querySelector("[data-ai-obs]");
+      var obsBox = item && item.querySelector("[data-ai-obs-display]");
+      var obsText = obsBox && obsBox.querySelector("span");
       if (costBox && custoInput) costBox.textContent = custoInput.value.trim() ? "$ " + custoInput.value.trim() : "$";
+      var obs = obsInput ? obsInput.value.trim() : "";
+      if (obsBox && obsText) {
+        obsText.textContent = obs;
+        obsBox.style.display = obs ? "" : "none";
+      }
+      _atualizarObservacaoSugestaoDetalhe(uid, obs);
+      if (!_lookupAiDetalhePendente) _salvarSugestoesAISilenciosoDetalhe();
       var form = document.getElementById("aiedit-det-" + uid);
       if (form) form.style.display = "none";
     });
@@ -1038,6 +1075,35 @@ async function _salvarSugestoesAI() {
   }
 }
 
+async function _salvarSugestoesAISilenciosoDetalhe() {
+  try {
+    var sugestoesEditadas = _getAiSugestoesEditadas();
+    if (!sugestoesEditadas || !_roteiroDetalheEdit) return;
+    var r = _roteiroDetalheEdit;
+    var body = {
+      idUsuario:           r.idUsuario,
+      titulo:              r.titulo,
+      pais:                r.pais,
+      cidade:              r.cidade,
+      tipoRoteiro:         r.tipoRoteiro,
+      statusRoteiro:       r.statusRoteiro,
+      visibilidadeRoteiro: r.visibilidadeRoteiro,
+      dataInicio:          r.dataInicio,
+      dataFim:             r.dataFim,
+      observacoes:         r.observacoes,
+      diasTotais:          r.diasTotais,
+      orcamento:           null,
+      sugestoes:           sugestoesEditadas
+    };
+    var res = await authFetch(_URL_API_DET + "/roteiros/" + _roteiroIdDetalheEdit, {
+      method:  "PUT",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify(body)
+    });
+    if (res.ok) _roteiroDetalheEdit = Object.assign({}, _roteiroDetalheEdit, { sugestoes: sugestoesEditadas });
+  } catch (_) {}
+}
+
 function _renderLocaisReaisDetalhe(lista) {
   var isDark = document.documentElement.getAttribute("data-theme") === "dark";
   var cCard  = isDark ? "#1e293b" : "#f8fafc";
@@ -1415,6 +1481,7 @@ document.addEventListener("click", async function(e) {
 
     if (resVinculo.ok || resVinculo.status === 201) {
       var vinculo = await resVinculo.json();
+      if (obs && !vinculo.observacoes) vinculo.observacoes = obs;
       _locaisDetalheEdit.push(vinculo);
       renderLocaisDetalheEdit();
       _atualizarMapaDetalheEdit();

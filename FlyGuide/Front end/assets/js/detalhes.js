@@ -198,10 +198,10 @@
   };
 
   function normalizarLocal(l) {
-    if (!l) return { nome: "", custo: null, _replace: false, _busca: null, _checkin: false, _checkout: false, endereco: null, placeId: null, latitude: null, longitude: null, tipo: null, types: [], rating: null };
-    if (typeof l === "string") return { nome: l, custo: null, _replace: false, _busca: null, _checkin: false, _checkout: false, endereco: null, placeId: null, latitude: null, longitude: null, tipo: null, types: [], rating: null };
+    if (!l) return { nome: "", custo: null, observacoes: null, _replace: false, _busca: null, _checkin: false, _checkout: false, endereco: null, placeId: null, latitude: null, longitude: null, tipo: null, types: [], rating: null };
+    if (typeof l === "string") return { nome: l, custo: null, observacoes: null, _replace: false, _busca: null, _checkin: false, _checkout: false, endereco: null, placeId: null, latitude: null, longitude: null, tipo: null, types: [], rating: null };
     const tipos = Array.isArray(l.types) ? l.types : (l.tipo ? [l.tipo] : []);
-    return { nome: l.nome || "", custo: l.custo || null, _replace: !!l._replace, _busca: l._busca || null,
+    return { nome: l.nome || "", custo: l.custo || null, observacoes: l.observacoes || null, _replace: !!l._replace, _busca: l._busca || null,
              _checkin: !!l._checkin, _checkout: !!l._checkout, endereco: l.endereco || null,
              placeId: l.placeId || l.place_id || null,
              latitude: l.latitude ?? l.lat ?? null,
@@ -730,6 +730,7 @@
           ? `<i class="bi bi-star-fill" style="color:#facc15;font-size:.75rem;"></i> ${ratingAI.toFixed(1)}`
           : "";
         const categoriaHtmlAI = categoriaLocalHtml(local, local.nome);
+        const observacoesAI = String(local.observacoes || "").trim();
         return `<div class="day-item" id="ai-place-${diaIdx}-${curIdx}"
              data-maps-query="${escapeHtml(query)}" ${dataRep} data-dia="${dia}"${_endAI ? ` data-addr="${_endAI}"` : ""}${temCoordAI ? ` data-lat="${latAI}" data-lng="${lngAI}"` : ""}${placeIdAI ? ` data-place-id="${placeIdAI}"` : ""}${ratingHtmlAI ? ` data-rating="${ratingAI}"` : ""}>
           <div class="day-bubble" style="${bStyle}">${curIdx + 1}</div>
@@ -738,6 +739,7 @@
               <div class="name ai-place-name">${escapeHtml(local.nome)}</div>
             </div>
             <div class="ai-place-addr" style="${_endAI ? "" : "display:none;"}font-size:.78rem;color:#64748b;margin-top:3px;">${_endAI ? `<i class="bi bi-geo-alt me-1"></i>${_endAI}` : ""}</div>
+            ${observacoesAI ? `<div class="costline mt-1"><i class="bi bi-pencil-fill" style="color:#94a3b8;"></i><span style="font-size:.82rem;color:#64748b;">${escapeHtml(observacoesAI)}</span></div>` : ""}
             <div class="place-detail-meta">
               <span data-place-category-slot>${categoriaHtmlAI}</span>
               <span class="ai-place-rating" style="display:${ratingHtmlAI ? "inline-flex" : "none"};align-items:center;gap:3px;font-size:.75rem;font-weight:700;color:#92400e;background:#fef3c7;padding:2px 8px;border-radius:999px;">${ratingHtmlAI}</span>

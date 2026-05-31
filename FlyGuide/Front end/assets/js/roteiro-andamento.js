@@ -677,6 +677,7 @@
       var mapsHref    = "https://www.google.com/maps/search/?api=1&query=" + mapsQuery;
 
       var endAI = it.endereco ? escapeHtml(it.endereco) : "";
+      var obsAI = it.observacoes ? escapeHtml(it.observacoes) : "";
       return "<div class=\"day-item " + itemCls + "\" id=\"ai-cp-" + it.key + "\""
         + (endAI ? " data-addr=\"" + endAI + "\"" : "") + ">"
         + "<button class=\"check-bubble-and\" data-ai-toggle=\"" + it.key + "\""
@@ -690,6 +691,7 @@
         + "</div>"
         + "<div class=\"and-place-addr\" style=\"" + (endAI ? "" : "display:none;") + "font-size:.78rem;color:#64748b;margin-top:3px;\">"
         + (endAI ? "<i class=\"bi bi-geo-alt me-1\"></i>" + endAI : "") + "</div>"
+        + (obsAI ? "<div class=\"costline\"><i class=\"bi bi-pencil-fill\" style=\"color:#94a3b8;\"></i><span style=\"font-size:.82rem;color:#64748b;\">" + obsAI + "</span></div>" : "")
         + "<div style=\"margin-top:6px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;\">"
         + "<a class=\"and-maps-link\" href=\"" + mapsHref + "\" target=\"_blank\" rel=\"noopener\""
         + " style=\"display:inline-flex;align-items:center;gap:5px;font-size:.78rem;color:#f97316;font-weight:700;text-decoration:none;\">"
@@ -734,6 +736,7 @@
                 nome:     typeof l === "string" ? l : (obj.nome || "Local"),
                 custo:    obj.custo || null,
                 endereco: obj.endereco || null,
+                observacoes: obj.observacoes || null,
                 _checkin:  !!obj._checkin,
                 _checkout: !!obj._checkout });
             });
@@ -745,6 +748,7 @@
               nome:     typeof l === "string" ? l : (obj.nome || "Local"),
               custo:    obj.custo || null,
               endereco: obj.endereco || null,
+              observacoes: obj.observacoes || null,
               _checkin:  !!obj._checkin,
               _checkout: !!obj._checkout });
           });
@@ -1455,5 +1459,4 @@
     }
   }
 })();
-
 
