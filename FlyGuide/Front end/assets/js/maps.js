@@ -1764,6 +1764,14 @@ const URL_API_BASE  = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app
         const rating = lugar.rating || 0;
         const total  = lugar.user_ratings_total || 0;
         const globalIdx = inicio + idx;
+        const endereco = lugar.vicinity || lugar.formatted_address || "";
+        const mapsUrl = mapsUrlLocalAgenda({
+          placeId: lugar.place_id,
+          nome: lugar.name,
+          endereco,
+          latitude: lugar.geometry?.location?.lat?.(),
+          longitude: lugar.geometry?.location?.lng?.(),
+        });
         const starsHtml = Array.from({ length: 5 }, (_, i) =>
           `<i class="bi bi-star${i < Math.round(rating) ? "-fill" : ""}" style="color:${i < Math.round(rating) ? "#f59e0b" : "#cbd5e1"};font-size:.8rem;"></i>`
         ).join("");
@@ -1780,10 +1788,11 @@ const URL_API_BASE  = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app
                 <span style="font-weight:700;color:#0f172a;font-size:.88rem;">${rating.toFixed(1)}</span>
                 ${total > 0 ? `<span style="color:#94a3b8;font-size:.78rem;">(${total.toLocaleString("pt-BR")} avaliações)</span>` : ""}
               </div>
-              ${lugar.vicinity ? `<div style="color:#94a3b8;font-size:.82rem;margin-top:4px;"><i class="bi bi-geo-alt me-1"></i>${escapeHtml(lugar.vicinity)}</div>` : ""}
+              ${endereco ? `<div style="color:#94a3b8;font-size:.82rem;margin-top:4px;"><i class="bi bi-geo-alt me-1"></i>${escapeHtml(endereco)}</div>` : ""}
               ${lugar.opening_hours != null ? `<div style="font-size:.78rem;margin-top:4px;color:${lugar.opening_hours.open_now ? "#16a34a" : "#dc2626"};">
                 <i class="bi bi-clock me-1"></i>${lugar.opening_hours.open_now ? "Aberto agora" : "Fechado agora"}
               </div>` : ""}
+              ${mapsUrl ? `<a href="${escapeHtml(mapsUrl)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:5px;margin-top:6px;font-size:.78rem;color:#f97316;font-weight:700;text-decoration:none;"><i class="bi bi-map"></i>Ver no Maps</a>` : ""}
             </div>
             <button class="btn btn-sm btn-primary-orange flex-shrink-0"
               style="white-space:nowrap;"

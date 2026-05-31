@@ -508,6 +508,14 @@ function _renderRecomendacoes(lugares, pagina) {
       const rating  = lugar.rating || 0;
       const tot     = lugar.user_ratings_total || 0;
       const addr    = lugar.vicinity || lugar.formatted_address || "";
+      const mapsUrl = lugar.place_id
+        ? _mapsUrlEdit(lugar.place_id, addr || lugar.name)
+        : _mapsUrlLocalEdit({
+            nome: lugar.name,
+            endereco: addr,
+            latitude: lugar.geometry?.location?.lat?.(),
+            longitude: lugar.geometry?.location?.lng?.(),
+          });
       const stars   = Array.from({ length: 5 }, (_, s) =>
         `<i class="bi bi-star${s < Math.round(rating) ? "-fill" : ""}" style="color:${s < Math.round(rating) ? "#f59e0b" : "#cbd5e1"};font-size:.72rem;"></i>`
       ).join("");
@@ -526,6 +534,7 @@ function _renderRecomendacoes(lugares, pagina) {
             ${addr ? `<div style="color:#94a3b8;font-size:.75rem;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><i class="bi bi-geo-alt me-1"></i>${escapeHtml(addr)}</div>` : ""}
             ${window.placeCategoryBadgeHtml ? window.placeCategoryBadgeHtml(lugar.types || []) : ""}
             ${lugar.business_status === "OPERATIONAL" ? `<div style="font-size:.72rem;color:#16a34a;margin-top:2px;"><i class="bi bi-clock me-1"></i>Estabelecimento ativo</div>` : ""}
+            ${mapsUrl ? `<a href="${escapeHtml(mapsUrl)}" target="_blank" rel="noopener" style="font-size:.72rem;color:#f97316;text-decoration:none;display:inline-flex;align-items:center;gap:3px;margin-top:3px;font-weight:700;"><i class="bi bi-map"></i>Ver no Maps</a>` : ""}
           </div>
           <button class="btn btn-sm btn-primary-orange flex-shrink-0"
                   style="font-size:.78rem;padding:4px 8px;white-space:nowrap;"
