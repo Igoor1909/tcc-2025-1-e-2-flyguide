@@ -466,7 +466,9 @@ function _renderRecomendacoes(lugares, pagina) {
   const listaEl = document.getElementById("listaRecomendacoesEdit");
   if (!listaEl) return;
 
-  if (lugares.length === 0) {
+  const lugaresBase = Array.isArray(lugares) ? lugares : _todosLugaresEdit;
+
+  if (lugaresBase.length === 0) {
     _todosLugaresEdit = [];
     listaEl.innerHTML = `
       <div class="text-center py-3 text-secondary" style="font-size:.82rem;">
@@ -476,7 +478,7 @@ function _renderRecomendacoes(lugares, pagina) {
     return;
   }
 
-  if (pagina === undefined) { _todosLugaresEdit = lugares; pagina = 0; }
+  if (pagina === undefined) { _todosLugaresEdit = lugaresBase; pagina = 0; }
   const pg       = Math.max(0, Math.min(pagina, Math.ceil(_todosLugaresEdit.length / _POR_PAGINA_EDIT) - 1));
   const total    = _todosLugaresEdit.length;
   const totalPg  = Math.ceil(total / _POR_PAGINA_EDIT);
