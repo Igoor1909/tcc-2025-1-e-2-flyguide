@@ -850,6 +850,21 @@ const URL_API_BASE  = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app
     return (locais || []).filter(l => !ehCheckinCheckoutAgenda(l)).length;
   }
 
+  function mapsUrlLocalAgenda(local) {
+    if (!local) return "";
+    const place = String(local.placeId || local.place_id || "").trim();
+    const lat = parseFloat(local.latitude);
+    const lng = parseFloat(local.longitude);
+    const query = place
+      ? String(local.endereco || local.nome || place).trim()
+      : Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0)
+        ? `${lat},${lng}`
+        : String(local.endereco || local.nome || "").trim();
+    if (!query) return "";
+    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+    return place ? `${url}&query_place_id=${encodeURIComponent(place)}` : url;
+  }
+
   // Carrega locais já salvos no banco
   function carregarLocais() {
     authFetch(`${URL_API_BASE}/roteiros/${roteiroId}/locais`)
@@ -907,7 +922,9 @@ const URL_API_BASE  = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app
     const corBorda   = isDark ? "#334155" : "#eef2f7";
 
     function renderItens(itens, diaGrupo) {
-      return itens.map((l, idx) => `
+      return itens.map((l, idx) => {
+        const mapsUrl = mapsUrlLocalAgenda(l);
+        return `
           <div class="day-item" id="local-item-${l.idRoteiroLocal}" draggable="true" data-vinculo-id="${l.idRoteiroLocal}" data-dia-grupo="${diaGrupo}" style="background:#fff;border:1px solid #eef2f7;border-radius:14px;padding:14px;display:flex;gap:10px;align-items:flex-start;margin-top:12px;">
             <div class="drag-handle" style="display:flex;align-items:center;padding:0 2px;cursor:grab;color:#cbd5e1;font-size:1.1rem;flex-shrink:0;" title="Arrastar para reordenar"><i class="bi bi-grip-vertical"></i></div>
             <div class="day-bubble" style="background:#f97316;color:#fff;width:44px;height:44px;border-radius:50%;display:grid;place-items:center;font-weight:900;flex-shrink:0;">
@@ -922,6 +939,7 @@ const URL_API_BASE  = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app
               ${l.endereco ? `<div style="color:${corEndereco};font-size:.82rem;margin-top:4px;"><i class="bi bi-geo-alt me-1"></i>${escapeHtml(l.endereco)}</div>` : ""}
               ${(() => { try { const h = JSON.parse(localStorage.getItem(`flyguide:place-hours:${l.placeId}`) || "null"); if (!h) return ""; const aberto = calcularAberturaAgora(h.periods); if (aberto === null) return ""; return `<div data-abertura="1" style="font-size:.78rem;margin-top:4px;color:${aberto ? "#16a34a" : "#dc2626"};"><i class="bi bi-clock me-1"></i>${aberto ? "Aberto agora" : "Fechado agora"}</div>`; } catch(_){ return ""; } })()}
               ${renderDistanciaBaseInfo(l, baseAtiva)}
+              ${mapsUrl ? `<a href="${escapeHtml(mapsUrl)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:5px;margin-top:6px;font-size:.78rem;color:#f97316;font-weight:700;text-decoration:none;"><i class="bi bi-map"></i>Ver no Maps</a>` : ""}
             </div>
             <div style="display:flex;flex-direction:column;gap:6px;">
               <button class="btn btn-sm btn-outline-secondary" data-editar-local="${l.idRoteiroLocal}" data-dia="${l.dia || ''}" data-obs="${escapeHtml(l.observacoes || '')}" data-horario="${formatarHorarioAgenda(l.horario)}" title="Editar">
@@ -931,7 +949,8 @@ const URL_API_BASE  = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app
                 <i class="bi bi-trash"></i>
               </button>
             </div>
-          </div>`).join("");
+          </div>`;
+      }).join("");
     }
 
     lista.innerHTML = [

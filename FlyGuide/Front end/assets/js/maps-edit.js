@@ -117,6 +117,18 @@ function _mapsUrlEdit(placeId, query) {
   return place ? `${url}&query_place_id=${encodeURIComponent(place)}` : url;
 }
 
+function _mapsUrlLocalEdit(local) {
+  if (!local) return "";
+  const lat = parseFloat(local.latitude);
+  const lng = parseFloat(local.longitude);
+  if (local.placeId) return _mapsUrlEdit(local.placeId, local.endereco || local.nome);
+  if (Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0)) {
+    return _mapsUrlEdit("", `${lat},${lng}`);
+  }
+  const query = local.endereco || local.nome || "";
+  return query ? _mapsUrlEdit("", query) : "";
+}
+
 function _obterBaseAtiva() {
   return _basesEdit.find(b => String(b.id) === String(_baseAtivaIdEdit)) || _basesEdit[0] || null;
 }
@@ -922,6 +934,7 @@ function _renderLocalCardMR(l, idx, isDark) {
   const maxDiaAttr = _diasTotaisEdit > 0 ? ` max="${_diasTotaisEdit}"` : "";
   const custoVal  = l.custo != null ? String(l.custo) : "";
   const custoLabel = custoVal !== "" ? "$ " + custoVal : "$";
+  const mapsUrl = _mapsUrlLocalEdit(l);
   return `<div id="lwrap-${vid}" style="margin-top:5px;">
     <div style="background:${corCard};border:1px solid ${corBorda};border-radius:8px;display:flex;align-items:center;gap:8px;padding:7px 10px;">
       <div style="background:#f97316;color:#fff;min-width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:.75rem;flex-shrink:0;">${idx + 1}</div>
@@ -930,6 +943,7 @@ function _renderLocalCardMR(l, idx, isDark) {
         ${l.endereco ? `<div style="font-size:.72rem;color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><i class="bi bi-geo-alt me-1"></i>${escapeHtml(l.endereco)}</div>` : ""}
         ${window.placeCategoryBadgeHtml && (l.tipo || l.nome) ? window.placeCategoryBadgeHtml([l.tipo || (window.inferPlaceType ? window.inferPlaceType(l.nome) : "tourist_attraction")]) : ""}
         ${l.observacoes ? `<div style="font-size:.72rem;color:${corLabel};">${escapeHtml(l.observacoes)}</div>` : ""}
+        ${mapsUrl ? `<a href="${escapeHtml(mapsUrl)}" target="_blank" rel="noopener" style="font-size:.7rem;color:#f97316;text-decoration:none;display:inline-flex;align-items:center;gap:3px;margin-top:3px;font-weight:700;"><i class="bi bi-map"></i>Ver no Maps</a>` : ""}
         <span id="mr-rating-lr-${vid}" data-mr-rating-id="mr-rating-lr-${vid}" data-mr-rating-nome="${escapeHtml(l.nome || '')}" data-mr-rating-pid="${escapeHtml(l.placeId || '')}" style="display:none;font-size:.7rem;font-weight:700;color:#92400e;background:#fef3c7;padding:1px 6px;border-radius:999px;align-items:center;gap:3px;"></span>
       </div>
       <div style="display:flex;gap:4px;flex-shrink:0;">
@@ -943,7 +957,7 @@ function _renderLocalCardMR(l, idx, isDark) {
         <label style="font-size:.72rem;font-weight:700;color:${corLabel};">Local</label>
         <div style="font-size:.88rem;font-weight:700;padding:3px 0 1px;">${escapeHtml(l.nome || "")}</div>
         ${l.endereco ? `<div style="font-size:.72rem;color:#94a3b8;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(l.endereco)}</div>` : ""}
-        ${l.placeId ? `<a href="${_mapsUrlEdit(l.placeId, l.endereco || l.nome)}" target="_blank" style="font-size:.7rem;color:#3b82f6;text-decoration:none;display:inline-flex;align-items:center;gap:3px;margin-top:2px;"><i class="bi bi-map-fill"></i>Ver no Maps</a>` : ""}
+        ${mapsUrl ? `<a href="${escapeHtml(mapsUrl)}" target="_blank" rel="noopener" style="font-size:.7rem;color:#3b82f6;text-decoration:none;display:inline-flex;align-items:center;gap:3px;margin-top:2px;"><i class="bi bi-map-fill"></i>Ver no Maps</a>` : ""}
       </div>
       <div class="row g-2">
         <div class="col-12">
@@ -2234,6 +2248,7 @@ function _renderLocaisReaisEdit(lista) {
         const corForm = isDark ? "#1e293b" : "#f1f5f9";
         const corFormBrd = isDark ? "#334155" : "#e2e8f0";
         const corLabel = isDark ? "#94a3b8" : "#64748b";
+        const mapsUrl = _mapsUrlLocalEdit(l);
         return `
           <div id="lwrap-${vid}" style="margin-bottom:6px;">
             <div style="background:${corCard};border:1px solid ${corCardBrd};border-radius:10px;
@@ -2255,6 +2270,7 @@ function _renderLocaisReaisEdit(lista) {
                 ${l.observacoes ? `<div style="font-size:.75rem;color:${isDark ? "#94a3b8" : "#64748b"};">${escapeHtml(l.observacoes)}</div>` : ""}
                 ${l.endereco    ? `<div style="font-size:.72rem;color:${corEndereco};margin-top:1px;"><i class="bi bi-geo-alt me-1"></i>${escapeHtml(l.endereco)}</div>` : ""}
                 ${distHtml}
+                ${mapsUrl ? `<a href="${escapeHtml(mapsUrl)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:4px;margin-top:4px;font-size:.72rem;color:#f97316;font-weight:700;text-decoration:none;"><i class="bi bi-map"></i>Ver no Maps</a>` : ""}
               </div>
               <div style="display:flex;gap:4px;flex-shrink:0;">
                 <button class="btn btn-sm btn-outline-secondary" data-edit-vinculo-mr="${vid}" title="Editar">
