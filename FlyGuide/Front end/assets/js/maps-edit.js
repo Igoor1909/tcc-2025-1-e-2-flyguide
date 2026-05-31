@@ -121,12 +121,21 @@ function _mapsUrlLocalEdit(local) {
   if (!local) return "";
   const lat = parseFloat(local.latitude);
   const lng = parseFloat(local.longitude);
-  if (local.placeId) return _mapsUrlEdit(local.placeId, local.endereco || local.nome);
+  const placeId = local.placeId || local.place_id || "";
+  if (placeId) return _mapsUrlEdit(placeId, local.endereco || local.nome);
   if (Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0)) {
     return _mapsUrlEdit("", `${lat},${lng}`);
   }
   const query = local.endereco || local.nome || "";
   return query ? _mapsUrlEdit("", query) : "";
+}
+
+function _atualizarLinksMapsAI(item, url) {
+  if (!item) return;
+  item.querySelectorAll("[data-ai-maps-link]").forEach(link => {
+    link.href = url || "#";
+    link.style.display = url ? "inline-flex" : "none";
+  });
 }
 
 function _obterBaseAtiva() {
@@ -783,11 +792,7 @@ function _initAIItemAutocomplete(input) {
     }
     const pidEl = item.querySelector("[data-ai-place-id]");
     if (pidEl) pidEl.value = place.place_id || "";
-    const mapsLink = item.querySelector("[data-ai-maps-link]");
-    if (mapsLink) {
-      mapsLink.href = _mapsUrlEdit(place.place_id, place.formatted_address || place.name);
-      mapsLink.style.display = "flex";
-    }
+    _atualizarLinksMapsAI(item, _mapsUrlEdit(place.place_id, place.formatted_address || place.name));
   });
 }
 
@@ -818,7 +823,8 @@ function _renderAIItemCardMR(item, idx, uid, isDark) {
 
   const nome = item.nome || "";
   const endereco = item.endereco || "";
-  const placeId = item.placeId || "";
+  const placeId = item.placeId || item.place_id || "";
+  const mapsUrl = _mapsUrlLocalEdit({ ...item, nome, endereco, placeId });
   const custo = _parseCustoAI(item.custo);
   const corCard = isDark ? "#1e293b" : "#f8fafc";
   const corBorda = isDark ? "#334155" : "#e2e8f0";
@@ -833,6 +839,7 @@ function _renderAIItemCardMR(item, idx, uid, isDark) {
         <div data-ai-address style="font-size:.72rem;color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:${endereco ? "" : "none"};">${endereco ? `<i class="bi bi-geo-alt me-1"></i>${escapeHtml(endereco)}` : ""}</div>
         ${window.placeCategoryBadgeHtml ? window.placeCategoryBadgeHtml([window.inferPlaceType ? window.inferPlaceType(nome) : "tourist_attraction"]) : ""}
         <span id="mr-rating-ai-${uid}" data-mr-rating-id="mr-rating-ai-${uid}" data-mr-rating-nome="${escapeHtml(nome)}" data-mr-rating-pid="${escapeHtml(placeId)}" style="display:none;font-size:.7rem;font-weight:700;color:#92400e;background:#fef3c7;padding:1px 6px;border-radius:999px;align-items:center;gap:3px;"></span>
+        <a data-ai-maps-link href="${mapsUrl ? escapeHtml(mapsUrl) : "#"}" target="_blank" rel="noopener" style="font-size:.7rem;color:#f97316;text-decoration:none;display:${mapsUrl ? "inline-flex" : "none"};align-items:center;gap:3px;margin-top:3px;font-weight:700;"><i class="bi bi-map"></i>Ver no Maps</a>
       </div>
       <div style="display:flex;gap:4px;flex-shrink:0;">
         <button type="button" class="btn btn-sm btn-outline-secondary" data-ai-edit="${uid}" title="Editar"><i class="bi bi-pencil"></i></button>
@@ -849,7 +856,7 @@ function _renderAIItemCardMR(item, idx, uid, isDark) {
           <input type="hidden" data-ai-lat value="${escapeHtml(String(item.latitude ?? ""))}">
           <input type="hidden" data-ai-lng value="${escapeHtml(String(item.longitude ?? ""))}">
           <div data-ai-endereco style="font-size:.72rem;color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:${endereco ? "" : "none"};">${escapeHtml(endereco)}</div>
-          <a data-ai-maps-link href="${placeId ? _mapsUrlEdit(placeId, endereco || nome) : "#"}" target="_blank" style="font-size:.7rem;color:#3b82f6;text-decoration:none;display:${placeId ? "flex" : "none"};align-items:center;gap:3px;margin-top:2px;"><i class="bi bi-map-fill"></i>Ver no Maps</a>
+          <a data-ai-maps-link href="${mapsUrl ? escapeHtml(mapsUrl) : "#"}" target="_blank" rel="noopener" style="font-size:.7rem;color:#3b82f6;text-decoration:none;display:${mapsUrl ? "inline-flex" : "none"};align-items:center;gap:3px;margin-top:2px;"><i class="bi bi-map-fill"></i>Ver no Maps</a>
         </div>
         <div class="col-12">
           <label style="font-size:.72rem;font-weight:700;color:#94a3b8;">Observações</label>
@@ -1100,13 +1107,12 @@ async function _autoLookupAIAddresses(lista, cidade) {
       const lngEl = item.querySelector("[data-ai-lng]");
       const addrEl = item.querySelector("[data-ai-address]");
       const endEl = item.querySelector("[data-ai-endereco]");
-      const mapsLink = item.querySelector("[data-ai-maps-link]");
       if (pidEl) pidEl.value = "";
       if (latEl) latEl.value = "";
       if (lngEl) lngEl.value = "";
       if (addrEl) { addrEl.textContent = ""; addrEl.style.display = "none"; }
       if (endEl) { endEl.textContent = ""; endEl.style.display = "none"; }
-      if (mapsLink) { mapsLink.href = "#"; mapsLink.style.display = "none"; }
+      _atualizarLinksMapsAI(item, "");
     };
 
     // Valida estado apenas para Brasil (UF de 2 letras no formatted_address).
@@ -1268,8 +1274,7 @@ async function _autoLookupAIAddresses(lista, cidade) {
           }
           if (details.place_id && pidEl) {
             pidEl.value = details.place_id;
-            const mapsLink = item.querySelector("[data-ai-maps-link]");
-            if (mapsLink) { mapsLink.href = _mapsUrlEdit(details.place_id, addr || details.name); mapsLink.style.display = "flex"; }
+            _atualizarLinksMapsAI(item, _mapsUrlEdit(details.place_id, addr || details.name));
           }
           if (details.geometry?.location) {
             const latEl = item.querySelector("[data-ai-lat]");
@@ -1363,8 +1368,7 @@ async function _autoLookupAIAddresses(lista, cidade) {
 
       if (place.place_id && pidEl) {
         pidEl.value = place.place_id;
-        const mapsLink = item.querySelector("[data-ai-maps-link]");
-        if (mapsLink) { mapsLink.href = _mapsUrlEdit(place.place_id, addr || place.name); mapsLink.style.display = "flex"; }
+        _atualizarLinksMapsAI(item, _mapsUrlEdit(place.place_id, addr || place.name));
       }
 
       if (place.geometry?.location) {
