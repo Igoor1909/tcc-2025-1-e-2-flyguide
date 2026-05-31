@@ -103,6 +103,41 @@
     return `<span data-price-level="${level}" style="font-size:.72rem;font-weight:700;color:${cfg.cor};background:${cfg.bg};padding:2px 8px;border-radius:999px;">${cfg.signo ? cfg.signo + " · " : ""}${cfg.label}</span>`;
   }
 
+  function normalizarTiposPlace(local, fallbackNome) {
+    let tipos = [];
+    if (Array.isArray(local)) tipos = local;
+    else if (Array.isArray(local?.types)) tipos = local.types;
+    else if (local?.tipo) tipos = [local.tipo];
+
+    if ((!tipos || tipos.length === 0) && fallbackNome && typeof window.inferPlaceType === "function") {
+      tipos = [window.inferPlaceType(fallbackNome)];
+    }
+
+    return [...new Set((tipos || []).filter(Boolean))];
+  }
+
+  function categoriaLocalHtml(local, fallbackNome) {
+    if (typeof window.placeCategoryBadgeHtml !== "function") return "";
+    const tipos = normalizarTiposPlace(local, fallbackNome);
+    return tipos.length ? window.placeCategoryBadgeHtml(tipos) : "";
+  }
+
+  function aplicarCategoriaPlace(container, tipos, fallbackNome) {
+    const slot = container?.querySelector("[data-place-category-slot]");
+    if (!slot) return;
+    const html = categoriaLocalHtml(Array.isArray(tipos) ? tipos : { types: tipos || [] }, fallbackNome);
+    if (html) slot.innerHTML = html;
+  }
+
+  function aplicarRatingPlace(container, rating, selector) {
+    const nota = Number(rating);
+    if (!Number.isFinite(nota) || nota <= 0) return;
+    const ratingEl = container?.querySelector(selector);
+    if (!ratingEl) return;
+    ratingEl.innerHTML = `<i class="bi bi-star-fill" style="color:#facc15;font-size:.75rem;"></i> ${nota.toFixed(1)}`;
+    ratingEl.style.display = "inline-flex";
+  }
+
   window.buscarHorariosDetalhes = function buscarHorariosDetalhes(locais) {
     if (!window.google?.maps?.places) return;
     const service = new google.maps.places.PlacesService(document.createElement("div"));
@@ -163,13 +198,17 @@
   };
 
   function normalizarLocal(l) {
-    if (!l) return { nome: "", custo: null, _replace: false, _busca: null, _checkin: false, _checkout: false, endereco: null, placeId: null, latitude: null, longitude: null };
-    if (typeof l === "string") return { nome: l, custo: null, _replace: false, _busca: null, _checkin: false, _checkout: false, endereco: null, placeId: null, latitude: null, longitude: null };
+    if (!l) return { nome: "", custo: null, _replace: false, _busca: null, _checkin: false, _checkout: false, endereco: null, placeId: null, latitude: null, longitude: null, tipo: null, types: [], rating: null };
+    if (typeof l === "string") return { nome: l, custo: null, _replace: false, _busca: null, _checkin: false, _checkout: false, endereco: null, placeId: null, latitude: null, longitude: null, tipo: null, types: [], rating: null };
+    const tipos = Array.isArray(l.types) ? l.types : (l.tipo ? [l.tipo] : []);
     return { nome: l.nome || "", custo: l.custo || null, _replace: !!l._replace, _busca: l._busca || null,
              _checkin: !!l._checkin, _checkout: !!l._checkout, endereco: l.endereco || null,
              placeId: l.placeId || l.place_id || null,
              latitude: l.latitude ?? l.lat ?? null,
-             longitude: l.longitude ?? l.lng ?? null };
+             longitude: l.longitude ?? l.lng ?? null,
+             tipo: l.tipo || tipos[0] || null,
+             types: tipos,
+             rating: l.rating ?? l.notaGoogle ?? l.googleRating ?? null };
   }
 
   function ehCheckinCheckoutDetalhe(local) {
@@ -353,6 +392,33 @@
       });
     }
 
+    function _getDetails(placeId, fallbackPlace, callback, tentativa = 0) {
+      if (!placeId) { callback(fallbackPlace); return; }
+      service.getDetails({
+        placeId,
+        fields: ["name", "formatted_address", "geometry", "place_id", "types", "rating", "opening_hours"]
+      }, (place, status) => {
+        if (_overQueryLimit(status) && tentativa < 3) {
+          setTimeout(() => _getDetails(placeId, fallbackPlace, callback, tentativa + 1), 450 * (tentativa + 1));
+          return;
+        }
+        if (!_statusOk(status) || !place) {
+          callback(fallbackPlace);
+          return;
+        }
+        callback({
+          ...fallbackPlace,
+          ...place,
+          place_id: place.place_id || fallbackPlace.place_id,
+          name: place.name || fallbackPlace.name,
+          formatted_address: place.formatted_address || fallbackPlace.formatted_address,
+          geometry: place.geometry || fallbackPlace.geometry,
+          types: place.types?.length ? place.types : fallbackPlace.types,
+          rating: place.rating ?? fallbackPlace.rating,
+        });
+      });
+    }
+
     function registrarStatus(el, dia, ok, query) {
       const status = statusPorDia[dia];
       if (!status) return;
@@ -402,13 +468,7 @@
         if (addrEl) { addrEl.innerHTML = `<i class="bi bi-geo-alt me-1"></i>${escapeHtml(addr)}`; addrEl.style.display = ""; }
         el.dataset.addr = addr;
       }
-      if (place.rating) {
-        const ratingEl = el.querySelector(".ai-place-rating");
-        if (ratingEl) {
-          ratingEl.innerHTML = `<i class="bi bi-star-fill" style="color:#facc15;font-size:.75rem;"></i> ${place.rating.toFixed(1)}`;
-          ratingEl.style.display = "inline-flex";
-        }
-      }
+      aplicarRatingPlace(el, place.rating, ".ai-place-rating");
       const openNow = place.opening_hours?.open_now ?? place.opening_hours?.isOpen?.() ?? null;
       if (openNow !== null && openNow !== undefined) {
         const mainEl = el.querySelector(".day-main");
@@ -418,13 +478,7 @@
         }
       }
       // Badge de categoria
-      if (place.types?.length && !el.querySelector(".ai-place-category")) {
-        const badgeHtml = window.placeCategoryBadgeHtml(place.types);
-        if (badgeHtml) {
-          const addrEl = el.querySelector(".ai-place-addr");
-          if (addrEl) addrEl.insertAdjacentHTML("afterend", badgeHtml);
-        }
-      }
+      aplicarCategoriaPlace(el, place.types, place.name || el.querySelector(".ai-place-name")?.textContent || query);
 
       const mapsLink = el.querySelector(".ai-maps-link");
       if (mapsLink) {
@@ -463,7 +517,7 @@
         const lngSalvaItem = parseFloat(el.dataset.lng || "");
 
         if (Number.isFinite(latSalvaItem) && Number.isFinite(lngSalvaItem) && !(latSalvaItem === 0 && lngSalvaItem === 0)) {
-          finalizar({
+          const fallbackPlace = {
             place_id: el.dataset.placeId || "",
             name: nameText || query || "Local",
             formatted_address: endereco,
@@ -473,8 +527,14 @@
                 lng: () => lngSalvaItem,
               },
             },
-            types: [],
-          });
+            types: normalizarTiposPlace(null, nameText || query),
+            rating: parseFloat(el.dataset.rating || "") || null,
+          };
+          if (fallbackPlace.place_id) {
+            _getDetails(fallbackPlace.place_id, fallbackPlace, finalizar);
+          } else {
+            finalizar(fallbackPlace);
+          }
           return;
         }
 
@@ -665,18 +725,22 @@
         const lngAI = parseFloat(local.longitude);
         const temCoordAI = Number.isFinite(latAI) && Number.isFinite(lngAI) && !(latAI === 0 && lngAI === 0);
         const placeIdAI = local.placeId ? escapeHtml(local.placeId) : "";
+        const ratingAI = Number(local.rating || 0);
+        const ratingHtmlAI = Number.isFinite(ratingAI) && ratingAI > 0
+          ? `<i class="bi bi-star-fill" style="color:#facc15;font-size:.75rem;"></i> ${ratingAI.toFixed(1)}`
+          : "";
+        const categoriaHtmlAI = categoriaLocalHtml(local, local.nome);
         return `<div class="day-item" id="ai-place-${diaIdx}-${curIdx}"
-             data-maps-query="${escapeHtml(query)}" ${dataRep} data-dia="${dia}"${_endAI ? ` data-addr="${_endAI}"` : ""}${temCoordAI ? ` data-lat="${latAI}" data-lng="${lngAI}"` : ""}${placeIdAI ? ` data-place-id="${placeIdAI}"` : ""}>
+             data-maps-query="${escapeHtml(query)}" ${dataRep} data-dia="${dia}"${_endAI ? ` data-addr="${_endAI}"` : ""}${temCoordAI ? ` data-lat="${latAI}" data-lng="${lngAI}"` : ""}${placeIdAI ? ` data-place-id="${placeIdAI}"` : ""}${ratingHtmlAI ? ` data-rating="${ratingAI}"` : ""}>
           <div class="day-bubble" style="${bStyle}">${curIdx + 1}</div>
           <div class="day-main">
             <div class="topline" style="flex-wrap:wrap;gap:6px;">
               <div class="name ai-place-name">${escapeHtml(local.nome)}</div>
-              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                <span class="ai-place-rating" style="display:none;align-items:center;gap:3px;font-size:.75rem;font-weight:700;color:#92400e;background:#fef3c7;padding:2px 8px;border-radius:999px;"></span>
-              </div>
             </div>
             <div class="ai-place-addr" style="${_endAI ? "" : "display:none;"}font-size:.78rem;color:#64748b;margin-top:3px;">${_endAI ? `<i class="bi bi-geo-alt me-1"></i>${_endAI}` : ""}</div>
-            <div style="margin-top:6px;display:flex;gap:10px;align-items:center;">
+            <div class="place-detail-meta">
+              <span data-place-category-slot>${categoriaHtmlAI}</span>
+              <span class="ai-place-rating" style="display:${ratingHtmlAI ? "inline-flex" : "none"};align-items:center;gap:3px;font-size:.75rem;font-weight:700;color:#92400e;background:#fef3c7;padding:2px 8px;border-radius:999px;">${ratingHtmlAI}</span>
               <a class="ai-maps-link" href="https://www.google.com/maps/search/?api=1&query=${mapsQ}"
                  target="_blank" rel="noopener"
                  style="display:inline-flex;align-items:center;gap:5px;font-size:.78rem;color:#f97316;font-weight:700;text-decoration:none;">
@@ -803,17 +867,33 @@
 
   function _localCardHtml(l, cor) {
     const bStyle = cor ? `background:${cor}22;color:${cor};` : `background:#fff7ed;color:#f97316;`;
+    const ratingReal = Number(l.rating || l.notaGoogle || l.googleRating || 0);
+    const ratingHtmlReal = Number.isFinite(ratingReal) && ratingReal > 0
+      ? `<i class="bi bi-star-fill" style="color:#facc15;font-size:.75rem;"></i> ${ratingReal.toFixed(1)}`
+      : "";
+    const categoriaHtmlReal = categoriaLocalHtml(l, l.nome || "Local");
+    const latReal = parseFloat(l.latitude);
+    const lngReal = parseFloat(l.longitude);
+    const temCoordReal = Number.isFinite(latReal) && Number.isFinite(lngReal) && !(latReal === 0 && lngReal === 0);
+    const mapsUrl = l.placeId
+      ? mapsUrlDetalhes(l.placeId, l.endereco || l.nome)
+      : (temCoordReal
+        ? `https://www.google.com/maps/search/?api=1&query=${latReal},${lngReal}`
+        : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(l.endereco || l.nome || "Local")}`);
     return `<div class="day-item" data-real-local${l.placeId ? ` data-real-place-id="${escapeHtml(l.placeId)}"` : ""}${l.endereco ? ` data-addr="${escapeHtml(l.endereco)}"` : ""}>
       <div class="day-bubble" data-real-bubble style="${bStyle}">?</div>
       <div class="day-main" id="detalhe-local-${l.idRoteiroLocal}">
         <div class="topline" style="gap:10px;flex-wrap:wrap;">
           <div class="name">${escapeHtml(l.nome || "Local")}</div>
-          <span class="real-place-rating" style="display:none;align-items:center;gap:3px;font-size:.75rem;font-weight:700;color:#92400e;background:#fef3c7;padding:2px 8px;border-radius:999px;"></span>
         </div>
         ${l.observacoes ? `<div class="text-secondary mt-1" style="font-size:.9rem;">${escapeHtml(l.observacoes)}</div>` : ""}
         ${l.endereco ? `<div class="costline mt-1"><i class="bi bi-geo-alt-fill" style="color:#f97316;"></i><span style="font-size:.82rem;color:#64748b;">${escapeHtml(l.endereco)}</span></div>` : ""}
+        <div class="place-detail-meta">
+          <span data-place-category-slot>${categoriaHtmlReal}</span>
+          <span class="real-place-rating" style="display:${ratingHtmlReal ? "inline-flex" : "none"};align-items:center;gap:3px;font-size:.75rem;font-weight:700;color:#92400e;background:#fef3c7;padding:2px 8px;border-radius:999px;">${ratingHtmlReal}</span>
+          <a href="${mapsUrl}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;font-size:.78rem;color:#f97316;font-weight:700;text-decoration:none;"><i class="bi bi-map"></i> Ver no Maps</a>
+        </div>
         ${badgeAberturaHtml(l.placeId)}
-        ${l.latitude && l.longitude ? `<a href="https://www.google.com/maps/search/?api=1&query=${l.latitude},${l.longitude}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;margin-top:6px;font-size:.78rem;color:#f97316;font-weight:700;text-decoration:none;"><i class="bi bi-map"></i> Ver no Google Maps</a>` : ""}
       </div>
     </div>`;
   }
@@ -821,16 +901,13 @@
   function enrichRealLocais() {
     if (!window.google?.maps?.places) { setTimeout(enrichRealLocais, 600); return; }
     const service = new google.maps.places.PlacesService(document.createElement("div"));
-    document.querySelectorAll("[data-real-place-id]").forEach(el => {
+    document.querySelectorAll("[data-real-local]").forEach(el => {
       const placeId = el.getAttribute("data-real-place-id");
       if (!placeId) return;
-      service.getDetails({ placeId, fields: ["rating"] }, (place, status) => {
-        if (status !== google.maps.places.PlacesServiceStatus.OK || !place?.rating) return;
-        const ratingEl = el.querySelector(".real-place-rating");
-        if (ratingEl) {
-          ratingEl.innerHTML = `<i class="bi bi-star-fill" style="color:#facc15;font-size:.75rem;"></i> ${place.rating.toFixed(1)}`;
-          ratingEl.style.display = "inline-flex";
-        }
+      service.getDetails({ placeId, fields: ["rating", "types", "name"] }, (place, status) => {
+        if (status !== google.maps.places.PlacesServiceStatus.OK || !place) return;
+        aplicarRatingPlace(el, place.rating, ".real-place-rating");
+        aplicarCategoriaPlace(el, place.types, place.name || el.querySelector(".name")?.textContent);
       });
     });
   }
@@ -972,6 +1049,7 @@
         </div>
       </section>`;
     }).join("");
+    enrichRealLocais();
   }
 
   const ROTEIROS_SALVOS_CACHE = "flyguide.roteirosSalvos";

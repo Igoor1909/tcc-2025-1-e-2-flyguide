@@ -193,6 +193,15 @@ html[data-theme="dark"] .dia-header-label{ color: #f1f5f9 !important; }
 .costline{ color: var(--fg-muted); font-size:.9rem; margin-top: 6px; display:flex; align-items:center; gap:8px; }
 .costline i{ color:#f59e0b; }
 
+.place-detail-meta{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+  margin-top:6px;
+}
+.place-detail-meta .place-category-badge{ margin-top:0 !important; }
+
 .tip-item{
   border-radius: 12px;
   background: #eff6ff;
