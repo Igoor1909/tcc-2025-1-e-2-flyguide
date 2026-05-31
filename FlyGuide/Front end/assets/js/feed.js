@@ -13,12 +13,63 @@
   let roteirosVisiveis  = [];
   let paginaFeed        = 0;
   const POR_PAGINA      = 12;
+  const ROTEIROS_SALVOS_CACHE = "flyguide.roteirosSalvos";
 
   const badgeClasse = {
     "Aventura": "badge-green", "Cultural": "badge-purple", "Mochilão": "badge-yellow",
     "Praia": "", "Natureza": "badge-green", "Gastronomia": "badge-purple",
     "Luxo": "badge-yellow", "Cidade": "",
   };
+
+  function obterRoteirosSalvosCache() {
+    try {
+      const data = JSON.parse(localStorage.getItem(ROTEIROS_SALVOS_CACHE) || "[]");
+      return new Set(Array.isArray(data) ? data.map(String) : []);
+    } catch (_) {
+      return new Set();
+    }
+  }
+
+  function definirRoteiroSalvoCache(id, salvo) {
+    if (!id) return;
+    const salvos = obterRoteirosSalvosCache();
+    if (salvo) salvos.add(String(id));
+    else salvos.delete(String(id));
+    localStorage.setItem(ROTEIROS_SALVOS_CACHE, JSON.stringify([...salvos]));
+  }
+
+  function roteiroSalvoCache(id) {
+    return obterRoteirosSalvosCache().has(String(id));
+  }
+
+  function aplicarEstadoBotaoSalvarFeed(btn, salvo) {
+    const icon = btn?.querySelector("i");
+    if (!btn || !icon) return;
+    btn.classList.toggle("saved", !!salvo);
+    btn.style.background = "";
+    btn.style.borderColor = "";
+    btn.setAttribute("aria-pressed", salvo ? "true" : "false");
+    btn.setAttribute("title", salvo ? "Roteiro salvo" : "Salvar roteiro");
+    icon.className = salvo ? "bi bi-bookmark-fill" : "bi bi-bookmark-plus";
+    icon.style.color = "";
+  }
+
+  async function sincronizarBotaoSalvarFeed(btn) {
+    const roteiroId = btn?.getAttribute("data-roteiro-id");
+    if (!roteiroId) return;
+    const iniciadoEm = Date.now();
+    if (roteiroSalvoCache(roteiroId)) aplicarEstadoBotaoSalvarFeed(btn, true);
+    if (!userId) return;
+    try {
+      const res = await authFetch(`${URL_API_BASE}/roteiros/${roteiroId}/clonou?idUsuario=${userId}`);
+      if (res.ok) {
+        const jaClonou = await res.json();
+        if (!jaClonou && Number(btn.dataset.saveStateChangedAt || 0) > iniciadoEm) return;
+        definirRoteiroSalvoCache(roteiroId, !!jaClonou);
+        aplicarEstadoBotaoSalvarFeed(btn, !!jaClonou);
+      }
+    } catch (_) {}
+  }
 
   function formatarDataCurta(dataStr) {
     if (!dataStr) return "—";
@@ -85,10 +136,10 @@
         method: "POST"
       });
       if (res.ok || res.status === 201) {
+        definirRoteiroSalvoCache(roteiroId, true);
+        if (btn) btn.dataset.saveStateChangedAt = String(Date.now());
         if (marcarSalvo) {
-          btn.classList.add("saved");
-          btn.style.background = "";
-          btn.style.borderColor = "";
+          aplicarEstadoBotaoSalvarFeed(btn, true);
         }
         icon.className = "bi bi-bookmark-fill";
         icon.style.color = "";
@@ -164,25 +215,8 @@
 
     // Bind botões de salvar
     lista.querySelectorAll("[data-save]").forEach(async btn => {
-      const roteiroId = btn.getAttribute("data-roteiro-id");
-      const icon = btn.querySelector("i");
-
       // Verifica se o usuário já clonou este roteiro
-      if (userId) {
-        try {
-          const res = await authFetch(`${URL_API_BASE}/roteiros/${roteiroId}/clonou?idUsuario=${userId}`);
-          if (res.ok) {
-            const jaClonou = await res.json();
-            if (jaClonou) {
-              btn.classList.add("saved");
-              btn.style.background = "";
-              btn.style.borderColor = "";
-              icon.className = "bi bi-bookmark-fill";
-              icon.style.color = "";
-            }
-          }
-        } catch (_) {}
-      }
+      sincronizarBotaoSalvarFeed(btn);
 
       btn.addEventListener("click", async (e) => {
         e.preventDefault();
@@ -218,6 +252,12 @@
       });
     });
   }
+
+  window.addEventListener("pageshow", () => {
+    const lista = document.getElementById("feedLista");
+    if (!lista || lista.style.display === "none") return;
+    lista.querySelectorAll("[data-save]").forEach(btn => sincronizarBotaoSalvarFeed(btn));
+  });
 
   // ── Limite de roteiros (FREE = 20 total em Meus Roteiros) ────────
   const LIMITE_FREE = 20;

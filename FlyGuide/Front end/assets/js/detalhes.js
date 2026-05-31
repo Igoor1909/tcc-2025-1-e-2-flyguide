@@ -974,6 +974,200 @@
     }).join("");
   }
 
+  const ROTEIROS_SALVOS_CACHE = "flyguide.roteirosSalvos";
+  const LIMITE_FREE = 20;
+
+  function obterRoteirosSalvosCache() {
+    try {
+      const data = JSON.parse(localStorage.getItem(ROTEIROS_SALVOS_CACHE) || "[]");
+      return new Set(Array.isArray(data) ? data.map(String) : []);
+    } catch (_) {
+      return new Set();
+    }
+  }
+
+  function definirRoteiroSalvoCache(id, salvo) {
+    if (!id) return;
+    const salvos = obterRoteirosSalvosCache();
+    if (salvo) salvos.add(String(id));
+    else salvos.delete(String(id));
+    localStorage.setItem(ROTEIROS_SALVOS_CACHE, JSON.stringify([...salvos]));
+  }
+
+  function roteiroSalvoCache(id) {
+    return obterRoteirosSalvosCache().has(String(id));
+  }
+
+  function aplicarEstadoBotaoSalvarDetalhe(btn, salvo) {
+    if (!btn) return;
+    const icon = btn.querySelector("i");
+    const label = btn.querySelector("span");
+    btn.classList.toggle("saved", !!salvo);
+    btn.setAttribute("aria-pressed", salvo ? "true" : "false");
+    btn.setAttribute("title", salvo ? "Roteiro salvo" : "Salvar roteiro");
+    btn.setAttribute("aria-label", salvo ? "Roteiro salvo" : "Salvar roteiro");
+    if (icon) icon.className = salvo ? "bi bi-bookmark-fill" : "bi bi-bookmark-plus";
+    if (label) label.textContent = salvo ? "Roteiro salvo" : "Salvar roteiro";
+  }
+
+  function mostrarToastRoteiroSalvo() {
+    const toast = document.createElement("div");
+    toast.style.cssText = [
+      "position:fixed", "bottom:24px", "left:50%", "transform:translateX(-50%)",
+      "background:#1e293b", "color:#f1f5f9", "padding:14px 20px", "border-radius:12px",
+      "box-shadow:0 8px 24px rgba(0,0,0,.3)", "font-size:.9rem", "font-weight:600",
+      "display:flex", "align-items:center", "gap:10px", "z-index:9999",
+      "border:1px solid #334155"
+    ].join(";");
+    toast.innerHTML = '<i class="bi bi-bookmark-fill" style="color:#f97316;font-size:1.1rem;"></i>'
+      + ' Roteiro salvo! Acesse em <a href="meus-roteiros.html" style="color:#f97316;margin-left:4px;font-weight:700;">Meus Roteiros</a>';
+    document.body.appendChild(toast);
+    setTimeout(() => {
+      toast.style.opacity = "0";
+      toast.style.transition = "opacity .3s";
+      setTimeout(() => toast.remove(), 300);
+    }, 3500);
+  }
+
+  async function verificarLimiteFreeDetalhe() {
+    if (!userId) return true;
+    try {
+      const [resR, resU] = await Promise.all([
+        authFetch(`${URL_API_BASE}/roteiros/usuario/${userId}`),
+        authFetch(`${URL_API_BASE}/users/search-completo/${userId}`)
+      ]);
+      const lista = resR.ok ? await resR.json() : [];
+      const usr = resU.ok ? await resU.json() : null;
+      if ((usr?.usuario?.tipoConta || "FREE") === "PREMIUM") return true;
+      return !Array.isArray(lista) || lista.length < LIMITE_FREE;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  function mostrarModalLimiteDetalhe() {
+    const modal = document.createElement("div");
+    modal.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;";
+    modal.innerHTML =
+      '<div style="background:#1e293b;border:1px solid #334155;border-radius:18px;padding:32px 28px;max-width:380px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.4);">'
+      + '<div style="width:52px;height:52px;border-radius:14px;background:#fff7ed;border:1px solid #fed7aa;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;">'
+      + '<i class="bi bi-map" style="font-size:1.5rem;color:#f97316;"></i></div>'
+      + '<h5 style="color:#f1f5f9;margin-bottom:8px;font-weight:800;">Limite atingido</h5>'
+      + '<p style="color:#94a3b8;font-size:.9rem;margin-bottom:20px;">Você já possui <strong style="color:#f97316;">20 roteiros</strong> no plano gratuito.<br>Assine o Premium para criar e salvar roteiros ilimitados.</p>'
+      + '<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">'
+      + '<button id="_limDetFechar" style="background:none;border:1px solid #334155;border-radius:10px;padding:9px 20px;color:#94a3b8;cursor:pointer;font-size:.9rem;">Fechar</button>'
+      + '<a href="planos-premium.html" style="background:#f97316;border:none;border-radius:10px;padding:9px 20px;color:#fff;cursor:pointer;font-size:.9rem;font-weight:700;text-decoration:none;"><i class="bi bi-star-fill me-1"></i>Ver Planos</a>'
+      + '</div></div>';
+    document.body.appendChild(modal);
+    modal.querySelector("#_limDetFechar").onclick = () => modal.remove();
+    modal.onclick = (ev) => { if (ev.target === modal) modal.remove(); };
+  }
+
+  function confirmarSalvarNovamenteDetalhe() {
+    return new Promise(resolve => {
+      const modal = document.createElement("div");
+      modal.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;";
+      modal.innerHTML = '<div style="background:#1e293b;border:1px solid #334155;border-radius:16px;padding:28px 24px;max-width:360px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.4);">'
+        + '<i class="bi bi-bookmark-fill" style="font-size:2rem;color:#f97316;"></i>'
+        + '<h5 style="color:#f1f5f9;margin:12px 0 8px;">Salvar novamente?</h5>'
+        + '<p style="color:#94a3b8;font-size:.88rem;margin-bottom:20px;">Você já salvou este roteiro. Deseja criar outra cópia em Meus Roteiros?</p>'
+        + '<div style="display:flex;gap:10px;justify-content:center;">'
+        + '<button id="_salvarDetNao" style="background:none;border:1px solid #334155;border-radius:10px;padding:8px 20px;color:#94a3b8;cursor:pointer;font-size:.9rem;">Não</button>'
+        + '<button id="_salvarDetSim" style="background:#f97316;border:none;border-radius:10px;padding:8px 20px;color:#fff;cursor:pointer;font-size:.9rem;font-weight:700;">Salvar cópia</button>'
+        + '</div></div>';
+      document.body.appendChild(modal);
+      function fechar(valor) { modal.remove(); resolve(valor); }
+      modal.querySelector("#_salvarDetNao").onclick = () => fechar(false);
+      modal.querySelector("#_salvarDetSim").onclick = () => fechar(true);
+      modal.onclick = (ev) => { if (ev.target === modal) fechar(false); };
+    });
+  }
+
+  async function sincronizarBotaoSalvarDetalhe(btn) {
+    if (!btn || !userId) return;
+    const id = btn.getAttribute("data-roteiro-id");
+    if (!id) return;
+    const iniciadoEm = Date.now();
+    if (roteiroSalvoCache(id)) aplicarEstadoBotaoSalvarDetalhe(btn, true);
+    try {
+      const res = await authFetch(`${URL_API_BASE}/roteiros/${id}/clonou?idUsuario=${userId}`);
+      if (res.ok) {
+        const jaClonou = await res.json();
+        if (!jaClonou && Number(btn.dataset.saveStateChangedAt || 0) > iniciadoEm) return;
+        definirRoteiroSalvoCache(id, !!jaClonou);
+        aplicarEstadoBotaoSalvarDetalhe(btn, !!jaClonou);
+      }
+    } catch (_) {}
+  }
+
+  async function clonarRoteiroDetalhe(id, btn) {
+    const icon = btn?.querySelector("i");
+    const label = btn?.querySelector("span");
+    const salvoAntes = btn?.classList.contains("saved");
+    if (btn) btn.disabled = true;
+    if (icon) icon.className = "bi bi-hourglass-split";
+    if (label) label.textContent = "Salvando...";
+
+    try {
+      const res = await authFetch(`${URL_API_BASE}/roteiros/${id}/clonar?idUsuario=${userId}`, {
+        method: "POST"
+      });
+      if (res.ok || res.status === 201) {
+        definirRoteiroSalvoCache(id, true);
+        if (btn) btn.dataset.saveStateChangedAt = String(Date.now());
+        aplicarEstadoBotaoSalvarDetalhe(btn, true);
+        mostrarToastRoteiroSalvo();
+        return true;
+      }
+      aplicarEstadoBotaoSalvarDetalhe(btn, salvoAntes);
+      alert("Não foi possível salvar o roteiro.");
+      return false;
+    } catch (_) {
+      aplicarEstadoBotaoSalvarDetalhe(btn, salvoAntes);
+      alert("Erro ao conectar ao servidor.");
+      return false;
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  function inicializarBotaoSalvarDetalhe(roteiro) {
+    const btn = document.getElementById("btnSalvarRoteiroDetalhe");
+    if (!btn || !roteiro) return;
+
+    const ownerId = roteiro.idUsuario ?? roteiro.usuario?.idUsuario ?? roteiro.usuarioId;
+    const isOwner = userId && ownerId != null && String(ownerId) === String(userId);
+    if (isOwner) {
+      btn.style.display = "none";
+      return;
+    }
+
+    btn.style.display = "inline-flex";
+    btn.setAttribute("data-roteiro-id", roteiro.idRoteiro);
+    aplicarEstadoBotaoSalvarDetalhe(btn, roteiroSalvoCache(roteiro.idRoteiro));
+    sincronizarBotaoSalvarDetalhe(btn);
+
+    btn.onclick = async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!userId) { window.location.href = "login.html"; return; }
+      const permitido = await verificarLimiteFreeDetalhe();
+      if (!permitido) { mostrarModalLimiteDetalhe(); return; }
+      if (btn.classList.contains("saved")) {
+        const salvarCopia = await confirmarSalvarNovamenteDetalhe();
+        if (!salvarCopia) return;
+      }
+      await clonarRoteiroDetalhe(roteiro.idRoteiro, btn);
+    };
+  }
+
+  window.addEventListener("pageshow", () => {
+    const btn = document.getElementById("btnSalvarRoteiroDetalhe");
+    if (btn?.getAttribute("data-roteiro-id") && btn.style.display !== "none") {
+      sincronizarBotaoSalvarDetalhe(btn);
+    }
+  });
+
   authFetch(`${URL_API_BASE}/roteiros/${roteiroId}/completo`)
     .then(r => { if (!r.ok) throw new Error(); return r.json(); })
     .then(data => {
@@ -1004,6 +1198,7 @@
         if (autorWrap) { autorWrap.style.display = "flex"; }
         setText("detalheAutor", r.nomeUsuario);
       }
+      inicializarBotaoSalvarDetalhe(r);
 
       // Stats
       setText("detalheDias", r.diasTotais ? `${r.diasTotais} dia${r.diasTotais > 1 ? "s" : ""}` : EMPTY_TEXT);

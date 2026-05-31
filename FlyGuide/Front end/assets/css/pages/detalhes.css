@@ -26,8 +26,48 @@ html[data-theme="dark"] #listaLocais section { border-color: #334155 !important;
   position:absolute;
   top: 16px; right: 16px;
   display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  flex-wrap:wrap;
   gap:10px;
   z-index: 2;
+}
+
+.details-save-btn{
+  min-height: 40px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.25);
+  background: rgba(15,23,42,.58);
+  color:#fff;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  padding: 8px 14px;
+  font-weight:800;
+  line-height:1;
+  cursor:pointer;
+  transition: background .18s, border-color .18s, transform .12s, color .18s;
+}
+.details-save-btn:hover{
+  transform: translateY(-1px);
+  background: rgba(15,23,42,.75);
+  border-color: rgba(249,115,22,.75);
+}
+.details-save-btn i{
+  color:#fb923c;
+  font-size:1rem;
+}
+.details-save-btn.saved{
+  background: rgba(250,204,21,.18);
+  border-color: rgba(250,204,21,.65);
+  color:#fef9c3;
+}
+.details-save-btn.saved i{ color:#facc15; }
+.details-save-btn:disabled{
+  cursor:wait;
+  opacity:.78;
+  transform:none;
 }
 
 .icon-btn,
@@ -199,8 +239,9 @@ html[data-theme="dark"] .dia-header-label{ color: #f1f5f9 !important; }
   }
 
   /* Botões no hero: reduz tamanho e ajusta gap */
-  .details-actions { top: 10px; right: 10px; gap: 6px; }
+  .details-actions { top: 10px; right: 10px; gap: 6px; max-width: calc(100% - 118px); }
   .back-btn { top: 10px; left: 10px; padding: 7px 10px; font-size: .85rem; }
+  .details-save-btn { min-height: 36px; padding: 7px 10px; font-size: .85rem; }
 
   .stat-card { padding: 12px; min-height: auto; }
   .stat-big  { font-size: 1.3rem; }
