@@ -82,6 +82,15 @@ function _agruparLocaisDetalhe(locais) {
     .map(function(entry) { return { dia: entry[0], itens: entry[1] }; });
 }
 
+function _ehCheckinCheckoutDetalheEdit(local) {
+  var nome = String((local && (local.nome || local.name)) || local || "").trim().toLowerCase().replace(/[\s-]/g, "");
+  return !!(local && local._checkin) || !!(local && local._checkout) || nome === "checkin" || nome === "checkout";
+}
+
+function _contarLocaisDetalheEdit(locais) {
+  return (locais || []).filter(function(l) { return !_ehCheckinCheckoutDetalheEdit(l); }).length;
+}
+
 function _posicaoDeslocadaMapaDetalheEdit(p, contadorCoordenada) {
   var key = Number(p.lat).toFixed(5) + "," + Number(p.lng).toFixed(5);
   var repeticao = contadorCoordenada[key] || 0;
@@ -527,9 +536,9 @@ function renderLocaisDetalheEditAI() {
     var diaNum = diaObj.dia || (dIdx + 1);
     var locaisDesteDia = _locaisDetalheEdit.filter(function(l) { return (l.dia || 0) === diaNum; });
     var totalLocais = (temPeriodos
-      ? _PERIODOS_AI_EDIT.reduce(function(s, p) { return s + (diaObj.periodos[p.key] || []).length; }, 0)
-      : (diaObj.locais || []).length)
-      + locaisDesteDia.length;
+      ? _PERIODOS_AI_EDIT.reduce(function(s, p) { return s + _contarLocaisDetalheEdit(diaObj.periodos[p.key] || []); }, 0)
+      : _contarLocaisDetalheEdit(diaObj.locais || []))
+      + _contarLocaisDetalheEdit(locaisDesteDia);
 
     html += '<div class="mb-2" data-ai-dia-idx="' + dIdx + '" style="border:1px solid ' + cBorda + ';border-radius:10px;overflow:hidden;">';
     html += '<button type="button"'
@@ -556,7 +565,7 @@ function renderLocaisDetalheEditAI() {
           if (per.key === 'tarde') return h >= '12:00' && h < '18:00';
           return h >= '18:00';
         });
-        var totalPer = itens.length + locaisDestePer.length;
+        var totalPerContavel = _contarLocaisDetalheEdit(itens) + _contarLocaisDetalheEdit(locaisDestePer);
         var perColId = 'per-' + per.key + '-' + dIdx;
         html += '<div class="mb-1" data-ai-per="' + per.key + '">';
         html += '<button type="button"'
@@ -566,7 +575,7 @@ function renderLocaisDetalheEditAI() {
           + '<div style="display:flex;align-items:center;gap:6px;">'
           + '<i class="bi ' + per.icon + '" style="color:' + per.cor + ';font-size:.82rem;"></i>'
           + '<span style="font-size:.78rem;font-weight:700;color:' + per.cor + ';">' + per.label + '</span>'
-          + '<span style="font-size:.68rem;font-weight:700;color:' + per.cor + ';opacity:.7;">' + totalPer + ' ' + (totalPer === 1 ? 'local' : 'locais') + '</span>'
+          + '<span style="font-size:.68rem;font-weight:700;color:' + per.cor + ';opacity:.7;">' + totalPerContavel + ' ' + (totalPerContavel === 1 ? 'local' : 'locais') + '</span>'
           + '</div>'
           + '<i class="bi bi-chevron-down" style="color:' + per.cor + ';font-size:.72rem;transition:transform .2s;opacity:.7;"></i>'
           + '</button>';
@@ -1041,7 +1050,7 @@ function _renderLocaisReaisDetalhe(lista) {
       return '<section class="mb-2">'
         + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin:8px 0 6px;">'
         + '<div style="font-size:.82rem;font-weight:800;color:' + cText + ';">' + (grupo.dia ? 'Dia ' + grupo.dia : 'Sem dia definido') + '</div>'
-        + '<div style="font-size:.72rem;font-weight:700;color:' + cLabel + ';">' + grupo.itens.length + ' ' + (grupo.itens.length === 1 ? 'local' : 'locais') + '</div>'
+        + '<div style="font-size:.72rem;font-weight:700;color:' + cLabel + ';">' + _contarLocaisDetalheEdit(grupo.itens) + ' ' + (_contarLocaisDetalheEdit(grupo.itens) === 1 ? 'local' : 'locais') + '</div>'
         + '</div>'
         + grupo.itens.map(function(l, idx) {
           var vid = String(l.idRoteiroLocal);

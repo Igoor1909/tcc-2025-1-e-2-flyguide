@@ -172,6 +172,24 @@
              longitude: l.longitude ?? l.lng ?? null };
   }
 
+  function ehCheckinCheckoutDetalhe(local) {
+    const l = normalizarLocal(local);
+    const nome = String(l.nome || "").trim().toLowerCase().replace(/[\s-]/g, "");
+    return l._checkin || l._checkout || nome === "checkin" || nome === "checkout";
+  }
+
+  function contarLocaisContaveisDetalhe(locais) {
+    return (locais || []).filter(l => !ehCheckinCheckoutDetalhe(l)).length;
+  }
+
+  function ehElementoCheckinCheckoutDetalhe(el) {
+    const nome = (el?.querySelector(".name")?.textContent
+      || el?.querySelector(".ai-place-name")?.textContent
+      || el?.textContent
+      || "").trim().toLowerCase().replace(/[\s-]/g, "");
+    return nome === "checkin" || nome === "checkout";
+  }
+
   const PERIODOS_CONFIG = [
     { key: "manha", label: "Manhã",  icon: "bi-sunrise-fill",   cor: "#f59e0b" },
     { key: "tarde", label: "Tarde",  icon: "bi-sun-fill",        cor: "#f97316" },
@@ -184,6 +202,20 @@
       return PERIODOS_CONFIG.flatMap(p => Array.isArray(d.periodos[p.key]) ? d.periodos[p.key] : []);
     }
     return Array.isArray(d.locais) ? d.locais : [];
+  }
+
+  function contarLocaisRenderizadosDia(dia) {
+    const container = document.getElementById("aiDiasContainer");
+    if (!container) return 0;
+    let total = 0;
+    container.querySelectorAll("section").forEach(sec => {
+      const hdr = sec.querySelector(".dia-header-label");
+      if (hdr && hdr.textContent.trim() === `Dia ${dia}`) {
+        total += [...sec.querySelectorAll(".day-item")]
+          .filter(item => !ehElementoCheckinCheckoutDetalhe(item)).length;
+      }
+    });
+    return total;
   }
 
   function gerarSugestoesFrontend(roteiro) {
@@ -334,8 +366,18 @@
 
     function onAllDone() {
       const totalPorDia = {};
-      Object.entries(statusPorDia).forEach(([dia, status]) => {
-        totalPorDia[dia] = status.total;
+      const totaisAtuais = window._aiTotalLocaisPorDia || {};
+      const diasComTotal = new Set([
+        ...Object.keys(statusPorDia),
+        ...Object.keys(totaisAtuais),
+      ]);
+      diasComTotal.forEach(dia => {
+        const status = statusPorDia[dia] || {};
+        totalPorDia[dia] = Math.max(
+          Number(status.total) || 0,
+          Number(totaisAtuais[dia]) || 0,
+          contarLocaisRenderizadosDia(dia)
+        );
       });
       window._aiTotalLocaisPorDia = totalPorDia;
       window._aiMapaStatusPorDia = statusPorDia;
@@ -584,6 +626,7 @@
 
     document.getElementById("aiDiasContainer").innerHTML = dias.map((d, diaIdx) => {
       const locaisList = locaisDoDia(d);
+      const totalDia = contarLocaisContaveisDetalhe(locaisList);
       const collapseId = `ai-dia-collapse-${d.dia}`;
       const aberto     = diaIdx === 0 ? "show" : "";
       const expandido  = diaIdx === 0 ? "true" : "false";
@@ -737,7 +780,7 @@
                 aria-expanded="${expandido}">
           <div class="dia-header-label mb-0">Dia ${d.dia}</div>
           <div style="display:flex;align-items:center;gap:10px;">
-            <span style="font-size:.78rem;font-weight:700;color:#6366f1;">${(() => { const n = locaisList.filter(l => { const nm = ((l.nome||"")).trim().toLowerCase().replace(/[\s-]/g,""); return nm !== "checkin" && nm !== "checkout" && !l._checkin && !l._checkout; }).length; return n + " " + (n === 1 ? "local" : "locais"); })()}</span>
+            <span style="font-size:.78rem;font-weight:700;color:#6366f1;">${totalDia} ${totalDia === 1 ? "local" : "locais"}</span>
             <i class="bi bi-chevron-down" style="color:#94a3b8;transition:transform .2s;"></i>
           </div>
         </button>
@@ -748,6 +791,11 @@
         </div>
       </section>`;
     }).join("");
+
+    window._aiTotalLocaisPorDia = dias.reduce((acc, d) => {
+      acc[d.dia] = contarLocaisContaveisDetalhe(locaisDoDia(d));
+      return acc;
+    }, {});
 
     enrichWithMaps(roteiro.cidade, roteiro.pais, roteiro.latDestino ?? null, roteiro.lngDestino ?? null);
     return true;
@@ -862,13 +910,14 @@
             } else {
               // Day section doesn't exist — create it
               const collapseId = `dia-collapse-extra-${dia ?? "sem"}`;
+              const totalExtra = ehCheckinCheckoutDetalhe(local) ? 0 : 1;
               container.insertAdjacentHTML("beforeend", `
                 <section style="margin-bottom:12px;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;">
                   <button class="w-100 d-flex align-items-center justify-content-between gap-3 px-4 py-3 border-0 bg-transparent"
                           style="cursor:pointer;" data-bs-toggle="collapse" data-bs-target="#${collapseId}" aria-expanded="false">
                     <div class="dia-header-label mb-0">${dia ? `Dia ${dia}` : "Sem dia definido"}</div>
                     <div style="display:flex;align-items:center;gap:10px;">
-                      <span style="font-size:.78rem;font-weight:700;color:#6366f1;">1 local</span>
+                      <span style="font-size:.78rem;font-weight:700;color:#6366f1;">${totalExtra} ${totalExtra === 1 ? "local" : "locais"}</span>
                       <i class="bi bi-chevron-down" style="color:#94a3b8;transition:transform .2s;"></i>
                     </div>
                   </button>
@@ -882,11 +931,14 @@
           // Renumber items and update counts (day header + period badges)
           if (daySection && collapseInner) {
             _renumerarDia(collapseInner);
-            const total = collapseInner.querySelectorAll(".day-item").length;
+            const total = contarLocaisRenderizadosDia(dia);
             const countSpan = daySection.querySelector("span[style*='#6366f1']");
             if (countSpan) countSpan.textContent = `${total} ${total === 1 ? "local" : "locais"}`;
+            window._aiTotalLocaisPorDia = window._aiTotalLocaisPorDia || {};
+            window._aiTotalLocaisPorDia[dia] = total;
             collapseInner.querySelectorAll("[data-period-key]").forEach(perDiv => {
-              const n = perDiv.querySelectorAll(".day-item").length;
+              const n = [...perDiv.querySelectorAll(".day-item")]
+                .filter(item => !ehElementoCheckinCheckoutDetalhe(item)).length;
               const badge = perDiv.querySelector(".per-count-badge");
               if (badge) badge.textContent = `${n} ${n === 1 ? "local" : "locais"}`;
             });
@@ -904,13 +956,14 @@
     lista.innerHTML = grupos.map(({ dia, itens }, grupoIdx) => {
       const collapseId = `dia-collapse-${dia ?? "sem"}`;
       const aberto = grupoIdx === 0 ? "show" : "";
+      const total = contarLocaisContaveisDetalhe(itens);
       return `
       <section style="margin-bottom:12px;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;">
         <button class="w-100 d-flex align-items-center justify-content-between gap-3 px-4 py-3 border-0 bg-transparent"
                 style="cursor:pointer;" data-bs-toggle="collapse" data-bs-target="#${collapseId}" aria-expanded="${grupoIdx === 0}">
           <div class="dia-header-label mb-0">${dia ? `Dia ${dia}` : "Sem dia definido"}</div>
           <div style="display:flex;align-items:center;gap:10px;">
-            <span style="font-size:.78rem;font-weight:700;color:#64748b;">${itens.length} ${itens.length === 1 ? "parada" : "paradas"}</span>
+            <span style="font-size:.78rem;font-weight:700;color:#64748b;">${total} ${total === 1 ? "local" : "locais"}</span>
             <i class="bi bi-chevron-down" style="color:#94a3b8;transition:transform .2s;"></i>
           </div>
         </button>

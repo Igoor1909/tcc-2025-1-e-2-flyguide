@@ -687,6 +687,31 @@ function _agruparLocaisEdit(locais) {
   return [...grupos.entries()].sort((a, b) => a[0] - b[0]).map(([dia, itens]) => ({ dia, itens }));
 }
 
+function _ehCheckinCheckoutEdit(local) {
+  const nome = String(local?.nome || local?.name || local || "").trim().toLowerCase().replace(/[\s-]/g, "");
+  return !!local?._checkin || !!local?._checkout || nome === "checkin" || nome === "checkout";
+}
+
+function _contarLocaisContaveisEdit(locais) {
+  return (locais || []).filter(l => !_ehCheckinCheckoutEdit(l)).length;
+}
+
+function _ehElementoCheckinCheckoutEdit(el) {
+  if (!el) return false;
+  if (el.hasAttribute("data-ai-special")) return true;
+  const nome = (el.querySelector("[data-ai-title]")?.textContent
+    || el.querySelector("[data-ai-nome]")?.value
+    || el.querySelector("[data-ai-edit-title]")?.textContent
+    || el.textContent
+    || "").trim().toLowerCase().replace(/[\s-]/g, "");
+  return nome === "checkin" || nome === "checkout";
+}
+
+function _contarItensVisiveisDiaEdit(diaEl) {
+  return [...diaEl.querySelectorAll("[data-ai-item], [id^='lwrap-']")]
+    .filter(el => !_ehElementoCheckinCheckoutEdit(el)).length;
+}
+
 // ── AI suggestions editing ────────────────────────────────────────
 function _parseCustoAI(custo) {
   if (!custo) return "";
@@ -823,7 +848,7 @@ function _atualizarContadoresAIVisiveis(lista) {
   lista.querySelectorAll("[data-ai-dia-idx]").forEach(diaEl => {
     const countEl = diaEl.querySelector("[data-ai-count-dia]");
     if (!countEl) return;
-    const total = diaEl.querySelectorAll("[data-ai-item]").length;
+    const total = _contarItensVisiveisDiaEdit(diaEl);
     countEl.textContent = `${total} ${total === 1 ? "local" : "locais"}`;
   });
 }
@@ -1652,11 +1677,11 @@ function _renderMiniMapaPasso3(lista) {
       `<button style="padding:4px 14px;border-radius:999px;border:1px solid ${chipBorder};font-size:.78rem;font-weight:700;cursor:pointer;white-space:nowrap;background:${diaFiltrado === null ? "#f97316" : chipBg};color:${diaFiltrado === null ? "#fff" : chipMuted};" data-p3-dia="todos">Todos</button>`,
       ...diasUnicos.map(d => {
         const cor = corPorDia[d], ativo = diaFiltrado === d;
-        const status = statusPorDia[d] || { total: (pontosPorDia[d] || []).length, mapeados: (pontosPorDia[d] || []).length };
-        const incompleto = status.total > status.mapeados;
-        const textoQtd = incompleto
-          ? `${status.mapeados}/${status.total} no mapa`
-          : `${status.total} ${status.total === 1 ? "local" : "locais"}`;
+        const totalPontos = (pontosPorDia[d] || []).length;
+        const status = statusPorDia[d] || { total: totalPontos, mapeados: totalPontos };
+        const totalLocais = status.total ?? totalPontos;
+        const incompleto = totalLocais > status.mapeados;
+        const textoQtd = `${totalLocais} ${totalLocais === 1 ? "local" : "locais"}`;
         return `<button title="${incompleto ? "Alguns locais deste dia não foram posicionados no mapa." : ""}" style="padding:4px 14px;border-radius:999px;border:1px ${incompleto ? "dashed" : "solid"} ${cor};font-size:.78rem;font-weight:700;cursor:pointer;white-space:nowrap;background:${ativo ? cor : chipBg};color:${ativo ? "#fff" : cor};" data-p3-dia="${d}">
           <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${ativo ? "#fff" : cor};margin-right:4px;vertical-align:middle;"></span>Dia ${d} - ${textoQtd}
         </button>`;
@@ -1705,8 +1730,9 @@ function renderLocaisEditAI() {
     const diaNum = diaObj.dia || (dIdx + 1);
     const locaisDesteDia = _locaisEdit.filter(l => (l.dia || 0) === diaNum);
     const totalLocais = temPeriodos
-      ? _PERIODOS_AI_MR.reduce((s, p) => s + (diaObj.periodos[p.key] || []).length, 0)
-      : (diaObj.locais || []).length;
+      ? _PERIODOS_AI_MR.reduce((s, p) => s + _contarLocaisContaveisEdit(diaObj.periodos[p.key] || []), 0)
+      : _contarLocaisContaveisEdit(diaObj.locais || []);
+    const totalDia = totalLocais + _contarLocaisContaveisEdit(locaisDesteDia);
 
     html += `<div class="mb-2" data-ai-dia-idx="${dIdx}" data-dia="${diaNum}" style="border:1px solid ${corToggleBrd};border-radius:10px;overflow:hidden;">`;
     html += `<button type="button"
@@ -1715,7 +1741,7 @@ function renderLocaisEditAI() {
         data-bs-toggle="collapse" data-bs-target="#${colId}" aria-expanded="${dIdx === 0}">
       <span style="font-size:.85rem;font-weight:800;color:${corHeader};">Dia ${diaObj.dia || (dIdx + 1)}</span>
       <div class="d-flex align-items-center gap-2">
-        <span data-ai-count-dia style="font-size:.72rem;font-weight:700;color:#6366f1;">${totalLocais} ${totalLocais === 1 ? "local" : "locais"}</span>
+        <span data-ai-count-dia style="font-size:.72rem;font-weight:700;color:#6366f1;">${totalDia} ${totalDia === 1 ? "local" : "locais"}</span>
         <i class="bi bi-chevron-down" style="color:#94a3b8;font-size:.75rem;transition:transform .2s;"></i>
       </div>
     </button>`;
@@ -2191,7 +2217,10 @@ function _renderLocaisReaisEdit(lista) {
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;
                   margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid ${corBorda};">
         <div style="font-size:.82rem;font-weight:800;color:${corHeader};">${dia ? `Dia ${dia}` : "Sem dia definido"}</div>
-        <div style="font-size:.72rem;font-weight:700;color:${corCount};">${itens.length} ${itens.length === 1 ? "local" : "locais"}</div>
+        ${(() => {
+          const total = _contarLocaisContaveisEdit(itens);
+          return `<div style="font-size:.72rem;font-weight:700;color:${corCount};">${total} ${total === 1 ? "local" : "locais"}</div>`;
+        })()}
       </div>
       ${itens.map((l, idx) => {
         const vid = String(l.idRoteiroLocal);

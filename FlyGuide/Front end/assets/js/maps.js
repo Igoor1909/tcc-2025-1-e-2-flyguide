@@ -841,6 +841,15 @@ const URL_API_BASE  = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app
       .map(([dia, itens]) => ({ dia, itens }));
   }
 
+  function ehCheckinCheckoutAgenda(local) {
+    const nome = String(local?.nome || local?.name || local || "").trim().toLowerCase().replace(/[\s-]/g, "");
+    return !!local?._checkin || !!local?._checkout || nome === "checkin" || nome === "checkout";
+  }
+
+  function contarLocaisAgenda(locais) {
+    return (locais || []).filter(l => !ehCheckinCheckoutAgenda(l)).length;
+  }
+
   // Carrega locais já salvos no banco
   function carregarLocais() {
     authFetch(`${URL_API_BASE}/roteiros/${roteiroId}/locais`)
@@ -932,7 +941,10 @@ const URL_API_BASE  = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app
           <section style="margin-top:16px;">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid ${corBorda};">
               <div class="dia-group-header">Dia ${dia}</div>
-              <div style="font-size:.78rem;font-weight:700;color:${corCount};">${itens.length} ${itens.length === 1 ? "local" : "locais"}</div>
+              ${(() => {
+                const total = contarLocaisAgenda(itens);
+                return `<div style="font-size:.78rem;font-weight:700;color:${corCount};">${total} ${total === 1 ? "local" : "locais"}</div>`;
+              })()}
             </div>
             ${itens.length === 0
               ? `<div style="text-align:center;padding:22px 12px;color:${corCount};">
@@ -946,7 +958,10 @@ const URL_API_BASE  = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app
         <section style="margin-top:16px;">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid ${corBorda};">
             <div class="dia-group-header">Sem dia definido</div>
-            <div style="font-size:.78rem;font-weight:700;color:${corCount};">${semDiaItens.length} ${semDiaItens.length === 1 ? "local" : "locais"}</div>
+            ${(() => {
+              const total = contarLocaisAgenda(semDiaItens);
+              return `<div style="font-size:.78rem;font-weight:700;color:${corCount};">${total} ${total === 1 ? "local" : "locais"}</div>`;
+            })()}
           </div>
           ${renderItens(semDiaItens, 0)}
         </section>`] : []),
@@ -1224,6 +1239,9 @@ const URL_API_BASE  = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app
 
     // Mapeia cor por dia
     const grupos = agruparLocaisPorDiaAgenda(locaisComCoordenadas);
+    const totalPorDiaMapa = new Map(
+      agruparLocaisPorDiaAgenda(locaisSalvos).map(g => [g.dia, contarLocaisAgenda(g.itens)])
+    );
     const corPorDia = {};
     grupos.forEach((g, idx) => { corPorDia[g.dia] = PALETA_DIAS[idx % PALETA_DIAS.length]; });
 
@@ -1241,7 +1259,7 @@ const URL_API_BASE  = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app
         ...grupos.map(g => {
           const cor = corPorDia[g.dia];
           const ativo = diaFiltradoMapa === g.dia;
-          const qtd = g.itens.filter(l => l.latitude && l.longitude).length;
+          const qtd = totalPorDiaMapa.get(g.dia) ?? contarLocaisAgenda(g.itens);
           return `<button class="btn btn-sm"
                     data-dia-mapa="${g.dia}"
                     style="padding:4px 14px;border-radius:999px;border:1px solid ${cor};font-size:.78rem;font-weight:700;cursor:pointer;white-space:nowrap;background:${ativo ? cor : chipBg};color:${ativo ? "#fff" : cor};">
@@ -1888,6 +1906,15 @@ const URL_API_BASE  = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app
   let _diasUnicos         = [];
   let _aiPlacesCache      = [];
 
+  function ehCheckinCheckoutMapaDetalhe(local) {
+    const nome = String(local?.nome || local?.name || local || "").trim().toLowerCase().replace(/[\s-]/g, "");
+    return !!local?._checkin || !!local?._checkout || nome === "checkin" || nome === "checkout";
+  }
+
+  function contarLocaisMapaDetalhe(locais) {
+    return (locais || []).filter(l => !ehCheckinCheckoutMapaDetalhe(l)).length;
+  }
+
   function renderMapaDetalhe() {
     const mapEl = document.getElementById("mapaRoteiro");
     if (!mapEl || !window.google) return;
@@ -2025,7 +2052,7 @@ const URL_API_BASE  = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app
       ..._diasUnicos.map(dia => {
         const cor   = _corPorDia[dia];
         const ativo = _diaFiltrado === dia;
-        const qtd = _locaisDetalhe.filter(l => (l.dia || 0) === dia && l.latitude && l.longitude).length;
+        const qtd = contarLocaisMapaDetalhe(_locaisDetalhe.filter(l => (l.dia || 0) === dia));
         return `<button style="padding:4px 14px;border-radius:999px;border:1px solid ${cor};font-size:.78rem;font-weight:700;cursor:pointer;white-space:nowrap;background:${ativo ? cor : chipBg};color:${ativo ? "#fff" : cor};"
                    data-dia-detalhe="${dia}">
                   <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${ativo ? "#fff" : cor};margin-right:4px;vertical-align:middle;"></span>Dia ${dia} - ${qtd} ${qtd === 1 ? "local" : "locais"}
@@ -2276,11 +2303,9 @@ const URL_API_BASE  = "https://tcc-2025-1-e-2-flyguide-production.up.railway.app
           const mapeados = totalMapeadoDia(dia);
           const qtd = (window._aiTotalLocaisPorDia && window._aiTotalLocaisPorDia[dia] != null)
             ? window._aiTotalLocaisPorDia[dia]
-            : (status?.total || mapeados);
+            : (status?.total ?? mapeados);
           const incompleto = qtd > mapeados;
-          const textoQtd = incompleto
-            ? `${mapeados}/${qtd} no mapa`
-            : `${qtd} ${qtd === 1 ? "local" : "locais"}`;
+          const textoQtd = `${qtd} ${qtd === 1 ? "local" : "locais"}`;
           return `<button title="${incompleto ? "Alguns locais deste dia não foram posicionados no mapa." : ""}"
                      style="padding:4px 14px;border-radius:999px;border:1px ${incompleto ? "dashed" : "solid"} ${cor};font-size:.78rem;font-weight:700;cursor:pointer;white-space:nowrap;background:${ativo ? cor : chipBg};color:${ativo ? "#fff" : cor};"
                      data-ai-dia="${dia}">
